@@ -45,6 +45,7 @@ export interface CreateOrderInput {
   platformRef?: string;
   presetId?: number;
   guestCount?: number;
+  pricelistId?: number;
   items?: OrderItemInput[];
 }
 
@@ -194,16 +195,46 @@ export class SalesService {
     }
     // An order may start empty (a fresh POS ticket) and gain items via addItem.
     const orderNo = await this.generateOrderNo(dto.branchId);
-    const items = (dto.items ?? []).map((i) => ({
-      productId: i.productId,
-      quantity: i.quantity,
-      unitPrice: i.unitPrice,
-      discount: i.discount ?? 0,
-      taxAmount: i.taxAmount ?? 0,
-      lineTotal: i.quantity * i.unitPrice - (i.discount ?? 0) + (i.taxAmount ?? 0),
-      notes: i.notes,
-      modifiers: i.modifiers && i.modifiers.length ? (i.modifiers as Prisma.InputJsonValue) : undefined,
-    }));
+
+    // Optional pricelist: resolve each line's unit price from the pricelist
+    // (product override → category override → product base salePrice). Falls
+    // back to the price the POS sent when no rule matches.
+    let plItems: Array<{ productId: number | null; categoryId: number | null; fixedPrice: number | null; percentPrice: number | null }> = [];
+    let prodMap = new Map<number, { salePrice: number; categoryId: number | null }>();
+    if (dto.pricelistId && (dto.items?.length ?? 0)) {
+      plItems = await this.prisma.pricelistItem.findMany({ where: { pricelistId: dto.pricelistId } });
+      const prods = await this.prisma.product.findMany({
+        where: { id: { in: (dto.items ?? []).map((i) => i.productId) } },
+        select: { id: true, salePrice: true, categoryId: true },
+      });
+      prodMap = new Map(prods.map((p) => [p.id, { salePrice: p.salePrice, categoryId: p.categoryId }]));
+    }
+    const priceFor = (productId: number, fallback: number): number => {
+      if (!dto.pricelistId) return fallback;
+      const prod = prodMap.get(productId);
+      const base = prod?.salePrice ?? fallback;
+      const item =
+        plItems.find((i) => i.productId === productId) ||
+        plItems.find((i) => i.categoryId != null && i.categoryId === prod?.categoryId);
+      if (!item) return fallback;
+      if (item.fixedPrice != null) return item.fixedPrice;
+      if (item.percentPrice != null) return Math.round(base * (1 - item.percentPrice / 100) * 100) / 100;
+      return fallback;
+    };
+
+    const items = (dto.items ?? []).map((i) => {
+      const unitPrice = priceFor(i.productId, i.unitPrice);
+      return {
+        productId: i.productId,
+        quantity: i.quantity,
+        unitPrice,
+        discount: i.discount ?? 0,
+        taxAmount: i.taxAmount ?? 0,
+        lineTotal: i.quantity * unitPrice - (i.discount ?? 0) + (i.taxAmount ?? 0),
+        notes: i.notes,
+        modifiers: i.modifiers && i.modifiers.length ? (i.modifiers as Prisma.InputJsonValue) : undefined,
+      };
+    });
     const t = this.totals(
       items,
       dto.serviceCharge ?? 0,

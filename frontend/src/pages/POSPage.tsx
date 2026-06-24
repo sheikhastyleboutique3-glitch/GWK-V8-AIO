@@ -148,6 +148,22 @@ export default function POSPage() {
     qc.invalidateQueries({ queryKey: ['pos-pending'] });
   };
 
+  // Course firing (Odoo "Fire Course N") for the order being settled.
+  const { data: courses } = useQuery({
+    queryKey: ['pos-courses', loadedOrderId],
+    queryFn: () => api.get(`/sales/orders/${loadedOrderId}/courses`).then((r) => r.data.data),
+    enabled: !!loadedOrderId,
+  });
+  const fireCourse = useMutation({
+    mutationFn: (courseNo: number) => api.post(`/sales/orders/${loadedOrderId}/courses/${courseNo}/fire`),
+    onSuccess: () => {
+      toast.success(t('pos.courseFired'));
+      qc.invalidateQueries({ queryKey: ['pos-courses', loadedOrderId] });
+      refetchLoaded();
+    },
+    onError: (e: any) => toast.error(e.response?.data?.message || 'Failed'),
+  });
+
   // Customer attached to the current sale (loaded order's customer, or the picked one).
   const activeCustomer = mode === 'existing' ? loadedOrder?.customer : customer;
 
@@ -487,11 +503,27 @@ export default function POSPage() {
         {/* Cart / bill */}
         <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 flex flex-col">
           {mode === 'existing' ? (
-            <div className="flex items-center justify-between mb-3 rounded-lg bg-primary/10 px-3 py-2">
-              <div className="text-sm font-medium text-primary">
-                {t('pos.settling')}: {loadedOrder?.tableName ? `${t('pos.table')} ${loadedOrder.tableName}` : loadedOrder?.orderNo}
+            <div className="mb-3">
+              <div className="flex items-center justify-between rounded-lg bg-primary/10 px-3 py-2">
+                <div className="text-sm font-medium text-primary">
+                  {t('pos.settling')}: {loadedOrder?.tableName ? `${t('pos.table')} ${loadedOrder.tableName}` : loadedOrder?.orderNo}
+                </div>
+                <button onClick={closeBill} className="text-xs text-gray-500 hover:text-gray-700" aria-label="Close bill">✕</button>
               </div>
-              <button onClick={closeBill} className="text-xs text-gray-500 hover:text-gray-700" aria-label="Close bill">✕</button>
+              {(courses?.length ?? 0) > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {(courses || []).map((c: any) => (
+                    <button
+                      key={c.courseNo}
+                      disabled={c.status !== 'QUEUED' || fireCourse.isPending}
+                      onClick={() => fireCourse.mutate(c.courseNo)}
+                      className={`px-2 py-1 rounded text-xs font-medium ${c.status === 'QUEUED' ? 'bg-amber-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}
+                    >
+                      {c.status === 'QUEUED' ? `🔥 ${t('pos.fireCourse')} ${c.courseNo}` : `${t('pos.course')} ${c.courseNo} ✓`}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             <>

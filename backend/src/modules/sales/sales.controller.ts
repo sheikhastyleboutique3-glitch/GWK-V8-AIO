@@ -52,6 +52,7 @@ export class CreateOrderDto {
   @IsOptional() @IsString() platformRef?: string;
   @IsOptional() @IsInt() presetId?: number;
   @IsOptional() @IsInt() guestCount?: number;
+  @IsOptional() @IsInt() pricelistId?: number;
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => OrderItemDto)
   items?: OrderItemDto[];
 }
