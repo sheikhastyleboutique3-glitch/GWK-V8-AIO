@@ -50,6 +50,8 @@ export class CreateOrderDto {
   @IsOptional() @IsString() couponCode?: string;
   @IsOptional() @IsInt() deliveryPlatformId?: number;
   @IsOptional() @IsString() platformRef?: string;
+  @IsOptional() @IsInt() presetId?: number;
+  @IsOptional() @IsInt() guestCount?: number;
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => OrderItemDto)
   items?: OrderItemDto[];
 }

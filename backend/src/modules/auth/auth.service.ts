@@ -60,6 +60,55 @@ export class AuthService {
     };
   }
 
+  /**
+   * Fast cashier switch (Odoo employee badge/PIN login). Given a branch and a
+   * numeric PIN, find the matching approved staff member for that branch and
+   * issue the same JWT pair as a normal login — no email/password needed at the
+   * terminal. PINs are matched within a branch scope to keep them short.
+   */
+  async pinLogin(pin: string, branchId?: number) {
+    if (!pin) throw new UnauthorizedException('PIN required');
+    const candidates = await this.prisma.user.findMany({
+      where: {
+        posPin: pin,
+        isActive: true,
+        isApproved: true,
+        ...(branchId ? { OR: [{ branchId }, { userBranches: { some: { branchId } } }] } : {}),
+      },
+      include: {
+        branch: { select: { id: true, name: true, nameAr: true } },
+        userBranches: { include: { branch: { select: { id: true, name: true, nameAr: true } } } },
+      },
+    });
+    if (candidates.length !== 1) {
+      // 0 = wrong PIN; >1 = ambiguous (PINs must be unique within the branch).
+      throw new UnauthorizedException('Invalid or ambiguous PIN');
+    }
+    const user = candidates[0];
+    const branchIds = user.userBranches.map((ub) => ub.branchId);
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      branchId: user.branchId,
+      branchIds: branchIds.length > 0 ? branchIds : user.branchId ? [user.branchId] : [],
+    };
+    const accessToken = this.jwt.sign(payload);
+    const refreshToken = this.jwt.sign(payload, {
+      secret: this.config.get('JWT_REFRESH_SECRET', 'refresh_secret'),
+      expiresIn: this.config.get('JWT_REFRESH_EXPIRES_IN', '7d'),
+    });
+    const { password: _, ...safeUser } = user;
+    return {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      user: {
+        ...safeUser,
+        assignedBranches: user.userBranches.map((ub) => ({ id: ub.branch.id, name: ub.branch.name, nameAr: ub.branch.nameAr, isPrimary: ub.isPrimary })),
+      },
+    };
+  }
+
   async refreshToken(token: string) {
     try {
       const payload = this.jwt.verify(token, {

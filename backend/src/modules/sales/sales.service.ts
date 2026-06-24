@@ -43,6 +43,8 @@ export interface CreateOrderInput {
   couponCode?: string;
   deliveryPlatformId?: number;
   platformRef?: string;
+  presetId?: number;
+  guestCount?: number;
   items?: OrderItemInput[];
 }
 
@@ -216,13 +218,26 @@ export class SalesService {
       couponDiscount = res.discount;
     }
     const totals = this.totals(items, dto.serviceCharge ?? 0, dto.tip ?? 0, couponDiscount);
-    const channel = dto.channel ?? OrderChannel.DINE_IN;
+    // Apply an order preset (Dine-In/Takeout/Delivery): it sets the channel and
+    // the takeout fiscal position so the right taxes/flow apply.
+    let channel = dto.channel ?? OrderChannel.DINE_IN;
+    let fiscalPositionId: number | null = null;
+    if (dto.presetId) {
+      const preset = await this.prisma.orderPreset.findUnique({ where: { id: dto.presetId } });
+      if (preset) {
+        channel = preset.channel;
+        fiscalPositionId = preset.fiscalPositionId ?? null;
+      }
+    }
     const commission = await this.commissionFor(channel, dto.deliveryPlatformId ?? null, totals.total);
     const order = await this.prisma.order.create({
       data: {
         orderNo,
         branchId: dto.branchId,
         channel,
+        presetId: dto.presetId ?? null,
+        fiscalPositionId,
+        guestCount: dto.guestCount ?? 1,
         customerId: dto.customerId ?? null,
         tableName: dto.tableName,
         serviceCharge: dto.serviceCharge ?? 0,

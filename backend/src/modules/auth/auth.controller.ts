@@ -34,6 +34,14 @@ export class AuthController {
     return this.authService.refreshToken(body.refresh_token);
   }
 
+  // Fast cashier PIN/badge login at the terminal.
+  @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  @Post('pin-login')
+  pinLogin(@Body() body: { pin: string; branchId?: number }) {
+    return this.authService.pinLogin(body?.pin, body?.branchId);
+  }
+
   @ApiBearerAuth()
   @Get('profile')
   getProfile(@CurrentUser('sub') userId: number) {
