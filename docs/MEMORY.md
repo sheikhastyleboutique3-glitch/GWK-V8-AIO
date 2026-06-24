@@ -21,6 +21,7 @@ Multi-branch, bilingual EN/AR. One TypeScript stack end-to-end.
 4. **Combos aren't Products:** a combo explodes at checkout into its chosen component order-lines; the first line carries the combo price, the rest are 0, so each component still deducts its recipe.
 5. **Aggregators (Talabat/Snoonu)** settle via a virtual `AGGREGATOR` channel/payment so their money never inflates the cash drawer; commission & net payout tracked per order.
 6. **Hardware seams, not hard deps:** payment terminals (`/payment-terminals/:id/capture`) auto-approve without a vendor SDK but expose a clearly-marked seam; IoT devices are a registry; printing is an external agent.
+7. **Trading-day session gate:** `sales.create` blocks order creation unless the branch has an **OPEN** `PosSession` (opened by a cashier/manager with the opening cash count). The session is stamped on the order at creation, not just completion, so no ticket can outlive/precede its session. Configurable via Setting `pos.requireOpenSession` (default ON; `"false"` relaxes it). Waiters never open sessions — they only ride an already-open one.
 
 ## Conventions
 - New backend module = `*.service.ts` (Prisma calls) + `*.controller.ts` (REST + Roles) + `*.module.ts`, registered in `app.module.ts`. Config CRUD uses pass-through `dto: any`.

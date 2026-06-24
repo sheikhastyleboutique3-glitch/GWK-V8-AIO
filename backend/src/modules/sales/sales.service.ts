@@ -196,6 +196,21 @@ export class SalesService {
         'This branch is locked by administration (Baladiya / CR non-compliance). Operations are suspended.',
       );
     }
+    // Trading-day gate: a branch must have an OPEN POS session (opened with the
+    // opening cash count by a cashier/manager) before ANY order — waiter or
+    // cashier — can be created. This binds every ticket to a session for clean
+    // cash control + Z-reports and prevents orphan orders. Configurable via the
+    // Setting `pos.requireOpenSession` (default ON); set to "false" to relax.
+    const sessionId = await this.posSessions.currentSessionId(dto.branchId);
+    if (!sessionId) {
+      const setting = await this.prisma.setting.findUnique({ where: { key: 'pos.requireOpenSession' } });
+      const required = !setting || setting.value !== 'false';
+      if (required) {
+        throw new BadRequestException(
+          'No open POS session for this branch. A cashier or manager must open a session (opening cash count) before orders can be taken.',
+        );
+      }
+    }
     // An order may start empty (a fresh POS ticket) and gain items via addItem.
     const orderNo = await this.generateOrderNo(dto.branchId);
 
@@ -304,6 +319,7 @@ export class SalesService {
         presetId: dto.presetId ?? null,
         fiscalPositionId,
         guestCount: dto.guestCount ?? 1,
+        sessionId: sessionId ?? null,
         isSelfOrder: dto.isSelfOrder ?? false,
         selfOrderMode: dto.selfOrderMode ?? null,
         customerId: dto.customerId ?? null,

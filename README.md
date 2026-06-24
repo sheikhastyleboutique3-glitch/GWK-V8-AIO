@@ -105,6 +105,8 @@ The demo ships 3 branches, a coffee/pastry menu with recipes & modifiers, a posi
 
 All demo accounts use password **`Admin@1234`** (change on first login). New hires land **PENDING** until a manager approves them; all demo users are pre-approved. Access is **role-based** and **branch-scoped** (users only see their assigned branch's data).
 
+> **⏱️ Trading-day rule (session gate).** A branch's day must be **opened by a cashier/manager** via a POS session with an **opening cash count** before *any* order can be created — waiter or cashier. Every ticket is then bound to that session for accurate cash control & Z-reports (no orphan orders). Waiters don't open sessions (they handle no cash); they can punch orders only once the branch session is open. Enforced in `sales.create`; toggle with the `pos.requireOpenSession` setting (default **ON**, set `"false"` to relax). End of shift: cashier/manager runs the **closing count** → variance posts to the finance journal.
+
 ### Demo accounts
 
 | Email | Name | Role | Branch | Lang |

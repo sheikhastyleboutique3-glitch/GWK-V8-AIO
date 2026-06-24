@@ -28,7 +28,15 @@ Repeatable how-tos for operating and extending the system.
 ## Operations skills
 
 ### Open a trading day
-Admin/cashier → **Sessions** → open session with the **opening cash count** (denominations). Orders can only be rung up inside an open session.
+Admin/cashier → **Sessions** → open session with the **opening cash count** (denominations). Orders can only be rung up inside an open session — **and** the branch must have an open session before *any* waiter/cashier can create a ticket (enforced in `sales.create`). Waiters don't open sessions; they ride the branch's open session.
+
+### Toggle the session gate (require-open-session)
+The gate is controlled by Setting **`pos.requireOpenSession`** (default ON). To relax it (e.g. quick-service that runs "blind"), upsert that setting to value `"false"`:
+```sql
+INSERT INTO settings(key,value,"group","updatedAt") VALUES('pos.requireOpenSession','false','pos',now())
+ON CONFLICT(key) DO UPDATE SET value='false';
+```
+Set back to `"true"` (or delete the row) to re-enforce. Enforcement lives in `backend/src/modules/sales/sales.service.ts` → `create()`; the session id is stamped on the order at creation.
 
 ### Close & reconcile
 Close session → enter the **counted drawer** (denominations). The system computes expected-vs-counted and posts the variance as a `CASH_DIFFERENCE` finance entry. Print the Z report.
