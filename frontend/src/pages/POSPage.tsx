@@ -186,6 +186,7 @@ export default function POSPage() {
     return map;
   }, [modifierGroups]);
   const [modProduct, setModProduct] = useState<{ product: any; groups: ModGroup[] } | null>(null);
+  const [variantProduct, setVariantProduct] = useState<{ product: any; variants: any[] } | null>(null);
 
   // ---- New-sale local cart helpers ----
   const addToCart = (p: any, unitPrice?: number, modifiers?: ChosenModifier[]) => {
@@ -226,13 +227,34 @@ export default function POSPage() {
     if (mode === 'existing') addItemMut.mutate({ product: p, unitPrice, modifiers });
     else addToCart(p, unitPrice, modifiers);
   };
-  const onProduct = (p: any) => {
+  const onProduct = async (p: any) => {
+    // Product with variants → let the cashier pick the variant (adjusts price).
+    if (p.hasVariants) {
+      try {
+        const variants = await api.get(`/product-attributes/variants/${p.id}`).then((r) => r.data.data);
+        if (variants?.length) {
+          setVariantProduct({ product: p, variants: variants.filter((v: any) => v.isActive !== false) });
+          return;
+        }
+      } catch {
+        /* fall through to normal add */
+      }
+    }
     const groups = productGroups.get(p.id);
     if (groups && groups.length) {
       setModProduct({ product: p, groups });
       return;
     }
     addLine(p, p.costPrice ?? 0, undefined);
+  };
+
+  const pickVariant = (v: any) => {
+    if (!variantProduct) return;
+    const base = variantProduct.product.salePrice ?? variantProduct.product.costPrice ?? 0;
+    const prod = { ...variantProduct.product, name: `${variantProduct.product.name} · ${v.sku}` };
+    // Pass a display-only modifier so variant lines stay distinct in the cart.
+    addLine(prod, base + (v.priceExtra ?? 0), [{ optionId: v.id, name: v.sku, priceDelta: 0 }] as any);
+    setVariantProduct(null);
   };
 
   const loadBill = (order: any) => {
@@ -423,6 +445,25 @@ export default function POSPage() {
     <div>
       <PageHeader title={t('nav.pos')} subtitle={activeBranch?.name} />
       <PosSessionBar branchId={branchId} businessInfo={businessInfo} />
+      {variantProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setVariantProduct(null)}>
+          <div className="w-full max-w-sm rounded-xl bg-white dark:bg-gray-900 p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="text-sm font-semibold mb-3">{variantProduct.product.name} — {t('pos.pickVariant')}</div>
+            <div className="space-y-2">
+              {variantProduct.variants.map((v: any) => {
+                const base = variantProduct.product.salePrice ?? variantProduct.product.costPrice ?? 0;
+                return (
+                  <button key={v.id} onClick={() => pickVariant(v)} className="w-full flex justify-between items-center rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <span>{v.sku}</span>
+                    <span className="font-semibold">{(base + (v.priceExtra ?? 0)).toFixed(2)}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <button onClick={() => setVariantProduct(null)} className="mt-3 w-full py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm">{t('common.cancel')}</button>
+          </div>
+        </div>
+      )}
       {modProduct && (
         <ModifierModal
           product={modProduct.product}
