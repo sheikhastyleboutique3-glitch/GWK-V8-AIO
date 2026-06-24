@@ -101,6 +101,82 @@ The demo ships 3 branches, a coffee/pastry menu with recipes & modifiers, a posi
 
 ---
 
+## 👥 Demo Staff — Workflows & Permissions
+
+All demo accounts use password **`Admin@1234`** (change on first login). New hires land **PENDING** until a manager approves them; all demo users are pre-approved. Access is **role-based** and **branch-scoped** (users only see their assigned branch's data).
+
+### Demo accounts
+
+| Email | Name | Role | Branch | Lang |
+|-------|------|------|--------|------|
+| `admin@gwk.com` | Super Admin | **SUPER_ADMIN** | Warehouse (all) | EN |
+| `manager.d@gwk.com` | Rania Al-Kuwari | **BRANCH_MANAGER** | Doha | AR |
+| `manager.w@gwk.com` | Faisal Al-Thani | **BRANCH_MANAGER** | Wakra | AR |
+| `procurement@gwk.com` | Omar Al-Marri | **PROCUREMENT** | Warehouse | EN |
+| `warehouse@gwk.com` | Nasser Al-Dosari | **WAREHOUSE** | Warehouse | AR |
+| `kitchen@gwk.com` | Layla Al-Naimi | **KITCHEN** | Doha | AR |
+| `barista@gwk.com` | Tariq Al-Hajri | **BARISTA** | Doha | EN |
+| `pastry@gwk.com` | Hana Al-Sulaiti | **PASTRY** | Doha | AR |
+| `cashier@gwk.com` | Sami Al-Emadi | **CASHIER** | Doha | EN |
+| `waiter@gwk.com` | Khalid Al-Naimi | **WAITER** | Doha | EN |
+| `cleaner@gwk.com` | Yusuf Al-Kaabi | **CLEANER** | Doha | AR |
+| `kitchen.w@gwk.com` | Mona Al-Mohannadi | **KITCHEN** | Wakra | AR |
+
+> Roles also defined for **DRIVER** (deliveries terminal) and **ACCOUNTANT** (finance/reconciliation) — create them under **Team → Users**.
+> Pages open to *every* signed-in user: **Dashboard, Product Catalog, Requisitions, Wastage, Alerts, Notifications**.
+
+### Role workflows & access
+
+#### 🛡️ SUPER_ADMIN — *Super Admin*
+**Workflow:** Owns global setup. Creates branches, users, categories, menu, recipes, modifiers, taxes/pricelists/combos, printers, payment methods/terminals, presets, loyalty, IoT & self-order configs; reviews the audit log and company-wide analytics.
+**Access:** Everything, all branches — including **Branches** and **Audit Log** (super-admin only).
+
+#### 🧑‍💼 BRANCH_MANAGER — *Rania (Doha) / Faisal (Wakra)*
+**Workflow:** Runs one branch end-to-end. Approves new staff, manages menu/recipes/promotions, opens/closes POS sessions & reviews cash variance, handles purchase orders/payables/receivables, monitors KDS and reports, and owns all **Configuration** screens for the branch.
+**Access:** Sales dashboard & orders, POS, Waiter, Tables, KDS, Menu/Recipes/Modifiers/Promotions, Inventory/StockCount/Production/Transfers, Suppliers/POs/Payables, Staff Tasks, Users, Reports/Sessions/Receivables/Delivery-platforms, all **Configuration**, Discount Rules, Printers, Loyalty. *(Not: Branches, Audit Log.)*
+
+#### 💳 CASHIER — *Sami*
+**Workflow:** Opens a session with the **opening cash count**, rings up orders at the **POS** (presets, variants, combos, modifiers, discounts, split-tender, split-by-seat, loyalty/eWallet & terminal tenders), settles waiter bills, manages customers/deliveries, and runs the **closing cash count** + Z report at end of shift.
+**Access:** POS, Waiter, Tables, Deliveries, Customers, Menu/86, Sales History, Sessions, Receivables, Loyalty + the open-to-all pages.
+
+#### 🧑‍🍳 WAITER — *Khalid*
+**Workflow:** Works the **floor plan** — seats guests at tables, punches orders per seat, fires **courses** to the kitchen in waves, marks 86 items, requests the bill; the cashier settles payment.
+**Access:** Waiter, Tables, Menu/86 + open-to-all.
+
+#### 🔥 KITCHEN — *Layla (Doha) / Mona (Wakra)*
+**Workflow:** Works the **KDS** hot-kitchen queue: receives fired tickets/courses, advances them PREPARING → READY → SERVED, marks 86 items, and runs **production orders** (central-kitchen prep that consumes raw stock and yields semi/finished goods). Maintains **recipes/BOM**.
+**Access:** KDS, Menu/86, Recipes & BOM, Production + open-to-all.
+
+#### ☕ BARISTA — *Tariq*
+**Workflow:** Works the **bar/drinks KDS** station — prepares and bumps drink tickets routed to the Barista printer/screen; marks drinks 86.
+**Access:** KDS, Menu/86 + open-to-all.
+
+#### 🥐 PASTRY — *Hana*
+**Workflow:** Works the **pastry/bakery KDS** station, runs pastry **production**, and maintains pastry **recipes**.
+**Access:** KDS, Menu/86, Recipes & BOM, Production + open-to-all.
+
+#### 📦 PROCUREMENT — *Omar*
+**Workflow:** Sources supply: manages **suppliers**, raises **purchase orders**, tracks **payables** (aging), sets **bulk pricing**, moves stock via **transfers**, reconciles **delivery platforms**, and watches inventory & reports across branches.
+**Access:** Pricing, Inventory, Suppliers, Purchase Orders, Payables, Transfers, Reports, Receivables, Delivery Platforms + open-to-all.
+
+#### 🏭 WAREHOUSE — *Nasser*
+**Workflow:** Central-warehouse ops: receives goods into **batches (FEFO)**, fulfills branch **requisitions**, dispatches **transfers**, runs **stocktakes** (variance/shrinkage) and **production**, and clears assigned **staff tasks**.
+**Access:** Inventory, Stock Count, Production, Transfers, Suppliers, Purchase Orders, Staff Tasks + open-to-all.
+
+#### 🧹 CLEANER — *Yusuf*
+**Workflow:** Receives and completes **staff tasks/checklists** (cleaning, opening/closing duties, maintenance) assigned by the manager.
+**Access:** Staff Tasks + open-to-all.
+
+#### 🚗 DRIVER *(role available; create as needed)*
+**Workflow:** Uses the **Deliveries** terminal: picks up assigned delivery orders, moves them OUT_FOR_DELIVERY → DELIVERED.
+**Access:** Deliveries + open-to-all.
+
+#### 🧮 ACCOUNTANT *(role available; create as needed)*
+**Workflow:** Reviews finance: receivables/payables and aggregator **reconciliation** (gross vs commission vs net payout).
+**Access:** Finance/reconciliation endpoints + open-to-all.
+
+---
+
 ## 🖨️ On-prem print agent
 Network KOT printing runs on a store device — see [`agent/README.md`](./agent/README.md).
 
