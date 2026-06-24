@@ -1,0 +1,799 @@
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { PrismaService } from '../../common/prisma/prisma.service';
+import { InventoryService } from '../inventory/inventory.service';
+import { FinanceService, FinanceEntryInput } from '../finance/finance.service';
+import { PromotionsService } from '../promotions/promotions.service';
+import { PosSessionsService } from '../pos-sessions/pos-sessions.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { ORDER_COMPLETED, OrderCompletedEvent } from '../../common/events/order-events';
+import { KDS_CHANGED } from '../kds/kds.gateway';
+import {
+  InventoryTxType,
+  OrderChannel,
+  OrderStatus,
+  PaymentMethod,
+  Prisma,
+  TableStatus,
+  FinanceEntryType,
+} from '@prisma/client';
+
+export interface OrderItemInput {
+  productId: number;
+  quantity: number;
+  unitPrice: number;
+  discount?: number;
+  taxAmount?: number;
+  notes?: string;
+  modifiers?: any[];
+}
+
+export interface CreateOrderInput {
+  branchId: number;
+  channel?: OrderChannel;
+  customerId?: number;
+  tableName?: string;
+  serviceCharge?: number;
+  tip?: number;
+  notes?: string;
+  couponCode?: string;
+  deliveryPlatformId?: number;
+  platformRef?: string;
+  items?: OrderItemInput[];
+}
+
+export interface PaymentInput {
+  method: PaymentMethod;
+  amount: number;
+  reference?: string;
+  giftCardCode?: string;
+}
+
+// 1 loyalty point per whole currency unit spent. Tune via settings later.
+const LOYALTY_RATE = 1;
+// Monetary value of one loyalty point when redeemed (e.g. 0.05 = 5 dirhams/point).
+const LOYALTY_POINT_VALUE = 0.05;
+
+@Injectable()
+export class SalesService {
+  constructor(
+    private prisma: PrismaService,
+    private inventory: InventoryService,
+    private finance: FinanceService,
+    private promotions: PromotionsService,
+    private events: EventEmitter2,
+    private posSessions: PosSessionsService,
+  ) {}
+
+  private orderInclude = {
+    items: {
+      include: {
+        product: {
+          select: {
+            id: true,
+            sku: true,
+            name: true,
+            nameAr: true,
+            category: { select: { id: true, name: true, nameAr: true, station: true } },
+          },
+        },
+      },
+    },
+    payments: true,
+    customer: { select: { id: true, name: true, phone: true, loyaltyPoints: true } },
+    branch: { select: { id: true, name: true, nameAr: true } },
+  } satisfies Prisma.OrderInclude;
+
+  private async generateOrderNo(branchId: number): Promise<string> {
+    const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const count = await this.prisma.order.count();
+    return `ORD-${stamp}-B${branchId}-${String(count + 1).padStart(5, '0')}`;
+  }
+
+  /** Recompute monetary roll-up fields from the current line items. */
+  private totals(
+    items: Array<{ quantity: number; unitPrice: number; discount: number; taxAmount: number }>,
+    serviceCharge: number,
+    tip: number,
+    couponDiscount = 0,
+    ruleDiscount = 0,
+  ) {
+    const subtotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+    const itemDiscounts = items.reduce((s, i) => s + (i.discount ?? 0), 0);
+    const discountTotal = itemDiscounts + couponDiscount + ruleDiscount;
+    const taxTotal = items.reduce((s, i) => s + (i.taxAmount ?? 0), 0);
+    const total = subtotal - discountTotal + taxTotal + serviceCharge + tip;
+    return { subtotal, discountTotal, taxTotal, total };
+  }
+
+  /**
+   * Aggregator reconciliation. For third-party channels (Talabat / Snoonu /
+   * generic AGGREGATOR) the platform keeps a commission and pays out later, so
+   * we compute commissionAmount + netPayout off the order total. For all other
+   * channels there is no commission and netPayout == total.
+   */
+  private static readonly AGGREGATOR_CHANNELS: OrderChannel[] = [
+    OrderChannel.TALABAT,
+    OrderChannel.SNOONU,
+    OrderChannel.AGGREGATOR,
+  ];
+
+  private async commissionFor(
+    channel: OrderChannel,
+    deliveryPlatformId: number | null | undefined,
+    total: number,
+  ): Promise<{ commissionAmount: number; netPayout: number }> {
+    if (!SalesService.AGGREGATOR_CHANNELS.includes(channel)) {
+      return { commissionAmount: 0, netPayout: total };
+    }
+    let pct = 0;
+    if (deliveryPlatformId) {
+      const platform = await this.prisma.deliveryPlatform.findUnique({
+        where: { id: deliveryPlatformId },
+        select: { commissionPct: true },
+      });
+      pct = platform?.commissionPct ?? 0;
+    }
+    const commissionAmount = Math.round(total * (pct / 100) * 100) / 100;
+    return { commissionAmount, netPayout: Math.round((total - commissionAmount) * 100) / 100 };
+  }
+
+  private async recompute(orderId: number) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+    if (!order) throw new NotFoundException(`Order ${orderId} not found`);
+    const t = this.totals(order.items, order.serviceCharge, order.tip, order.couponDiscount, order.ruleDiscount);
+    const commission = await this.commissionFor(order.channel, order.deliveryPlatformId, t.total);
+    return this.prisma.order.update({
+      where: { id: orderId },
+      data: { ...t, ...commission },
+      include: this.orderInclude,
+    });
+  }
+
+  findAll(filters?: { branchId?: number; status?: OrderStatus; customerId?: number }) {
+    return this.prisma.order.findMany({
+      where: {
+        ...(filters?.branchId ? { branchId: filters.branchId } : {}),
+        ...(filters?.status ? { status: filters.status } : {}),
+        ...(filters?.customerId ? { customerId: filters.customerId } : {}),
+      },
+      include: this.orderInclude,
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+  }
+
+  async findOne(id: number) {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: this.orderInclude,
+    });
+    if (!order) throw new NotFoundException(`Order ${id} not found`);
+    return order;
+  }
+
+  async create(dto: CreateOrderInput, userId?: number) {
+    // Qatar regulatory lock: block new orders on an admin-locked branch.
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: dto.branchId },
+      select: { isEnforcedLocked: true },
+    });
+    if (branch?.isEnforcedLocked) {
+      throw new BadRequestException(
+        'This branch is locked by administration (Baladiya / CR non-compliance). Operations are suspended.',
+      );
+    }
+    // An order may start empty (a fresh POS ticket) and gain items via addItem.
+    const orderNo = await this.generateOrderNo(dto.branchId);
+    const items = (dto.items ?? []).map((i) => ({
+      productId: i.productId,
+      quantity: i.quantity,
+      unitPrice: i.unitPrice,
+      discount: i.discount ?? 0,
+      taxAmount: i.taxAmount ?? 0,
+      lineTotal: i.quantity * i.unitPrice - (i.discount ?? 0) + (i.taxAmount ?? 0),
+      notes: i.notes,
+      modifiers: i.modifiers && i.modifiers.length ? (i.modifiers as Prisma.InputJsonValue) : undefined,
+    }));
+    const t = this.totals(
+      items,
+      dto.serviceCharge ?? 0,
+      dto.tip ?? 0,
+    );
+    // Validate & price an optional coupon against the gross item subtotal.
+    let couponCode: string | null = null;
+    let couponDiscount = 0;
+    if (dto.couponCode) {
+      const res = await this.promotions.validateCoupon(dto.couponCode, t.subtotal);
+      couponCode = res.code;
+      couponDiscount = res.discount;
+    }
+    const totals = this.totals(items, dto.serviceCharge ?? 0, dto.tip ?? 0, couponDiscount);
+    const channel = dto.channel ?? OrderChannel.DINE_IN;
+    const commission = await this.commissionFor(channel, dto.deliveryPlatformId ?? null, totals.total);
+    const order = await this.prisma.order.create({
+      data: {
+        orderNo,
+        branchId: dto.branchId,
+        channel,
+        customerId: dto.customerId ?? null,
+        tableName: dto.tableName,
+        serviceCharge: dto.serviceCharge ?? 0,
+        tip: dto.tip ?? 0,
+        notes: dto.notes,
+        couponCode,
+        couponDiscount,
+        deliveryPlatformId: dto.deliveryPlatformId ?? null,
+        platformRef: dto.platformRef ?? null,
+        ...commission,
+        createdById: userId ?? null,
+        ...totals,
+        items: { create: items },
+      },
+      include: this.orderInclude,
+    });
+    // Delivery-channel orders get a manifest for dispatch. Aggregator orders
+    // (Talabat/Snoonu) are fulfilled by the platform's own fleet, so only our
+    // own internal DELIVERY channel creates a dispatch manifest.
+    if (order.channel === OrderChannel.DELIVERY) {
+      await this.prisma.orderDelivery
+        .create({ data: { orderId: order.id, branchId: order.branchId, status: 'PENDING' } })
+        .catch(() => {});
+    }
+    return order;
+  }
+
+  private async assertOpen(orderId: number) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException(`Order ${orderId} not found`);
+    if (order.status !== OrderStatus.OPEN && order.status !== OrderStatus.HELD) {
+      throw new BadRequestException(
+        `Order ${order.orderNo} is ${order.status}; only OPEN/HELD orders can be modified.`,
+      );
+    }
+    return order;
+  }
+
+  async addItem(orderId: number, dto: OrderItemInput) {
+    await this.assertOpen(orderId);
+    await this.prisma.orderItem.create({
+      data: {
+        orderId,
+        productId: dto.productId,
+        quantity: dto.quantity,
+        unitPrice: dto.unitPrice,
+        discount: dto.discount ?? 0,
+        taxAmount: dto.taxAmount ?? 0,
+        lineTotal: dto.quantity * dto.unitPrice - (dto.discount ?? 0) + (dto.taxAmount ?? 0),
+        notes: dto.notes,
+        modifiers: dto.modifiers && dto.modifiers.length ? (dto.modifiers as Prisma.InputJsonValue) : undefined,
+      },
+    });
+    const res = await this.recompute(orderId);
+    this.events.emit(KDS_CHANGED, { branchId: res.branchId });
+    return res;
+  }
+
+  async removeItem(orderId: number, itemId: number) {
+    await this.assertOpen(orderId);
+    const item = await this.prisma.orderItem.findFirst({ where: { id: itemId, orderId } });
+    if (!item) throw new NotFoundException(`Item ${itemId} not found on order ${orderId}`);
+    await this.prisma.orderItem.delete({ where: { id: itemId } });
+    return this.recompute(orderId);
+  }
+
+  async setStatus(orderId: number, status: OrderStatus) {
+    await this.assertOpen(orderId);
+    await this.prisma.order.update({ where: { id: orderId }, data: { status } });
+    return this.findOne(orderId);
+  }
+
+  /**
+   * Apply (or clear) a coupon on an existing OPEN/HELD order — used when a
+   * cashier picks up a waiter's bill and applies a discount before payment.
+   * Pass an empty/undefined code to remove a previously applied coupon.
+   */
+  async applyCoupon(orderId: number, code?: string | null) {
+    await this.assertOpen(orderId);
+    let couponCode: string | null = null;
+    let couponDiscount = 0;
+    if (code && code.trim()) {
+      const items = await this.prisma.orderItem.findMany({ where: { orderId } });
+      const subtotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+      const res = await this.promotions.validateCoupon(code.trim(), subtotal);
+      couponCode = res.code;
+      couponDiscount = res.discount;
+    }
+    await this.prisma.order.update({
+      where: { id: orderId },
+      data: { couponCode, couponDiscount },
+    });
+    return this.recompute(orderId);
+  }
+
+  /**
+   * Apply (or clear) a reusable DiscountRule on an OPEN/HELD order. Supports
+   * ORDER-scope PERCENT/FIXED rules computed against the current item subtotal.
+   * ITEM/CATEGORY and BOGO rules are stored for definition but must be applied
+   * per line (POS sets OrderItem.discount directly); this method rejects them
+   * with a clear message rather than silently mis-charging. Pass ruleId null to
+   * clear a previously applied rule.
+   */
+  async applyDiscountRule(orderId: number, ruleId?: number | null, reason?: string) {
+    await this.assertOpen(orderId);
+    let discountRuleId: number | null = null;
+    let ruleDiscount = 0;
+    let discountReason: string | null = null;
+
+    if (ruleId) {
+      const rule = await this.prisma.discountRule.findUnique({ where: { id: ruleId } });
+      if (!rule || !rule.isActive) throw new BadRequestException('Discount rule not found or inactive.');
+      const now = new Date();
+      if (rule.validFrom && now < rule.validFrom) throw new BadRequestException('Discount rule is not yet valid.');
+      if (rule.validTo && now > rule.validTo) throw new BadRequestException('Discount rule has expired.');
+      if (rule.scope !== 'ORDER') {
+        throw new BadRequestException(
+          `${rule.scope}/${rule.type} rules are applied per line item, not cart-wide.`,
+        );
+      }
+      const items = await this.prisma.orderItem.findMany({ where: { orderId } });
+      const subtotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+      if (subtotal + 1e-6 < rule.minOrder) {
+        throw new BadRequestException(`Order subtotal below the rule minimum of ${rule.minOrder}.`);
+      }
+      if (rule.type === 'PERCENT') {
+        ruleDiscount = Math.round(subtotal * (rule.value / 100) * 100) / 100;
+      } else if (rule.type === 'FIXED') {
+        ruleDiscount = Math.min(rule.value, subtotal);
+      } else {
+        throw new BadRequestException('BOGO rules are applied per line item, not cart-wide.');
+      }
+      discountRuleId = rule.id;
+      discountReason = reason?.trim() || rule.name;
+    }
+
+    await this.prisma.order.update({
+      where: { id: orderId },
+      data: { discountRuleId, ruleDiscount, discountReason },
+    });
+    return this.recompute(orderId);
+  }
+
+  /** Release a dine-in table back to AVAILABLE once its bill is settled. */
+  private async freeTable(branchId: number, tableName?: string | null) {
+    if (!tableName) return;
+    try {
+      await this.prisma.restaurantTable.updateMany({
+        where: { branchId, name: tableName, status: { not: TableStatus.AVAILABLE } },
+        data: { status: TableStatus.AVAILABLE },
+      });
+    } catch {
+      /* table linkage is best-effort; never block a completed sale */
+    }
+  }
+
+  /** Move an open ticket to a different table. */
+  async transferTable(orderId: number, tableName: string) {
+    const order = await this.assertOpen(orderId);
+    await this.prisma.order.update({ where: { id: orderId }, data: { tableName } });
+    if (tableName) {
+      await this.prisma.restaurantTable
+        .updateMany({ where: { branchId: order.branchId, name: tableName }, data: { status: TableStatus.OCCUPIED } })
+        .catch(() => {});
+    }
+    this.events.emit(KDS_CHANGED, { branchId: order.branchId });
+    return this.findOne(orderId);
+  }
+
+  /** Merge another open ticket's items into this one, then void the source. */
+  async merge(targetId: number, fromId: number) {
+    if (targetId === fromId) throw new BadRequestException('Cannot merge an order into itself.');
+    const target = await this.assertOpen(targetId);
+    const from = await this.assertOpen(fromId);
+    if (target.branchId !== from.branchId) throw new BadRequestException('Orders are in different branches.');
+    await this.prisma.$transaction(async (tx) => {
+      await tx.orderItem.updateMany({ where: { orderId: fromId }, data: { orderId: targetId } });
+      await tx.order.update({ where: { id: fromId }, data: { status: OrderStatus.VOIDED } });
+    });
+    await this.recompute(targetId);
+    await this.freeTable(from.branchId, from.tableName);
+    this.events.emit(KDS_CHANGED, { branchId: target.branchId });
+    return this.findOne(targetId);
+  }
+
+  /** Split selected line items off into a new ticket (split bill by item). */
+  async split(orderId: number, itemIds: number[]) {
+    const order = await this.assertOpen(orderId);
+    if (!itemIds?.length) throw new BadRequestException('Select at least one item to split.');
+    const items = await this.prisma.orderItem.findMany({ where: { id: { in: itemIds }, orderId } });
+    if (!items.length) throw new BadRequestException('No matching items on this order.');
+    const total = await this.prisma.orderItem.count({ where: { orderId } });
+    if (items.length >= total) throw new BadRequestException('Cannot split off every item — nothing would remain.');
+
+    const newOrder = await this.prisma.order.create({
+      data: {
+        orderNo: await this.generateOrderNo(order.branchId),
+        branchId: order.branchId,
+        channel: order.channel,
+        tableName: order.tableName,
+        createdById: order.createdById,
+      },
+    });
+    await this.prisma.orderItem.updateMany({ where: { id: { in: items.map((i) => i.id) } }, data: { orderId: newOrder.id } });
+    await this.recompute(orderId);
+    await this.recompute(newOrder.id);
+    return { original: await this.findOne(orderId), newOrder: await this.findOne(newOrder.id) };
+  }
+
+  async voidOrder(orderId: number) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException(`Order ${orderId} not found`);
+    if (order.status === OrderStatus.COMPLETED) {
+      throw new BadRequestException('Completed orders cannot be voided; issue a refund instead.');
+    }
+    await this.prisma.order.update({ where: { id: orderId }, data: { status: OrderStatus.VOIDED } });
+    return this.findOne(orderId);
+  }
+
+  /**
+   * Refund a COMPLETED sale. Within one serializable transaction:
+   *   1. Restock every component that was deducted (mirrors the sale's BOM
+   *      explosion, but as RETURN_IN through the FEFO engine).
+   *   2. Post reversing finance entries (REFUND revenue + COGS/tax/service/tip
+   *      reversal) so period totals net back out.
+   *   3. Roll back the customer's loyalty accrual (never below zero).
+   *   4. Mark the order REFUNDED.
+   * Gift-card / card payments are NOT auto-credited back — settle those by your
+   * payment provider / manual gift-card top-up.
+   */
+  async refund(orderId: number, userId?: number) {
+    const pre = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+    if (!pre) throw new NotFoundException(`Order ${orderId} not found`);
+    if (pre.status !== OrderStatus.COMPLETED) {
+      throw new BadRequestException(`Only COMPLETED orders can be refunded (order is ${pre.status}).`);
+    }
+
+    const refunded = await this.prisma.$transaction(
+      async (tx) => {
+        for (const item of pre.items) {
+          const recipe = await tx.recipe.findFirst({
+            where: { productId: item.productId, isActive: true },
+            orderBy: { version: 'desc' },
+            include: { components: true },
+          });
+
+          if (recipe && recipe.components.length) {
+            const yieldQty = recipe.yieldQty || 1;
+            const recipeLoss = 1 + (recipe.prepLossPct + recipe.cookingLossPct + recipe.wastePct) / 100;
+            for (const comp of recipe.components) {
+              const perUnit = (comp.quantity * (1 + (comp.wastePct ?? 0) / 100)) / yieldQty;
+              const qty = perUnit * item.quantity * recipeLoss;
+              if (qty <= 0) continue;
+              await this.inventory.applyManualAdjustment(tx, {
+                productId: comp.componentProductId,
+                branchId: pre.branchId,
+                quantity: qty,
+                type: InventoryTxType.RETURN_IN,
+                notes: `Refund ${pre.orderNo} — recipe of product #${item.productId}`,
+                performedById: userId,
+              });
+            }
+          } else {
+            await this.inventory.applyManualAdjustment(tx, {
+              productId: item.productId,
+              branchId: pre.branchId,
+              quantity: item.quantity,
+              type: InventoryTxType.RETURN_IN,
+              notes: `Refund ${pre.orderNo} — direct stock item`,
+              performedById: userId,
+            });
+          }
+        }
+
+        // Reversing finance journal lines.
+        const base = {
+          branchId: pre.branchId,
+          sourceType: 'order',
+          sourceId: pre.id,
+          reference: pre.orderNo,
+          createdById: userId,
+        };
+        const lines: FinanceEntryInput[] = [
+          { ...base, type: FinanceEntryType.REFUND, amount: -(pre.subtotal - pre.discountTotal), notes: 'Sale refunded' },
+          { ...base, type: FinanceEntryType.COGS, amount: Math.abs(pre.foodCost), notes: 'COGS reversal (refund)' },
+        ];
+        if (pre.taxTotal) lines.push({ ...base, type: FinanceEntryType.TAX, amount: -pre.taxTotal, notes: 'Tax reversal (refund)' });
+        if (pre.serviceCharge) lines.push({ ...base, type: FinanceEntryType.SERVICE_CHARGE, amount: -pre.serviceCharge, notes: 'Service reversal (refund)' });
+        if (pre.tip) lines.push({ ...base, type: FinanceEntryType.TIP, amount: -pre.tip, notes: 'Tip reversal (refund)' });
+        await this.finance.createMany(lines, tx);
+
+        // Reverse loyalty accrual.
+        if (pre.customerId) {
+          const cust = await tx.customer.findUnique({ where: { id: pre.customerId } });
+          const dec = Math.floor(pre.total * LOYALTY_RATE);
+          await tx.customer.update({
+            where: { id: pre.customerId },
+            data: { loyaltyPoints: Math.max(0, (cust?.loyaltyPoints ?? 0) - dec) },
+          });
+        }
+
+        return tx.order.update({
+          where: { id: orderId },
+          data: { status: OrderStatus.REFUNDED },
+          include: this.orderInclude,
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20_000 },
+    );
+
+    return refunded;
+  }
+
+  async addPayment(orderId: number, dto: PaymentInput, userId?: number) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException(`Order ${orderId} not found`);
+    if (order.status === OrderStatus.VOIDED || order.status === OrderStatus.REFUNDED) {
+      throw new BadRequestException(`Cannot take payment on a ${order.status} order.`);
+    }
+    if (!(dto.amount > 0)) throw new BadRequestException('Payment amount must be positive.');
+
+    // Gift card tender: draw the amount down from the card balance first.
+    if (dto.method === PaymentMethod.GIFT_CARD) {
+      if (!dto.giftCardCode) {
+        throw new BadRequestException('giftCardCode is required for a gift card payment.');
+      }
+      await this.promotions.redeemGiftCard(dto.giftCardCode, dto.amount);
+    }
+
+    // Store credit / loyalty tenders draw from the attached customer's wallet.
+    if (dto.method === PaymentMethod.STORE_CREDIT || dto.method === PaymentMethod.LOYALTY) {
+      if (!order.customerId) {
+        throw new BadRequestException('Attach a customer to pay with store credit or loyalty points.');
+      }
+      const customer = await this.prisma.customer.findUnique({ where: { id: order.customerId } });
+      if (!customer) throw new BadRequestException('Customer not found for wallet payment.');
+      if (dto.method === PaymentMethod.STORE_CREDIT) {
+        if ((customer.creditBalance ?? 0) + 1e-6 < dto.amount) {
+          throw new BadRequestException(`Insufficient store credit: ${customer.creditBalance?.toFixed(2)} available.`);
+        }
+        await this.prisma.customer.update({
+          where: { id: customer.id },
+          data: { creditBalance: { decrement: dto.amount } },
+        });
+      } else {
+        const pointsNeeded = Math.ceil(dto.amount / LOYALTY_POINT_VALUE);
+        if ((customer.loyaltyPoints ?? 0) < pointsNeeded) {
+          throw new BadRequestException(`Insufficient points: need ${pointsNeeded}, have ${customer.loyaltyPoints}.`);
+        }
+        await this.prisma.customer.update({
+          where: { id: customer.id },
+          data: { loyaltyPoints: { decrement: pointsNeeded } },
+        });
+      }
+    }
+
+    await this.prisma.payment.create({
+      data: {
+        orderId,
+        method: dto.method,
+        amount: dto.amount,
+        reference: dto.reference ?? dto.giftCardCode,
+        receivedById: userId ?? null,
+      },
+    });
+    const paid = await this.prisma.payment.aggregate({
+      where: { orderId },
+      _sum: { amount: true },
+    });
+    await this.prisma.order.update({
+      where: { id: orderId },
+      data: { paidTotal: paid._sum.amount ?? 0 },
+    });
+    return this.findOne(orderId);
+  }
+
+  /**
+   * KEYSTONE — Complete a sale.
+   * Within ONE serializable transaction:
+   *   1. Re-validate the order is OPEN/HELD and fully paid.
+   *   2. For each line item, explode its active Recipe (BOM) and deduct every
+   *      component from branch stock via the existing FEFO inventory engine
+   *      (one SALE inventory_transaction per component per batch consumed).
+   *      Items with no recipe deduct the sold product itself (retail goods).
+   *   3. Capture food cost + gross profit snapshots on the order and each line.
+   *   4. Mark COMPLETED and accrue loyalty points.
+   * If any component is short on stock the whole transaction rolls back — no
+   * partial sale, no orphaned inventory movements.
+   */
+  async complete(orderId: number, opts: { allowUnpaid?: boolean } = {}, userId?: number) {
+    const pre = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+    if (!pre) throw new NotFoundException(`Order ${orderId} not found`);
+    if (pre.status !== OrderStatus.OPEN && pre.status !== OrderStatus.HELD) {
+      throw new BadRequestException(`Order ${pre.orderNo} is already ${pre.status}.`);
+    }
+    if (!pre.items.length) {
+      throw new BadRequestException('Cannot complete an order with no items.');
+    }
+    if (!opts.allowUnpaid && pre.paidTotal + 1e-6 < pre.total) {
+      throw new BadRequestException(
+        `Order not fully paid: paid ${pre.paidTotal}, total ${pre.total}.`,
+      );
+    }
+
+    // Stamp the open POS session (if any) for Z-report aggregation.
+    const sessionId = await this.posSessions.currentSessionId(pre.branchId);
+
+    const completed = await this.prisma.$transaction(
+      async (tx) => {
+        let orderFoodCost = 0;
+
+        for (const item of pre.items) {
+          const recipe = await tx.recipe.findFirst({
+            where: { productId: item.productId, isActive: true },
+            orderBy: { version: 'desc' },
+            include: { components: { include: { componentProduct: { select: { costPrice: true } } } } },
+          });
+
+          let lineCost = 0;
+
+          if (recipe && recipe.components.length) {
+            const yieldQty = recipe.yieldQty || 1;
+            const recipeLoss =
+              1 + (recipe.prepLossPct + recipe.cookingLossPct + recipe.wastePct) / 100;
+
+            for (const comp of recipe.components) {
+              const perUnit =
+                (comp.quantity * (1 + (comp.wastePct ?? 0) / 100)) / yieldQty;
+              const deductQty = perUnit * item.quantity * recipeLoss;
+              if (deductQty <= 0) continue;
+
+              await this.inventory.applyManualAdjustment(tx, {
+                productId: comp.componentProductId,
+                branchId: pre.branchId,
+                quantity: deductQty,
+                type: InventoryTxType.SALE,
+                notes: `Sale ${pre.orderNo} — recipe of product #${item.productId}`,
+                performedById: userId,
+              });
+
+              lineCost += deductQty * (comp.componentProduct?.costPrice ?? 0);
+            }
+          } else {
+            // No recipe: treat the sold product as a stocked item and deduct it directly.
+            const prod = await tx.product.findUnique({
+              where: { id: item.productId },
+              select: { costPrice: true },
+            });
+            await this.inventory.applyManualAdjustment(tx, {
+              productId: item.productId,
+              branchId: pre.branchId,
+              quantity: item.quantity,
+              type: InventoryTxType.SALE,
+              notes: `Sale ${pre.orderNo} — direct stock item`,
+              performedById: userId,
+            });
+            lineCost = item.quantity * (prod?.costPrice ?? 0);
+          }
+
+          // Modifier components (e.g. "extra shot") deduct their own stock.
+          const mods = Array.isArray(item.modifiers) ? (item.modifiers as any[]) : [];
+          for (const m of mods) {
+            if (m?.componentProductId && m?.qtyToDeduct > 0) {
+              const q = m.qtyToDeduct * item.quantity;
+              await this.inventory.applyManualAdjustment(tx, {
+                productId: m.componentProductId,
+                branchId: pre.branchId,
+                quantity: q,
+                type: InventoryTxType.SALE,
+                notes: `Sale ${pre.orderNo} — modifier ${m.name ?? ''}`,
+                performedById: userId,
+              });
+              const mp = await tx.product.findUnique({ where: { id: m.componentProductId }, select: { costPrice: true } });
+              lineCost += q * (mp?.costPrice ?? 0);
+            }
+          }
+
+          orderFoodCost += lineCost;
+          await tx.orderItem.update({
+            where: { id: item.id },
+            data: {
+              lineCost,
+              unitCost: item.quantity ? lineCost / item.quantity : 0,
+            },
+          });
+        }
+
+        const grossProfit = pre.total - orderFoodCost;
+        const commission = await this.commissionFor(pre.channel, pre.deliveryPlatformId, pre.total);
+
+        const completed = await tx.order.update({
+          where: { id: orderId },
+          data: {
+            status: OrderStatus.COMPLETED,
+            completedAt: new Date(),
+            foodCost: orderFoodCost,
+            grossProfit,
+            sessionId,
+            ...commission,
+          },
+          include: this.orderInclude,
+        });
+
+        // Loyalty accrual.
+        if (pre.customerId) {
+          await tx.customer.update({
+            where: { id: pre.customerId },
+            data: { loyaltyPoints: { increment: Math.floor(pre.total * LOYALTY_RATE) } },
+          });
+        }
+
+        // Finance journal: revenue + COGS (+ tax / service / tip) for this sale.
+        await this.finance.recordSale(
+          {
+            orderId: pre.id,
+            orderNo: pre.orderNo,
+            branchId: pre.branchId,
+            revenue: pre.subtotal - pre.discountTotal,
+            tax: pre.taxTotal,
+            serviceCharge: pre.serviceCharge,
+            tip: pre.tip,
+            cogs: orderFoodCost,
+            createdById: userId,
+          },
+          tx,
+        );
+
+        return completed;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20_000 },
+    );
+
+    // Post-commit: count the coupon redemption. The sale is already final, so a
+    // redemption-limit race here must not roll back a completed, paid order.
+    if (pre.couponCode) {
+      try {
+        await this.prisma.coupon.update({
+          where: { code: pre.couponCode },
+          data: { redeemedCount: { increment: 1 } },
+        });
+      } catch {
+        /* coupon went away or hit its cap after checkout — ignore */
+      }
+    }
+
+    // Post-commit: fire the decoupled domain event for non-blocking side
+    // effects (analytics, dashboard refresh, notifications). Never awaited into
+    // the checkout path — a listener failure cannot affect the committed sale.
+    const evt: OrderCompletedEvent = {
+      orderId: completed.id,
+      orderNo: completed.orderNo,
+      branchId: completed.branchId,
+      channel: completed.channel,
+      total: completed.total,
+      foodCost: completed.foodCost,
+      grossProfit: completed.grossProfit,
+      customerId: completed.customerId,
+      completedAt: completed.completedAt ?? new Date(),
+    };
+    this.events.emit(ORDER_COMPLETED, evt);
+
+    // Post-commit: release the dine-in table (best-effort, non-blocking).
+    await this.freeTable(completed.branchId, completed.tableName);
+    // Notify kitchen displays for this branch.
+    this.events.emit(KDS_CHANGED, { branchId: completed.branchId });
+
+    return completed;
+  }
+}

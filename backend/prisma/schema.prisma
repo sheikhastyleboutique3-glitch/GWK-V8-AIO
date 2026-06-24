@@ -1,0 +1,1753 @@
+// =============================================================================
+// GWK V8 AIO — Prisma Schema (Odoo 19.0 POS Bar/Restaurant parity target)
+// PostgreSQL. Additive over the existing GWK V7 schema: every legacy table is
+// retained; new Odoo-parity tables + relations are layered on top so existing
+// data and code keep working. Transactions are NEVER hard-deleted — they are
+// soft-voided (status / isVoided) for a complete audit trail.
+// =============================================================================
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum Role {
+  SUPER_ADMIN
+  BRANCH_MANAGER
+  PROCUREMENT
+  WAREHOUSE
+  KITCHEN
+  BARISTA
+  PASTRY
+  CASHIER
+  CLEANER
+  WAITER
+  DRIVER
+  ACCOUNTANT
+}
+
+enum RequisitionStatus {
+  DRAFT
+  SUBMITTED
+  MANAGER_APPROVED
+  MANAGER_MODIFIED
+  MANAGER_CANCELLED
+  ORDER_PLACED_WITH_SUPPLIER
+  RECEIVED_AT_WAREHOUSE
+  DISPATCHED_TO_BRANCH
+  CONFIRMED_RECEIPT
+}
+
+enum WastageReason {
+  EXPIRED
+  DAMAGED
+  SPILLAGE
+  OVERPRODUCTION
+  QUALITY_REJECTION
+  OTHER
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SENT_TO_SUPPLIER
+  PARTIALLY_RECEIVED
+  FULLY_RECEIVED
+  CANCELLED
+}
+
+enum AlertType {
+  EXPIRY_WARNING
+  LOW_STOCK
+  WASTAGE_THRESHOLD
+}
+
+enum InventoryTxType {
+  RECEIPT
+  REQUISITION_FULFILLMENT
+  WASTAGE
+  ADJUSTMENT
+  TRANSFER_IN
+  TRANSFER_OUT
+  SALE
+  PRODUCTION_CONSUME
+  PRODUCTION_YIELD
+  RETURN_IN
+}
+
+enum ExpiryTrackingType {
+  SHELF_LIFE_DAYS
+  MANUFACTURE_TO_EXPIRY
+}
+
+enum ProductType {
+  RAW
+  SEMI_FINISHED
+  MENU
+}
+
+enum TransferStatus {
+  DRAFT
+  IN_TRANSIT
+  RECEIVED
+  CANCELLED
+}
+
+enum ConnectionType {
+  USB
+  IP
+  IOT
+}
+
+enum OrderChannel {
+  DINE_IN
+  TAKEAWAY
+  DELIVERY
+  QR
+  TALABAT
+  SNOONU
+  AGGREGATOR
+}
+
+// Odoo-compliant POS order state machine.
+//   DRAFT -> IN_PROGRESS -> READY -> PAID -> DONE -> INVOICED
+//   any pre-PAID state -> VOIDED ; PAID/DONE -> REFUNDED
+// Legacy V7 values (OPEN/HELD/COMPLETED) retained so existing rows are valid;
+// a data migration maps OPEN->DRAFT and COMPLETED->DONE.
+enum OrderStatus {
+  DRAFT
+  IN_PROGRESS
+  HELD
+  READY
+  PAID
+  DONE
+  INVOICED
+  VOIDED
+  REFUNDED
+  OPEN // legacy (== DRAFT)
+  COMPLETED // legacy (== DONE)
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  BANK_TRANSFER
+  WALLET
+  QR
+  STORE_CREDIT
+  LOYALTY
+  GIFT_CARD
+  AGGREGATOR
+}
+
+// Classifies a configurable payment method (Odoo `pos.payment.method`).
+enum PaymentMethodType {
+  CASH
+  BANK
+  WALLET
+  AGGREGATOR
+  GIFT_CARD
+  LOYALTY
+  STORE_CREDIT
+}
+
+enum KdsStatus {
+  QUEUED
+  PREPARING
+  READY
+  SERVED
+  CANCELLED
+}
+
+enum ProductionOrderStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum FinanceEntryType {
+  SALE_REVENUE
+  COGS
+  TAX
+  SERVICE_CHARGE
+  TIP
+  PURCHASE
+  WASTAGE
+  PRODUCTION_COST
+  REFUND
+  PAYMENT
+  CASH_DIFFERENCE // session over/short posted at closing control
+  COMMISSION // aggregator commission expense
+}
+
+enum ReservationStatus {
+  BOOKED
+  SEATED
+  CANCELLED
+  NO_SHOW
+  COMPLETED
+}
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+  BILL_REQUESTED
+}
+
+enum TableShape {
+  SQUARE
+  ROUND
+  RECTANGLE
+}
+
+enum CouponType {
+  PERCENT
+  FIXED
+}
+
+enum DiscountScope {
+  ORDER
+  ITEM
+  CATEGORY
+}
+
+enum DiscountType {
+  PERCENT
+  FIXED
+  BOGO
+}
+
+enum StaffTaskCategory {
+  CLEANING
+  MAINTENANCE
+  OPENING
+  CLOSING
+  OTHER
+}
+
+enum StaffTaskStatus {
+  PENDING
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+enum StaffTaskPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum PosSessionStatus {
+  OPENING_CONTROL // opened, awaiting opening cash count
+  OPEN
+  CLOSING_CONTROL // closing, awaiting counted drawer
+  CLOSED
+}
+
+enum CashCountPhase {
+  OPENING
+  CLOSING
+}
+
+enum CashMovementType {
+  CASH_IN
+  CASH_OUT
+}
+
+enum DeliveryStatus {
+  PENDING
+  ASSIGNED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  FAILED
+}
+
+enum SalesQuoteStatus {
+  DRAFT
+  CONFIRMED
+  FULFILLED
+  CANCELLED
+}
+
+enum TaxComputation {
+  PERCENT_EXCLUDED // tax added on top of price
+  PERCENT_INCLUDED // tax already inside the price
+}
+
+enum PricelistType {
+  BASE
+  CUSTOMER_GROUP
+  TIME_WINDOW
+}
+
+// =============================================================================
+// CORE ENTITIES
+// =============================================================================
+
+model Branch {
+  id                Int       @id @default(autoincrement())
+  name              String
+  nameAr            String
+  address           String?
+  phone             String?
+  isActive          Boolean   @default(true)
+  isWarehouse       Boolean   @default(false)
+  cashFloat         Float     @default(0)
+  crNumber          String?
+  baladiyaLicenseNo String?
+  licenseExpiryDate DateTime?
+  isEnforcedLocked  Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  users            User[]
+  userBranches     UserBranch[]
+  inventory        Inventory[]
+  requisitions     Requisition[]
+  wastageRecords   WastageRecord[]
+  dispatchedOrders RequisitionDispatch[] @relation("DestinationBranch")
+  purchaseOrders   PurchaseOrder[]
+  transfersFrom    TransferOrder[]       @relation("FromBranch")
+  transfersTo      TransferOrder[]       @relation("ToBranch")
+  orders           Order[]
+  floors           RestaurantFloor[]
+  posConfigs       PosConfig[]
+  posSessions      PosSession[]
+
+  @@map("branches")
+}
+
+model User {
+  id          Int      @id @default(autoincrement())
+  email       String   @unique
+  password    String
+  firstName   String
+  lastName    String
+  firstNameAr String?
+  lastNameAr  String?
+  role        Role     @default(CASHIER)
+  isActive    Boolean  @default(true)
+  isApproved  Boolean  @default(false)
+  language    String   @default("en")
+  branchId    Int?
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userBranches          UserBranch[]
+  createdRequisitions   Requisition[]                @relation("CreatedBy")
+  reviewedRequisitions  Requisition[]                @relation("ReviewedBy")
+  processedRequisitions Requisition[]                @relation("ProcessedBy")
+  wastageRecords        WastageRecord[]
+  purchaseOrders        PurchaseOrder[]
+  auditLogs             AuditLog[]
+  inventoryTx           InventoryTransaction[]
+  notificationPrefs     UserNotificationPreference[]
+  notifications         Notification[]
+  priceChanges          SupplierPriceHistory[]
+  statusChanges         RequisitionStatusHistory[]
+  transfersCreated      TransferOrder[]              @relation("TransferCreatedBy")
+  transfersReceived     TransferOrder[]              @relation("TransferReceivedBy")
+  ordersCreated         Order[]                      @relation("OrderCreatedBy")
+  paymentsReceived      Payment[]                    @relation("PaymentReceivedBy")
+  recipesCreated        Recipe[]                     @relation("RecipeCreatedBy")
+  sessionsOpened        PosSession[]                 @relation("SessionOpenedBy")
+  sessionsClosed        PosSession[]                 @relation("SessionClosedBy")
+
+  @@map("users")
+}
+
+model UserBranch {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branchId   Int
+  branch     Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  isPrimary  Boolean  @default(false)
+  assignedAt DateTime @default(now())
+
+  @@unique([userId, branchId])
+  @@map("user_branches")
+}
+
+// =============================================================================
+// PRODUCT CATALOG
+// =============================================================================
+
+model Category {
+  id            Int      @id @default(autoincrement())
+  name          String
+  nameAr        String
+  description   String?
+  descriptionAr String?
+  icon          String?
+  imageUrl      String?
+  sortOrder     Int      @default(0)
+  // Customer-facing POS category flag: only POS categories appear on the till.
+  isPosVisible  Boolean  @default(true)
+  station       String?
+  printerId     Int?
+  printer       Printer? @relation(fields: [printerId], references: [id])
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  products       Product[]
+  pricelistItems PricelistItem[]
+
+  @@map("categories")
+}
+
+model Printer {
+  id         Int            @id @default(autoincrement())
+  name       String
+  connection ConnectionType @default(IP)
+  ipAddress  String?
+  port       Int?           @default(9100)
+  usbPort    String?
+  widthMm    Int            @default(80)
+  branchId   Int?
+  isActive   Boolean        @default(true)
+  notes      String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  categories  Category[]
+  prepDisplays PreparationDisplay[]
+
+  @@map("printers")
+}
+
+model Unit {
+  id           Int     @id @default(autoincrement())
+  name         String
+  nameAr       String?
+  abbreviation String
+  isActive     Boolean @default(true)
+
+  products             Product[]
+  requisitionItems     RequisitionItem[]
+  poItems              PurchaseOrderItem[]
+  wastageRecords       WastageRecord[]
+  recipeYieldUnits     Recipe[]            @relation("RecipeYieldUnit")
+  recipeComponentUnits RecipeComponent[]
+
+  @@map("units")
+}
+
+model Product {
+  id                 Int                 @id @default(autoincrement())
+  sku                String              @unique
+  name               String
+  nameAr             String
+  description        String?
+  descriptionAr      String?
+  imageUrl           String?
+  imageUrls          String[]            @default([])
+  categoryId         Int?
+  category           Category?           @relation(fields: [categoryId], references: [id])
+  unitId             Int?
+  unit               Unit?               @relation(fields: [unitId], references: [id])
+  minStockLevel      Float               @default(0)
+  reorderPoint       Float               @default(0)
+  isActive           Boolean             @default(true)
+  supplierId         Int?
+  supplier           Supplier?           @relation(fields: [supplierId], references: [id])
+  costPrice          Float               @default(0)
+  // Default menu sell price (Odoo `list_price`). Pricelists may override.
+  salePrice          Float               @default(0)
+  taxCategory        String?
+  yieldFactor        Float               @default(100)
+  isSellable         Boolean             @default(true)
+  productType        ProductType         @default(MENU)
+  isAvailable        Boolean             @default(true)
+  tracksExpiry       Boolean             @default(false)
+  expiryTrackingType ExpiryTrackingType?
+  shelfLifeDays      Int?
+  isArchived         Boolean             @default(false)
+  archivedAt         DateTime?
+  allergens          String[]            @default([])
+  allergenNotes      String?
+  allergenNotesAr    String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  inventory            Inventory[]
+  requisitionItems     RequisitionItem[]
+  wastageRecords       WastageRecord[]
+  poItems              PurchaseOrderItem[]
+  inventoryTx          InventoryTransaction[]
+  supplierPriceHistory SupplierPriceHistory[]
+  batches              Batch[]
+  transferItems        TransferOrderItem[]
+  recipes              Recipe[]               @relation("ProductRecipes")
+  recipeComponents     RecipeComponent[]      @relation("RecipeComponentOf")
+  orderItems           OrderItem[]            @relation("OrderedProduct")
+  productTaxes         ProductTax[]
+  pricelistItems       PricelistItem[]
+  comboChoices         ComboChoice[]
+  productModifierGroups ProductModifierGroup[]
+
+  @@index([categoryId])
+  @@index([supplierId])
+  @@index([isActive, isArchived])
+  @@index([productType, isSellable])
+  @@map("products")
+}
+
+// =============================================================================
+// TAXES & PRICELISTS (Odoo account.tax / product.pricelist parity)
+// =============================================================================
+
+model TaxRate {
+  id          Int            @id @default(autoincrement())
+  name        String
+  percent     Float          @default(0)
+  computation TaxComputation @default(PERCENT_EXCLUDED)
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  productTaxes ProductTax[]
+
+  @@map("tax_rates")
+}
+
+model ProductTax {
+  id        Int     @id @default(autoincrement())
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  taxRateId Int
+  taxRate   TaxRate @relation(fields: [taxRateId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, taxRateId])
+  @@index([taxRateId])
+  @@map("product_taxes")
+}
+
+model Pricelist {
+  id        Int           @id @default(autoincrement())
+  name      String
+  type      PricelistType @default(BASE)
+  currency  String        @default("QAR")
+  group     String? // customer group this pricelist targets
+  validFrom DateTime?
+  validTo   DateTime?
+  isActive  Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  items PricelistItem[]
+
+  @@map("pricelists")
+}
+
+model PricelistItem {
+  id           Int       @id @default(autoincrement())
+  pricelistId  Int
+  pricelist    Pricelist @relation(fields: [pricelistId], references: [id], onDelete: Cascade)
+  productId    Int?
+  product      Product?  @relation(fields: [productId], references: [id])
+  categoryId   Int?
+  category     Category? @relation(fields: [categoryId], references: [id])
+  fixedPrice   Float?
+  percentPrice Float? // % off the base sale price
+  minQty       Float     @default(0)
+
+  @@index([pricelistId])
+  @@map("pricelist_items")
+}
+
+// =============================================================================
+// COMBOS (Odoo POS combo meals — choose N items for a price)
+// =============================================================================
+
+model Combo {
+  id        Int      @id @default(autoincrement())
+  name      String
+  nameAr    String?
+  basePrice Float    @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines ComboLine[]
+
+  @@map("combos")
+}
+
+model ComboLine {
+  id        Int     @id @default(autoincrement())
+  comboId   Int
+  combo     Combo   @relation(fields: [comboId], references: [id], onDelete: Cascade)
+  name      String // e.g. "Choose a drink"
+  minSelect Int     @default(1)
+  maxSelect Int     @default(1)
+
+  choices ComboChoice[]
+
+  @@index([comboId])
+  @@map("combo_lines")
+}
+
+model ComboChoice {
+  id          Int       @id @default(autoincrement())
+  comboLineId Int
+  comboLine   ComboLine @relation(fields: [comboLineId], references: [id], onDelete: Cascade)
+  productId   Int
+  product     Product   @relation(fields: [productId], references: [id])
+  priceExtra  Float     @default(0)
+
+  @@index([comboLineId])
+  @@map("combo_choices")
+}
+
+// =============================================================================
+// INVENTORY
+// =============================================================================
+
+model Inventory {
+  id              Int       @id @default(autoincrement())
+  productId       Int
+  product         Product   @relation(fields: [productId], references: [id])
+  branchId        Int
+  branch          Branch    @relation(fields: [branchId], references: [id])
+  batchId         Int?
+  batch           Batch?    @relation(fields: [batchId], references: [id])
+  quantity        Float     @default(0)
+  manufactureDate DateTime?
+  expiryDate      DateTime?
+  batchNumber     String?
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([productId, branchId, batchId])
+  @@index([productId, branchId])
+  @@index([expiryDate])
+  @@map("inventory")
+}
+
+model Batch {
+  id                 Int       @id @default(autoincrement())
+  productId          Int
+  product            Product   @relation(fields: [productId], references: [id])
+  batchNumber        String    @unique
+  manufactureDate    DateTime?
+  expiryDate         DateTime?
+  unitCost           Float     @default(0)
+  receivedAtBranchId Int?
+  receivedDate       DateTime  @default(now())
+  createdAt          DateTime  @default(now())
+
+  inventory     Inventory[]
+  transferItems TransferOrderItem[]
+
+  @@index([productId, expiryDate])
+  @@map("batches")
+}
+
+model TransferOrder {
+  id           Int            @id @default(autoincrement())
+  transferNo   String         @unique
+  fromBranchId Int
+  fromBranch   Branch         @relation("FromBranch", fields: [fromBranchId], references: [id])
+  toBranchId   Int
+  toBranch     Branch         @relation("ToBranch", fields: [toBranchId], references: [id])
+  status       TransferStatus @default(DRAFT)
+  notes        String?
+  createdById  Int?
+  createdBy    User?          @relation("TransferCreatedBy", fields: [createdById], references: [id])
+  receivedById Int?
+  receivedBy   User?          @relation("TransferReceivedBy", fields: [receivedById], references: [id])
+  dispatchedAt DateTime?
+  receivedAt   DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  items TransferOrderItem[]
+
+  @@index([fromBranchId, status])
+  @@index([toBranchId, status])
+  @@index([status])
+  @@map("transfer_orders")
+}
+
+model TransferOrderItem {
+  id              Int           @id @default(autoincrement())
+  transferOrderId Int
+  transferOrder   TransferOrder @relation(fields: [transferOrderId], references: [id], onDelete: Cascade)
+  productId       Int
+  product         Product       @relation(fields: [productId], references: [id])
+  batchId         Int?
+  batch           Batch?        @relation(fields: [batchId], references: [id])
+  quantity        Float
+  expiryDate      DateTime?
+
+  @@index([transferOrderId])
+  @@index([productId])
+  @@map("transfer_order_items")
+}
+
+model InventoryTransaction {
+  id            Int             @id @default(autoincrement())
+  productId     Int
+  product       Product         @relation(fields: [productId], references: [id])
+  branchId      Int
+  type          InventoryTxType
+  quantity      Float
+  balanceBefore Float
+  balanceAfter  Float
+  reference     String?
+  notes         String?
+  performedById Int?
+  performedBy   User?           @relation(fields: [performedById], references: [id])
+  createdAt     DateTime        @default(now())
+
+  @@index([productId, branchId])
+  @@index([branchId])
+  @@index([createdAt])
+  @@map("inventory_transactions")
+}
+
+// =============================================================================
+// REQUISITION WORKFLOW
+// =============================================================================
+
+model Requisition {
+  id            Int               @id @default(autoincrement())
+  requisitionNo String            @unique
+  branchId      Int
+  branch        Branch            @relation(fields: [branchId], references: [id])
+  department    String
+  status        RequisitionStatus @default(DRAFT)
+  priority      String            @default("NORMAL")
+  notes         String?
+  notesAr       String?
+  neededBy      DateTime?
+  createdById   Int
+  createdBy     User              @relation("CreatedBy", fields: [createdById], references: [id])
+  reviewedById  Int?
+  reviewedBy    User?             @relation("ReviewedBy", fields: [reviewedById], references: [id])
+  reviewedAt    DateTime?
+  reviewNotes   String?
+  processedById Int?
+  processedBy   User?             @relation("ProcessedBy", fields: [processedById], references: [id])
+  processedAt   DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  items          RequisitionItem[]
+  statusHistory  RequisitionStatusHistory[]
+  dispatch       RequisitionDispatch?
+  purchaseOrders PurchaseOrder[]
+
+  @@index([branchId, status])
+  @@index([status])
+  @@index([createdById])
+  @@index([createdAt])
+  @@map("requisitions")
+}
+
+model RequisitionItem {
+  id            Int         @id @default(autoincrement())
+  requisitionId Int
+  requisition   Requisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+  productId     Int
+  product       Product     @relation(fields: [productId], references: [id])
+  unitId        Int?
+  unit          Unit?       @relation(fields: [unitId], references: [id])
+  requestedQty  Float
+  approvedQty   Float?
+  receivedQty   Float?
+  notes         String?
+
+  @@index([requisitionId])
+  @@index([productId])
+  @@map("requisition_items")
+}
+
+model RequisitionStatusHistory {
+  id            Int               @id @default(autoincrement())
+  requisitionId Int
+  requisition   Requisition       @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+  status        RequisitionStatus
+  changedById   Int?
+  changedBy     User?             @relation(fields: [changedById], references: [id])
+  notes         String?
+  createdAt     DateTime          @default(now())
+
+  @@index([requisitionId])
+  @@map("requisition_status_history")
+}
+
+model RequisitionDispatch {
+  id                  Int         @id @default(autoincrement())
+  requisitionId       Int         @unique
+  requisition         Requisition @relation(fields: [requisitionId], references: [id])
+  destinationBranchId Int
+  destinationBranch   Branch      @relation("DestinationBranch", fields: [destinationBranchId], references: [id])
+  driverId            Int?
+  driver              Driver?     @relation(fields: [driverId], references: [id])
+  driverName          String?
+  driverPhone         String?
+  recipientName       String?
+  dispatchedAt        DateTime?
+  confirmedAt         DateTime?
+  trackingNotes       String?
+
+  @@map("requisition_dispatches")
+}
+
+model Driver {
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String?
+  licenseNo String?
+  vehicle   String?
+  isActive  Boolean  @default(true)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  dispatches RequisitionDispatch[]
+
+  @@map("drivers")
+}
+
+// =============================================================================
+// SUPPLIERS & PURCHASE ORDERS (+ Accounts Payable)
+// =============================================================================
+
+model Supplier {
+  id           Int      @id @default(autoincrement())
+  name         String
+  nameAr       String?
+  contactName  String?
+  email        String?
+  phone        String?
+  address      String?
+  taxNumber    String?
+  paymentTerms String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  products       Product[]
+  purchaseOrders PurchaseOrder[]
+  priceHistory   SupplierPriceHistory[]
+
+  @@map("suppliers")
+}
+
+model PurchaseOrder {
+  id            Int                 @id @default(autoincrement())
+  poNumber      String              @unique
+  supplierId    Int
+  supplier      Supplier            @relation(fields: [supplierId], references: [id])
+  branchId      Int
+  branch        Branch              @relation(fields: [branchId], references: [id])
+  requisitionId Int?
+  requisition   Requisition?        @relation(fields: [requisitionId], references: [id])
+  status        PurchaseOrderStatus @default(DRAFT)
+  currency      String              @default("QAR")
+  totalAmount   Float               @default(0)
+  paidAmount    Float               @default(0)
+  notes         String?
+  expectedDate  DateTime?
+  receivedDate  DateTime?
+  createdById   Int?
+  createdBy     User?               @relation(fields: [createdById], references: [id])
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  items PurchaseOrderItem[]
+
+  @@index([branchId, status])
+  @@index([supplierId])
+  @@index([requisitionId])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              Int           @id @default(autoincrement())
+  purchaseOrderId Int
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  productId       Int
+  product         Product       @relation(fields: [productId], references: [id])
+  unitId          Int?
+  unit            Unit?         @relation(fields: [unitId], references: [id])
+  orderedQty      Float
+  receivedQty     Float         @default(0)
+  unitPrice       Float
+  expiryDate      DateTime?
+
+  @@map("purchase_order_items")
+}
+
+// =============================================================================
+// WASTAGE / ALERTS / AUDIT / SETTINGS
+// =============================================================================
+
+model WastageRecord {
+  id         Int           @id @default(autoincrement())
+  branchId   Int
+  branch     Branch        @relation(fields: [branchId], references: [id])
+  productId  Int
+  product    Product       @relation(fields: [productId], references: [id])
+  unitId     Int?
+  unit       Unit?         @relation(fields: [unitId], references: [id])
+  quantity   Float
+  reason     WastageReason
+  notes      String?
+  loggedById Int
+  loggedBy   User          @relation(fields: [loggedById], references: [id])
+  createdAt  DateTime      @default(now())
+
+  @@index([branchId, createdAt])
+  @@index([productId])
+  @@map("wastage_records")
+}
+
+model Alert {
+  id         Int       @id @default(autoincrement())
+  type       AlertType
+  title      String
+  titleAr    String?
+  message    String
+  messageAr  String?
+  branchId   Int?
+  productId  Int?
+  isRead     Boolean   @default(false)
+  isResolved Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+
+  @@index([branchId, isResolved])
+  @@index([isResolved])
+  @@map("alerts")
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  oldValues Json?
+  newValues Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Setting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String
+  group     String   @default("general")
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+model SystemResetLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  resetType String
+  details   Json?
+  createdAt DateTime @default(now())
+
+  @@map("system_reset_logs")
+}
+
+model SupplierPriceHistory {
+  id          Int      @id @default(autoincrement())
+  supplierId  Int
+  supplier    Supplier @relation(fields: [supplierId], references: [id])
+  productId   Int
+  product     Product  @relation(fields: [productId], references: [id])
+  oldPrice    Float
+  newPrice    Float
+  changedById Int?
+  changedBy   User?    @relation(fields: [changedById], references: [id])
+  source      String   @default("MANUAL")
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  @@map("supplier_price_history")
+}
+
+model NotificationConfig {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String
+  group     String   @default("notifications")
+  updatedAt DateTime @updatedAt
+
+  @@map("notification_configs")
+}
+
+model UserNotificationPreference {
+  id             Int     @id @default(autoincrement())
+  userId         Int
+  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel        String
+  eventType      String
+  enabled        Boolean @default(true)
+  whatsappNumber String?
+
+  @@unique([userId, channel, eventType])
+  @@map("user_notification_preferences")
+}
+
+model Notification {
+  id         Int       @id @default(autoincrement())
+  userId     Int
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventType  String
+  channel    String    @default("requisitions")
+  title      String
+  titleAr    String?
+  message    String
+  messageAr  String?
+  entityType String?
+  entityId   Int?
+  link       String?
+  branchId   Int?
+  actorId    Int?
+  isRead     Boolean   @default(false)
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+// =============================================================================
+// CONFIGURATION: POS TERMINALS, FLOORS, TABLES, PREP DISPLAYS, PAYMENT METHODS
+// =============================================================================
+
+// Odoo `pos.config` — a physical register / terminal. A session always belongs
+// to exactly one terminal so cash control is per-register.
+model PosConfig {
+  id             Int      @id @default(autoincrement())
+  name           String
+  branchId       Int
+  branch         Branch   @relation(fields: [branchId], references: [id])
+  defaultFloorId Int? // scalar; floors are branch-scoped
+  allowSplitBill Boolean  @default(true)
+  allowTableMove Boolean  @default(true)
+  iface          Json? // misc terminal UI flags
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  sessions PosSession[]
+  orders   Order[]
+
+  @@index([branchId])
+  @@map("pos_configs")
+}
+
+model RestaurantFloor {
+  id         Int      @id @default(autoincrement())
+  branchId   Int
+  branch     Branch   @relation(fields: [branchId], references: [id])
+  name       String
+  nameAr     String?
+  background String? // color or image URL for the floor grid
+  sortOrder  Int      @default(0)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tables RestaurantTable[]
+
+  @@index([branchId])
+  @@map("restaurant_floors")
+}
+
+model RestaurantTable {
+  id        Int              @id @default(autoincrement())
+  branchId  Int
+  floorId   Int?
+  floor     RestaurantFloor? @relation(fields: [floorId], references: [id])
+  name      String
+  seats     Int              @default(2)
+  status    TableStatus      @default(AVAILABLE)
+  // Visual positioning grid (Odoo floor plan).
+  posX      Float            @default(0)
+  posY      Float            @default(0)
+  width     Float            @default(80)
+  height    Float            @default(80)
+  shape     TableShape       @default(SQUARE)
+  isActive  Boolean          @default(true)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  orders     Order[]
+  tableMoves OrderTableMove[]
+
+  @@index([branchId, status])
+  @@index([floorId])
+  @@map("restaurant_tables")
+}
+
+// Odoo Prep Display (KDS screen). Routes categories to a screen/printer.
+model PreparationDisplay {
+  id          Int      @id @default(autoincrement())
+  branchId    Int
+  name        String
+  printerId   Int?
+  printer     Printer? @relation(fields: [printerId], references: [id])
+  categoryIds Int[]    @default([]) // categories routed to this screen
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([branchId])
+  @@map("preparation_displays")
+}
+
+// Odoo `pos.payment.method` — configurable tender (journal, cash counting...).
+model PaymentMethodConfig {
+  id                 Int               @id @default(autoincrement())
+  name               String
+  nameAr             String?
+  type               PaymentMethodType @default(CASH)
+  isCashCount        Boolean           @default(false) // counts toward the drawer
+  opensDrawer        Boolean           @default(false)
+  deliveryPlatformId Int? // links an AGGREGATOR method to its platform
+  isActive           Boolean           @default(true)
+  sortOrder          Int               @default(0)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  payments Payment[]
+
+  @@map("payment_method_configs")
+}
+
+// =============================================================================
+// DELIVERY PLATFORMS (aggregators)
+// =============================================================================
+
+model DeliveryPlatform {
+  id             Int          @id @default(autoincrement())
+  name           String
+  channel        OrderChannel @default(AGGREGATOR)
+  commissionPct  Float        @default(0)
+  payoutTermDays Int          @default(7)
+  isActive       Boolean      @default(true)
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@map("delivery_platforms")
+}
+
+// =============================================================================
+// RECIPE / BILL OF MATERIALS (the warehouse <-> menu bridge)
+// =============================================================================
+
+model Recipe {
+  id             Int      @id @default(autoincrement())
+  productId      Int
+  product        Product  @relation("ProductRecipes", fields: [productId], references: [id])
+  name           String
+  version        Int      @default(1)
+  isActive       Boolean  @default(true)
+  yieldQty       Float    @default(1)
+  yieldUnitId    Int?
+  yieldUnit      Unit?    @relation("RecipeYieldUnit", fields: [yieldUnitId], references: [id])
+  prepLossPct    Float    @default(0)
+  cookingLossPct Float    @default(0)
+  wastePct       Float    @default(0)
+  notes          String?
+  notesAr        String?
+  imageUrl       String?
+  isApproved     Boolean  @default(false)
+  createdById    Int?
+  createdBy      User?    @relation("RecipeCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  components RecipeComponent[]
+
+  @@index([productId, isActive])
+  @@map("recipes")
+}
+
+model RecipeComponent {
+  id                 Int     @id @default(autoincrement())
+  recipeId           Int
+  recipe             Recipe  @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  componentProductId Int
+  componentProduct   Product @relation("RecipeComponentOf", fields: [componentProductId], references: [id])
+  quantity           Float
+  unitId             Int?
+  unit               Unit?   @relation(fields: [unitId], references: [id])
+  wastePct           Float   @default(0)
+  notes              String?
+
+  @@index([recipeId])
+  @@index([componentProductId])
+  @@map("recipe_components")
+}
+
+// =============================================================================
+// CUSTOMERS / DISCOUNTS
+// =============================================================================
+
+model Customer {
+  id            Int       @id @default(autoincrement())
+  name          String
+  phone         String?   @unique
+  email         String?
+  group         String?
+  loyaltyPoints Float     @default(0)
+  creditBalance Float     @default(0)
+  creditLimit   Float     @default(0)
+  birthday      DateTime?
+  notes         String?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  orders Order[]
+
+  @@index([phone])
+  @@map("customers")
+}
+
+model DiscountRule {
+  id                      Int           @id @default(autoincrement())
+  name                    String
+  nameAr                  String?
+  scope                   DiscountScope @default(ORDER)
+  type                    DiscountType  @default(PERCENT)
+  value                   Float         @default(0)
+  categoryId              Int?
+  productId               Int?
+  minOrder                Float         @default(0)
+  requiresManagerApproval Boolean       @default(false)
+  validFrom               DateTime?
+  validTo                 DateTime?
+  isActive                Boolean       @default(true)
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  @@index([isActive])
+  @@map("discount_rules")
+}
+
+// =============================================================================
+// FRONT-END POS CHECKOUT: ORDERS, LINES, TABLE MOVES
+// =============================================================================
+
+model Order {
+  id                 Int          @id @default(autoincrement())
+  orderNo            String       @unique
+  branchId           Int
+  branch             Branch       @relation(fields: [branchId], references: [id])
+  channel            OrderChannel @default(DINE_IN)
+  status             OrderStatus  @default(OPEN)
+  customerId         Int?
+  customer           Customer?    @relation(fields: [customerId], references: [id])
+  // Real table binding (Odoo floor plan). tableName kept for legacy display.
+  tableId            Int?
+  table              RestaurantTable? @relation(fields: [tableId], references: [id])
+  tableName          String?
+  guestCount         Int          @default(1)
+  // Session-bound: an order must live inside an open PosSession + terminal.
+  sessionId          Int?
+  session            PosSession?  @relation(fields: [sessionId], references: [id])
+  posConfigId        Int?
+  posConfig          PosConfig?   @relation(fields: [posConfigId], references: [id])
+  // Split-bill lineage: child orders point back to the parent ticket.
+  parentOrderId      Int?
+  parentOrder        Order?       @relation("OrderSplits", fields: [parentOrderId], references: [id])
+  childOrders        Order[]      @relation("OrderSplits")
+  // Refund lineage: a refund order references the original.
+  refundedOrderId    Int?
+  refundedOrder      Order?       @relation("OrderRefunds", fields: [refundedOrderId], references: [id])
+  refunds            Order[]      @relation("OrderRefunds")
+  // Discounts.
+  couponCode         String?
+  couponDiscount     Float        @default(0)
+  discountRuleId     Int?
+  ruleDiscount       Float        @default(0)
+  discountReason     String?
+  // Aggregator reconciliation.
+  deliveryPlatformId Int?
+  commissionAmount   Float        @default(0)
+  netPayout          Float        @default(0)
+  platformRef        String?
+  // Monetary breakdown.
+  subtotal           Float        @default(0)
+  discountTotal      Float        @default(0)
+  taxTotal           Float        @default(0)
+  serviceCharge      Float        @default(0)
+  tip                Float        @default(0)
+  total              Float        @default(0)
+  paidTotal          Float        @default(0)
+  // Immutable costing snapshot at completion.
+  foodCost           Float        @default(0)
+  grossProfit        Float        @default(0)
+  notes              String?
+  createdById        Int?
+  createdBy          User?        @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  completedAt        DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  items      OrderItem[]
+  payments   Payment[]
+  tableMoves OrderTableMove[]
+
+  @@index([branchId, status])
+  @@index([status])
+  @@index([customerId])
+  @@index([sessionId])
+  @@index([tableId])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id        Int       @id @default(autoincrement())
+  orderId   Int
+  order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId Int
+  product   Product   @relation("OrderedProduct", fields: [productId], references: [id])
+  quantity  Float
+  unitPrice Float
+  discount  Float     @default(0)
+  taxAmount Float     @default(0)
+  lineTotal Float     @default(0)
+  unitCost  Float     @default(0)
+  lineCost  Float     @default(0)
+  modifiers Json?
+  // Per-seat ordering + course firing (Odoo).
+  seat      Int?
+  courseNo  Int       @default(1)
+  // KDS lifecycle.
+  kdsStatus KdsStatus @default(QUEUED)
+  firedAt   DateTime?
+  readyAt   DateTime?
+  // Soft void — order lines are never hard-deleted once fired (audit trail).
+  isVoided     Boolean   @default(false)
+  voidReason   String?
+  voidedById   Int?
+  voidedAt     DateTime?
+  refundedQty  Float     @default(0)
+  notes        String?
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([kdsStatus])
+  @@map("order_items")
+}
+
+// Audit of table switches for an open order (Odoo table move).
+model OrderTableMove {
+  id          Int             @id @default(autoincrement())
+  orderId     Int
+  order       Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fromTableId Int?
+  toTableId   Int?
+  toTable     RestaurantTable? @relation(fields: [toTableId], references: [id])
+  movedById   Int?
+  createdAt   DateTime        @default(now())
+
+  @@index([orderId])
+  @@map("order_table_moves")
+}
+
+// =============================================================================
+// PAYMENTS LEDGER: PAYMENTS, SESSIONS, CASH CONTROL, FINANCE
+// =============================================================================
+
+model Payment {
+  id                    Int                  @id @default(autoincrement())
+  orderId               Int
+  order                 Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  method                PaymentMethod
+  methodConfigId        Int?
+  methodConfig          PaymentMethodConfig? @relation(fields: [methodConfigId], references: [id])
+  amount                Float
+  reference             String?
+  // Soft reversal instead of delete.
+  isReversed            Boolean              @default(false)
+  reversedAt            DateTime?
+  receivedById          Int?
+  receivedBy            User?                @relation("PaymentReceivedBy", fields: [receivedById], references: [id])
+  createdAt             DateTime             @default(now())
+
+  @@index([orderId])
+  @@index([methodConfigId])
+  @@map("payments")
+}
+
+model PosSession {
+  id             Int              @id @default(autoincrement())
+  sessionNo      String           @unique
+  branchId       Int
+  branch         Branch           @relation(fields: [branchId], references: [id])
+  posConfigId    Int?
+  posConfig      PosConfig?       @relation(fields: [posConfigId], references: [id])
+  status         PosSessionStatus @default(OPENING_CONTROL)
+  openingFloat   Float            @default(0)
+  // Closing control: computed expected cash vs counted, and the discrepancy.
+  expectedCash   Float?
+  closingCounted Float?
+  cashDifference Float?
+  openedById     Int?
+  openedBy       User?            @relation("SessionOpenedBy", fields: [openedById], references: [id])
+  closedById     Int?
+  closedBy       User?            @relation("SessionClosedBy", fields: [closedById], references: [id])
+  openedAt       DateTime         @default(now())
+  closedAt       DateTime?
+  notes          String?
+
+  movements  PosCashMovement[]
+  cashCounts PosCashCount[]
+  orders     Order[]
+
+  @@index([branchId, status])
+  @@index([posConfigId])
+  @@map("pos_sessions")
+}
+
+// Denomination breakdown for opening / closing cash control.
+model PosCashCount {
+  id          Int            @id @default(autoincrement())
+  sessionId   Int
+  session     PosSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  phase       CashCountPhase
+  totalCounted Float         @default(0)
+  createdById Int?
+  createdAt   DateTime       @default(now())
+
+  lines PosCashCountLine[]
+
+  @@index([sessionId])
+  @@map("pos_cash_counts")
+}
+
+model PosCashCountLine {
+  id           Int          @id @default(autoincrement())
+  cashCountId  Int
+  cashCount    PosCashCount @relation(fields: [cashCountId], references: [id], onDelete: Cascade)
+  denomination Float // e.g. 100, 50, 10, 1, 0.5
+  count        Int          @default(0)
+  subtotal     Float        @default(0)
+
+  @@index([cashCountId])
+  @@map("pos_cash_count_lines")
+}
+
+model PosCashMovement {
+  id          Int              @id @default(autoincrement())
+  sessionId   Int
+  session     PosSession       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  type        CashMovementType
+  amount      Float
+  reason      String?
+  createdById Int?
+  createdAt   DateTime         @default(now())
+
+  @@index([sessionId])
+  @@map("pos_cash_movements")
+}
+
+model FinanceEntry {
+  id          Int              @id @default(autoincrement())
+  type        FinanceEntryType
+  amount      Float
+  currency    String           @default("QAR")
+  branchId    Int?
+  sourceType  String?
+  sourceId    Int?
+  reference   String?
+  notes       String?
+  createdById Int?
+  occurredAt  DateTime         @default(now())
+  createdAt   DateTime         @default(now())
+
+  @@index([type])
+  @@index([branchId, occurredAt])
+  @@index([sourceType, sourceId])
+  @@map("finance_entries")
+}
+
+// =============================================================================
+// PRODUCTION / CENTRAL KITCHEN
+// =============================================================================
+
+model ProductionOrder {
+  id           Int                   @id @default(autoincrement())
+  productionNo String                @unique
+  branchId     Int
+  productId    Int
+  recipeId     Int?
+  plannedQty   Float
+  producedQty  Float                 @default(0)
+  status       ProductionOrderStatus @default(PLANNED)
+  batchNumber  String?
+  expiryDate   DateTime?
+  totalCost    Float                 @default(0)
+  notes        String?
+  createdById  Int?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  consumptions ProductionConsumption[]
+
+  @@index([branchId, status])
+  @@index([productId])
+  @@map("production_orders")
+}
+
+model ProductionConsumption {
+  id                 Int             @id @default(autoincrement())
+  productionOrderId  Int
+  productionOrder    ProductionOrder @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
+  componentProductId Int
+  plannedQty         Float
+  actualQty          Float           @default(0)
+  unitCost           Float           @default(0)
+  lineCost           Float           @default(0)
+
+  @@index([productionOrderId])
+  @@map("production_consumptions")
+}
+
+// =============================================================================
+// RESERVATIONS / PROMOTIONS / TASKS / DELIVERY / SALES QUOTES / STOCKTAKE
+// =============================================================================
+
+model Reservation {
+  id           Int               @id @default(autoincrement())
+  branchId     Int
+  tableId      Int?
+  customerId   Int?
+  customerName String?
+  phone        String?
+  partySize    Int               @default(2)
+  reservedAt   DateTime
+  status       ReservationStatus @default(BOOKED)
+  notes        String?
+  createdById  Int?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([branchId, reservedAt])
+  @@index([status])
+  @@map("reservations")
+}
+
+model GiftCard {
+  id             Int       @id @default(autoincrement())
+  code           String    @unique
+  initialBalance Float
+  balance        Float
+  customerId     Int?
+  isActive       Boolean   @default(true)
+  expiresAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@map("gift_cards")
+}
+
+model Coupon {
+  id             Int        @id @default(autoincrement())
+  code           String     @unique
+  type           CouponType
+  value          Float
+  minOrder       Float      @default(0)
+  maxRedemptions Int?
+  redeemedCount  Int        @default(0)
+  isActive       Boolean    @default(true)
+  startsAt       DateTime?
+  endsAt         DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@map("coupons")
+}
+
+model StaffTask {
+  id           Int               @id @default(autoincrement())
+  branchId     Int
+  title        String
+  titleAr      String?
+  description  String?
+  category     StaffTaskCategory @default(CLEANING)
+  status       StaffTaskStatus   @default(PENDING)
+  priority     StaffTaskPriority @default(NORMAL)
+  assignedToId Int?
+  createdById  Int?
+  dueAt        DateTime?
+  completedAt  DateTime?
+  checklist    Json?
+  recurrence   String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([branchId, status])
+  @@index([assignedToId])
+  @@map("staff_tasks")
+}
+
+model ModifierGroup {
+  id        Int      @id @default(autoincrement())
+  name      String
+  nameAr    String?
+  minSelect Int      @default(0)
+  maxSelect Int      @default(1)
+  required  Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  options      ModifierOption[]
+  productLinks ProductModifierGroup[]
+
+  @@map("modifier_groups")
+}
+
+model ModifierOption {
+  id                 Int           @id @default(autoincrement())
+  groupId            Int
+  group              ModifierGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  name               String
+  nameAr             String?
+  priceDelta         Float         @default(0)
+  componentProductId Int?
+  qtyToDeduct        Float         @default(0)
+  isActive           Boolean       @default(true)
+  sortOrder          Int           @default(0)
+
+  @@index([groupId])
+  @@map("modifier_options")
+}
+
+model ProductModifierGroup {
+  id        Int           @id @default(autoincrement())
+  productId Int
+  product   Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  groupId   Int
+  group     ModifierGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  sortOrder Int           @default(0)
+
+  @@unique([productId, groupId])
+  @@index([productId])
+  @@map("product_modifier_groups")
+}
+
+model OrderDelivery {
+  id           Int            @id @default(autoincrement())
+  orderId      Int            @unique
+  branchId     Int
+  driverId     Int?
+  status       DeliveryStatus @default(PENDING)
+  address      String?
+  phone        String?
+  notes        String?
+  assignedAt   DateTime?
+  dispatchedAt DateTime?
+  deliveredAt  DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([branchId, status])
+  @@index([driverId, status])
+  @@map("order_deliveries")
+}
+
+model SalesQuote {
+  id          Int              @id @default(autoincrement())
+  quoteNo     String           @unique
+  branchId    Int
+  customerId  Int?
+  status      SalesQuoteStatus @default(DRAFT)
+  notes       String?
+  subtotal    Float            @default(0)
+  total       Float            @default(0)
+  orderId     Int?
+  validUntil  DateTime?
+  createdById Int?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  items SalesQuoteItem[]
+
+  @@index([branchId, status])
+  @@map("sales_quotes")
+}
+
+model SalesQuoteItem {
+  id        Int        @id @default(autoincrement())
+  quoteId   Int
+  quote     SalesQuote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  productId Int
+  quantity  Float
+  unitPrice Float
+  lineTotal Float      @default(0)
+
+  @@index([quoteId])
+  @@map("sales_quote_items")
+}
+
+// Management reporting: variance / shrinkage audit (record-only).
+model StockCount {
+  id                 Int       @id @default(autoincrement())
+  countNo            String    @unique
+  branchId           Int
+  status             String    @default("DRAFT")
+  totalVarianceValue Float     @default(0)
+  notes              String?
+  createdById        Int?
+  createdAt          DateTime  @default(now())
+  finalizedAt        DateTime?
+
+  items StockCountItem[]
+
+  @@index([branchId])
+  @@map("stock_counts")
+}
+
+model StockCountItem {
+  id            Int        @id @default(autoincrement())
+  countId       Int
+  count         StockCount @relation(fields: [countId], references: [id], onDelete: Cascade)
+  productId     Int
+  systemQty     Float      @default(0)
+  countedQty    Float      @default(0)
+  variance      Float      @default(0)
+  unitCost      Float      @default(0)
+  varianceValue Float      @default(0)
+
+  @@index([countId])
+  @@map("stock_count_items")
+}
