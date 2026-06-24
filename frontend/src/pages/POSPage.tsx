@@ -245,6 +245,15 @@ export default function POSPage() {
       setModProduct({ product: p, groups });
       return;
     }
+    // Serial/lot-tracked item → capture the serial/lot number at the till.
+    if (p.tracksSerial) {
+      const serial = window.prompt(t('pos.enterSerial', { name: p.name }) as string, '');
+      if (serial === null) return;
+      if (serial.trim()) {
+        addLine(p, p.costPrice ?? 0, [{ optionId: -1, name: `S/N ${serial.trim()}`, priceDelta: 0 }] as any);
+        return;
+      }
+    }
     addLine(p, p.costPrice ?? 0, undefined);
   };
 

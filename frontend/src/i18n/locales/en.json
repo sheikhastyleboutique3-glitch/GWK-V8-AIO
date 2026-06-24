@@ -512,6 +512,7 @@
     "loyaltyCard": "Loyalty / eWallet",
     "loyaltyCardCode": "Loyalty / eWallet card code",
     "pickVariant": "Choose variant",
+    "enterSerial": "Enter serial / lot number for {{name}}",
     "printReceipt": "Print receipt",
     "points": "Points",
     "credit": "Credit",

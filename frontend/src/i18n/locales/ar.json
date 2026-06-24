@@ -518,6 +518,7 @@
     "loyaltyCard": "الولاء / المحفظة",
     "loyaltyCardCode": "رمز بطاقة الولاء / المحفظة",
     "pickVariant": "اختر المتغير",
+    "enterSerial": "أدخل الرقم التسلسلي / رقم الدفعة لـ {{name}}",
     "printReceipt": "طباعة الفاتورة",
     "points": "النقاط",
     "credit": "الرصيد",
