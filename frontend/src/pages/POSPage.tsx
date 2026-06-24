@@ -19,13 +19,14 @@ interface CartLine {
   modifiers?: ChosenModifier[];
 }
 type Channel = 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY' | 'QR' | 'TALABAT' | 'SNOONU' | 'AGGREGATOR';
-type PayMethod = 'CASH' | 'CARD' | 'GIFT_CARD' | 'STORE_CREDIT' | 'LOYALTY' | 'AGGREGATOR';
+type PayMethod = 'CASH' | 'CARD' | 'GIFT_CARD' | 'STORE_CREDIT' | 'LOYALTY' | 'AGGREGATOR' | 'LOYALTY_CARD';
 const AGGREGATOR_CHANNELS: Channel[] = ['TALABAT', 'SNOONU', 'AGGREGATOR'];
 const isAggregatorChannel = (c: Channel) => AGGREGATOR_CHANNELS.includes(c);
 interface Tender {
   method: PayMethod;
   amount: number;
   giftCardCode?: string;
+  loyaltyCode?: string;
 }
 
 export default function POSPage() {
@@ -281,9 +282,15 @@ export default function POSPage() {
     const amt = tenderAmount.trim() ? parseFloat(tenderAmount) : remaining;
     if (!(amt > 0)) return toast.error('Enter a payment amount');
     if (payMethod === 'GIFT_CARD' && !giftCardCode.trim()) return toast.error('Enter a gift card code');
+    if (payMethod === 'LOYALTY_CARD' && !giftCardCode.trim()) return toast.error('Enter a loyalty / eWallet card code');
     setTenders((prev) => [
       ...prev,
-      { method: payMethod, amount: +amt.toFixed(2), ...(payMethod === 'GIFT_CARD' ? { giftCardCode: giftCardCode.trim() } : {}) },
+      {
+        method: payMethod,
+        amount: +amt.toFixed(2),
+        ...(payMethod === 'GIFT_CARD' ? { giftCardCode: giftCardCode.trim() } : {}),
+        ...(payMethod === 'LOYALTY_CARD' ? { loyaltyCode: giftCardCode.trim() } : {}),
+      },
     ]);
     setTenderAmount('');
     setGiftCardCode('');
@@ -355,6 +362,17 @@ export default function POSPage() {
         orderId = created.data.id;
       }
       for (const ten of tenders) {
+        // Loyalty / eWallet card: draw the amount down from the card balance,
+        // then record it as a wallet payment referencing the card.
+        if (ten.method === 'LOYALTY_CARD' && ten.loyaltyCode) {
+          await api.post(`/loyalty/cards/${encodeURIComponent(ten.loyaltyCode)}/redeem`, { amount: ten.amount });
+          await api.post(`/sales/orders/${orderId}/payments`, {
+            method: 'WALLET',
+            amount: ten.amount,
+            reference: `loyalty:${ten.loyaltyCode}`,
+          });
+          continue;
+        }
         await api.post(`/sales/orders/${orderId}/payments`, {
           method: ten.method,
           amount: ten.amount,
@@ -722,6 +740,7 @@ export default function POSPage() {
               'CASH',
               'CARD',
               'GIFT_CARD',
+              'LOYALTY_CARD',
               ...(activeCustomer ? ['STORE_CREDIT', 'LOYALTY'] : []),
               ...(isAggregatorChannel(channel) ? ['AGGREGATOR'] : []),
             ] as PayMethod[]).map((m) => (
@@ -730,15 +749,15 @@ export default function POSPage() {
                 onClick={() => setPayMethod(m)}
                 className={`flex-1 min-w-[4rem] px-2 py-1.5 rounded-lg text-xs ${payMethod === m ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800'}`}
               >
-                {m === 'AGGREGATOR' ? t('pos.platformPaid') : m.replace('_', ' ')}
+                {m === 'AGGREGATOR' ? t('pos.platformPaid') : m === 'LOYALTY_CARD' ? t('pos.loyaltyCard') : m.replace('_', ' ')}
               </button>
             ))}
           </div>
-          {payMethod === 'GIFT_CARD' && (
+          {(payMethod === 'GIFT_CARD' || payMethod === 'LOYALTY_CARD') && (
             <input
               value={giftCardCode}
               onChange={(e) => setGiftCardCode(e.target.value)}
-              placeholder="Gift card code"
+              placeholder={payMethod === 'LOYALTY_CARD' ? t('pos.loyaltyCardCode') : 'Gift card code'}
               className="mt-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
             />
           )}

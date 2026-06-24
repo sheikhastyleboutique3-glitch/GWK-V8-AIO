@@ -509,6 +509,8 @@
     "courseFired": "Course fired to kitchen",
     "fireCourse": "Fire course",
     "course": "Course",
+    "loyaltyCard": "Loyalty / eWallet",
+    "loyaltyCardCode": "Loyalty / eWallet card code",
     "printReceipt": "Print receipt",
     "points": "Points",
     "credit": "Credit",
