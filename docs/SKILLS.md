@@ -2,6 +2,8 @@
 
 Repeatable how-tos for operating and extending the system.
 
+> **Snapshot:** All POS/admin/kiosk features built & documented (Stage 1). The next stages have playbooks at the bottom — start with **Stage 2: prove the runtime (smoke test)**.
+
 ## Dev skills
 
 ### Add a new backend module (config CRUD)

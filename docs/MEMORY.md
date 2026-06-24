@@ -3,6 +3,8 @@
 Durable knowledge about the system: architecture, key decisions, and conventions.
 Keep this current so anyone (human or AI) can ramp up fast.
 
+> **Snapshot:** Stage 1 (build + docs + demo) complete · overall **~88/100** · feature parity ~96% · next lever = **Stage 2 (prove the runtime on live Postgres)**. See *Status & Roadmap* below.
+
 ## What it is
 All-in-one Restaurant ERP + POS targeting **Odoo 19.0 POS (Bar/Restaurant) parity**.
 Multi-branch, bilingual EN/AR. One TypeScript stack end-to-end.
