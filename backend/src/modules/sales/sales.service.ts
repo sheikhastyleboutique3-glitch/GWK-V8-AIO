@@ -19,6 +19,7 @@ import {
   Prisma,
   TableStatus,
   FinanceEntryType,
+  KdsStatus,
 } from '@prisma/client';
 
 export interface OrderItemInput {
@@ -391,7 +392,32 @@ export class SalesService {
     return this.findOne(orderId);
   }
 
-  /** Merge another open ticket's items into this one, then void the source. */
+  /**
+   * Fire a course (Odoo "Fire Course N"): mark its OrderCourse row PREPARING +
+   * firedAt, push its order lines onto the KDS, and notify kitchen displays.
+   * Courses let the kitchen receive a long dine-in order in timed waves.
+   */
+  async fireCourse(orderId: number, courseNo: number) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException(`Order ${orderId} not found`);
+    const now = new Date();
+    await this.prisma.orderCourse.upsert({
+      where: { orderId_courseNo: { orderId, courseNo } },
+      update: { status: KdsStatus.PREPARING, firedAt: now },
+      create: { orderId, courseNo, status: KdsStatus.PREPARING, firedAt: now },
+    });
+    await this.prisma.orderItem.updateMany({
+      where: { orderId, courseNo, kdsStatus: KdsStatus.QUEUED },
+      data: { kdsStatus: KdsStatus.PREPARING, firedAt: now },
+    });
+    this.events.emit(KDS_CHANGED, { branchId: order.branchId });
+    return this.findOne(orderId);
+  }
+
+  /** List a ticket's courses with their firing status. */
+  listCourses(orderId: number) {
+    return this.prisma.orderCourse.findMany({ where: { orderId }, orderBy: { courseNo: 'asc' } });
+  }
   async merge(targetId: number, fromId: number) {
     if (targetId === fromId) throw new BadRequestException('Cannot merge an order into itself.');
     const target = await this.assertOpen(targetId);

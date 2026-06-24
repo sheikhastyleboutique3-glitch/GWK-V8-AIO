@@ -54,7 +54,8 @@
     "payables": "Payables (AP)",
     "deliveryPlatforms": "Delivery Platforms",
     "discountRules": "Discount Rules",
-    "printers": "Printers / KOT"
+    "printers": "Printers / KOT",
+    "loyalty": "Loyalty & eWallet"
   },
   "auth": {
     "login": "Sign In",
@@ -279,6 +280,21 @@
     "add": "Add printer",
     "empty": "No printers configured.",
     "note": "Network (ESC/POS) push to a printer's IP runs through an on-prem print agent. Assign a printer to each category to route its kitchen tickets."
+  },
+  "loyalty": {
+    "subtitle": "Loyalty points, eWallet & gift-card programs",
+    "programs": "Programs",
+    "noPrograms": "No programs yet.",
+    "programName": "Program name",
+    "addProgram": "Add program",
+    "cards": "Cards",
+    "noCards": "No cards yet.",
+    "program": "Program",
+    "cardCode": "Card code",
+    "openingBalance": "Opening balance",
+    "issueCard": "Issue card",
+    "earn": "Earn",
+    "redeem": "Redeem"
   },
   "menu": {
     "subtitle": "Mark items temporarily out of stock (86) without removing them",

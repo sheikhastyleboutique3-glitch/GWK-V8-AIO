@@ -61,6 +61,9 @@ import { LoyaltyModule } from './modules/loyalty/loyalty.module';
 import { IotDevicesModule } from './modules/iot-devices/iot-devices.module';
 import { SelfOrderConfigsModule } from './modules/self-order-configs/self-order-configs.module';
 import { ProductAttributesModule } from './modules/product-attributes/product-attributes.module';
+import { CombosModule } from './modules/combos/combos.module';
+import { PaymentMethodsModule } from './modules/payment-methods/payment-methods.module';
+import { PricelistsModule } from './modules/pricelists/pricelists.module';
 
 @Module({
   imports: [
@@ -132,6 +135,9 @@ import { ProductAttributesModule } from './modules/product-attributes/product-at
     IotDevicesModule,
     SelfOrderConfigsModule,
     ProductAttributesModule,
+    CombosModule,
+    PaymentMethodsModule,
+    PricelistsModule,
   ],
   providers: [
     // Apply rate limiting globally.

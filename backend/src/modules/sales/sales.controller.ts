@@ -154,6 +154,16 @@ export class SalesController {
     return this.svc.applyDiscountRule(id, dto.ruleId ?? null, dto.reason);
   }
 
+  @Get(':id/courses') @Roles(...POS_ROLES)
+  listCourses(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.listCourses(id);
+  }
+
+  @Post(':id/courses/:courseNo/fire') @Roles(...POS_ROLES)
+  fireCourse(@Param('id', ParseIntPipe) id: number, @Param('courseNo', ParseIntPipe) courseNo: number) {
+    return this.svc.fireCourse(id, courseNo);
+  }
+
   @Patch(':id/table') @Roles(...POS_ROLES)
   transferTable(@Param('id', ParseIntPipe) id: number, @Body() dto: TransferTableDto) {
     return this.svc.transferTable(id, dto.tableName);
