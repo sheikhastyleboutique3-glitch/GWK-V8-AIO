@@ -526,6 +526,8 @@
     "pickVariant": "Choose variant",
     "enterSerial": "Enter serial / lot number for {{name}}",
     "combos": "Combos",
+    "splitBySeat": "Split by seat",
+    "splitBySeatDone": "Split into {{count}} seat ticket(s)",
     "printReceipt": "Print receipt",
     "points": "Points",
     "credit": "Credit",

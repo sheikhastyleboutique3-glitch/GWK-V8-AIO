@@ -171,6 +171,16 @@ export default function POSPage() {
     },
     onError: (e: any) => toast.error(e.response?.data?.message || 'Failed'),
   });
+  const splitBySeat = useMutation({
+    mutationFn: () => api.post(`/sales/orders/${loadedOrderId}/split-by-seat`),
+    onSuccess: (r: any) => {
+      const n = r.data?.data?.seats?.length ?? 0;
+      toast.success(t('pos.splitBySeatDone', { count: n }));
+      qc.invalidateQueries({ queryKey: ['pos-pending'] });
+      refetchLoaded();
+    },
+    onError: (e: any) => toast.error(e.response?.data?.message || 'Failed'),
+  });
 
   // Customer attached to the current sale (loaded order's customer, or the picked one).
   const activeCustomer = mode === 'existing' ? loadedOrder?.customer : customer;
@@ -644,6 +654,11 @@ export default function POSPage() {
                   {t('pos.settling')}: {loadedOrder?.tableName ? `${t('pos.table')} ${loadedOrder.tableName}` : loadedOrder?.orderNo}
                 </div>
                 <button onClick={closeBill} className="text-xs text-gray-500 hover:text-gray-700" aria-label="Close bill">✕</button>
+              </div>
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                <button onClick={() => splitBySeat.mutate()} disabled={splitBySeat.isPending} className="px-2 py-1 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800">
+                  🪑 {t('pos.splitBySeat')}
+                </button>
               </div>
               {(courses?.length ?? 0) > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-2">

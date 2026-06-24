@@ -533,6 +533,8 @@
     "pickVariant": "اختر المتغير",
     "enterSerial": "أدخل الرقم التسلسلي / رقم الدفعة لـ {{name}}",
     "combos": "وجبات مركبة",
+    "splitBySeat": "تقسيم حسب المقعد",
+    "splitBySeatDone": "تم التقسيم إلى {{count}} فاتورة",
     "printReceipt": "طباعة الفاتورة",
     "points": "النقاط",
     "credit": "الرصيد",

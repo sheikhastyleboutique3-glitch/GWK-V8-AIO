@@ -540,6 +540,51 @@ export class SalesService {
     return { original: await this.findOne(orderId), newOrder: await this.findOne(newOrder.id) };
   }
 
+  /** Assign a seat number to a line (per-seat ordering / split-by-seat). */
+  async setItemSeat(orderId: number, itemId: number, seat: number | null) {
+    await this.assertOpen(orderId);
+    const item = await this.prisma.orderItem.findFirst({ where: { id: itemId, orderId } });
+    if (!item) throw new NotFoundException(`Item ${itemId} not found on order ${orderId}`);
+    await this.prisma.orderItem.update({ where: { id: itemId }, data: { seat } });
+    return this.findOne(orderId);
+  }
+
+  /**
+   * Split a bill by seat: every distinct seat (other than the lowest-numbered
+   * one, which stays on the original ticket) is moved onto its own child order.
+   * Lines without a seat stay on the original. Returns the original + the new
+   * per-seat tickets so each guest can pay separately.
+   */
+  async splitBySeat(orderId: number) {
+    const order = await this.assertOpen(orderId);
+    const items = await this.prisma.orderItem.findMany({ where: { orderId } });
+    const seats = [...new Set(items.filter((i) => i.seat != null).map((i) => i.seat as number))].sort((a, b) => a - b);
+    if (seats.length < 2) throw new BadRequestException('Assign at least two different seats before splitting by seat.');
+    // Keep the first seat on the original; spin the rest onto child tickets.
+    const movedSeats = seats.slice(1);
+    const created: number[] = [];
+    for (const seat of movedSeats) {
+      const seatItems = items.filter((i) => i.seat === seat);
+      if (!seatItems.length) continue;
+      const child = await this.prisma.order.create({
+        data: {
+          orderNo: await this.generateOrderNo(order.branchId),
+          branchId: order.branchId,
+          channel: order.channel,
+          tableName: order.tableName,
+          parentOrderId: order.id,
+          createdById: order.createdById,
+        },
+      });
+      await this.prisma.orderItem.updateMany({ where: { id: { in: seatItems.map((i) => i.id) } }, data: { orderId: child.id } });
+      await this.recompute(child.id);
+      created.push(child.id);
+    }
+    await this.recompute(orderId);
+    const children = await Promise.all(created.map((id) => this.findOne(id)));
+    return { original: await this.findOne(orderId), seats: children };
+  }
+
   async voidOrder(orderId: number) {
     const order = await this.prisma.order.findUnique({ where: { id: orderId } });
     if (!order) throw new NotFoundException(`Order ${orderId} not found`);

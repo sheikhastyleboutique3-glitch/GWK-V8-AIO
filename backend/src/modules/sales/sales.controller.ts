@@ -183,6 +183,20 @@ export class SalesController {
     return this.svc.split(id, dto.itemIds);
   }
 
+  @Post(':id/split-by-seat') @Roles(...POS_ROLES)
+  splitBySeat(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.splitBySeat(id);
+  }
+
+  @Patch(':id/items/:itemId/seat') @Roles(...POS_ROLES)
+  setItemSeat(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('itemId', ParseIntPipe) itemId: number,
+    @Body() dto: { seat: number | null },
+  ) {
+    return this.svc.setItemSeat(id, itemId, dto?.seat ?? null);
+  }
+
   @Patch(':id/void') @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
   voidOrder(@Param('id', ParseIntPipe) id: number) {
     return this.svc.voidOrder(id);
