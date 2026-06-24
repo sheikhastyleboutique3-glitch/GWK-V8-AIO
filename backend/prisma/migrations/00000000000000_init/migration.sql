@@ -97,6 +97,36 @@ CREATE TYPE "TaxComputation" AS ENUM ('PERCENT_EXCLUDED', 'PERCENT_INCLUDED');
 -- CreateEnum
 CREATE TYPE "PricelistType" AS ENUM ('BASE', 'CUSTOMER_GROUP', 'TIME_WINDOW');
 
+-- CreateEnum
+CREATE TYPE "PaymentIntegration" AS ENUM ('NONE', 'TERMINAL', 'QR_BANK', 'CASH_MACHINE', 'ONLINE', 'DELIVERY');
+
+-- CreateEnum
+CREATE TYPE "TerminalProvider" AS ENUM ('ADYEN', 'STRIPE', 'VIVA', 'SIX', 'WORLDLINE', 'RAZORPAY', 'MERCADO_PAGO');
+
+-- CreateEnum
+CREATE TYPE "CashMachineProvider" AS ENUM ('CASHDRO', 'GLORY');
+
+-- CreateEnum
+CREATE TYPE "AttributeDisplayType" AS ENUM ('RADIO', 'SELECT', 'COLOR', 'MULTI');
+
+-- CreateEnum
+CREATE TYPE "LoyaltyProgramType" AS ENUM ('LOYALTY', 'EWALLET', 'GIFT_CARD', 'PROMOTION', 'DISCOUNT', 'COUPON', 'BUY_X_GET_Y');
+
+-- CreateEnum
+CREATE TYPE "LoyaltyRewardType" AS ENUM ('DISCOUNT_PERCENT', 'DISCOUNT_FIXED', 'FREE_PRODUCT', 'SHIPPING');
+
+-- CreateEnum
+CREATE TYPE "IotDeviceType" AS ENUM ('IOT_BOX', 'RECEIPT_PRINTER', 'KITCHEN_PRINTER', 'BARCODE_SCANNER', 'SCALE', 'CUSTOMER_DISPLAY', 'CASH_DRAWER', 'PAYMENT_TERMINAL');
+
+-- CreateEnum
+CREATE TYPE "SelfOrderMode" AS ENUM ('KIOSK', 'QR_TABLE', 'MOBILE');
+
+-- CreateEnum
+CREATE TYPE "CashRoundingStrategy" AS ENUM ('ADD_ROUND_LINE', 'BIGGEST_TAX');
+
+-- CreateEnum
+CREATE TYPE "BookingStage" AS ENUM ('BOOKED', 'CHECKED_IN', 'SEATED', 'NO_SHOW', 'DONE');
+
 -- CreateTable
 CREATE TABLE "branches" (
     "id" SERIAL NOT NULL,
@@ -130,6 +160,9 @@ CREATE TABLE "users" (
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "isApproved" BOOLEAN NOT NULL DEFAULT false,
     "language" TEXT NOT NULL DEFAULT 'en',
+    "posPin" TEXT,
+    "badgeId" TEXT,
+    "posRights" JSONB,
     "branchId" INTEGER,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -220,6 +253,10 @@ CREATE TABLE "products" (
     "isSellable" BOOLEAN NOT NULL DEFAULT true,
     "productType" "ProductType" NOT NULL DEFAULT 'MENU',
     "isAvailable" BOOLEAN NOT NULL DEFAULT true,
+    "barcode" TEXT,
+    "weighed" BOOLEAN NOT NULL DEFAULT false,
+    "tracksSerial" BOOLEAN NOT NULL DEFAULT false,
+    "hasVariants" BOOLEAN NOT NULL DEFAULT false,
     "tracksExpiry" BOOLEAN NOT NULL DEFAULT false,
     "expiryTrackingType" "ExpiryTrackingType",
     "shelfLifeDays" INTEGER,
@@ -666,6 +703,9 @@ CREATE TABLE "pos_configs" (
     "defaultFloorId" INTEGER,
     "allowSplitBill" BOOLEAN NOT NULL DEFAULT true,
     "allowTableMove" BOOLEAN NOT NULL DEFAULT true,
+    "allowTips" BOOLEAN NOT NULL DEFAULT false,
+    "cashRoundingId" INTEGER,
+    "defaultPresetId" INTEGER,
     "iface" JSONB,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -732,6 +772,16 @@ CREATE TABLE "payment_method_configs" (
     "isCashCount" BOOLEAN NOT NULL DEFAULT false,
     "opensDrawer" BOOLEAN NOT NULL DEFAULT false,
     "deliveryPlatformId" INTEGER,
+    "integration" "PaymentIntegration" NOT NULL DEFAULT 'NONE',
+    "terminalProvider" "TerminalProvider",
+    "cashMachine" "CashMachineProvider",
+    "paymentTerminalId" INTEGER,
+    "journal" TEXT,
+    "identifyCustomer" BOOLEAN NOT NULL DEFAULT false,
+    "oneClick" BOOLEAN NOT NULL DEFAULT false,
+    "onlineProvider" TEXT,
+    "intermediaryAccount" TEXT,
+    "posConfigId" INTEGER,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "sortOrder" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -842,6 +892,12 @@ CREATE TABLE "orders" (
     "tableId" INTEGER,
     "tableName" TEXT,
     "guestCount" INTEGER NOT NULL DEFAULT 1,
+    "presetId" INTEGER,
+    "fiscalPositionId" INTEGER,
+    "isSelfOrder" BOOLEAN NOT NULL DEFAULT false,
+    "selfOrderMode" "SelfOrderMode",
+    "tabName" TEXT,
+    "roundingAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "sessionId" INTEGER,
     "posConfigId" INTEGER,
     "parentOrderId" INTEGER,
@@ -1050,6 +1106,10 @@ CREATE TABLE "reservations" (
     "partySize" INTEGER NOT NULL DEFAULT 2,
     "reservedAt" TIMESTAMP(3) NOT NULL,
     "status" "ReservationStatus" NOT NULL DEFAULT 'BOOKED',
+    "stage" "BookingStage" NOT NULL DEFAULT 'BOOKED',
+    "durationMins" INTEGER NOT NULL DEFAULT 90,
+    "linkedTableIds" INTEGER[] DEFAULT ARRAY[]::INTEGER[],
+    "resourceName" TEXT,
     "notes" TEXT,
     "createdById" INTEGER,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1232,8 +1292,226 @@ CREATE TABLE "stock_count_items" (
     CONSTRAINT "stock_count_items_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "product_attributes" (
+    "id" SERIAL NOT NULL,
+    "name" TEXT NOT NULL,
+    "nameAr" TEXT,
+    "displayType" "AttributeDisplayType" NOT NULL DEFAULT 'SELECT',
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "product_attributes_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "product_attribute_values" (
+    "id" SERIAL NOT NULL,
+    "attributeId" INTEGER NOT NULL,
+    "name" TEXT NOT NULL,
+    "nameAr" TEXT,
+    "priceExtra" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "colorHex" TEXT,
+    "sortOrder" INTEGER NOT NULL DEFAULT 0,
+
+    CONSTRAINT "product_attribute_values_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "product_attribute_lines" (
+    "id" SERIAL NOT NULL,
+    "productId" INTEGER NOT NULL,
+    "attributeId" INTEGER NOT NULL,
+    "valueIds" INTEGER[] DEFAULT ARRAY[]::INTEGER[],
+
+    CONSTRAINT "product_attribute_lines_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "product_variants" (
+    "id" SERIAL NOT NULL,
+    "productId" INTEGER NOT NULL,
+    "sku" TEXT NOT NULL,
+    "barcode" TEXT,
+    "priceExtra" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "attributeValueIds" INTEGER[] DEFAULT ARRAY[]::INTEGER[],
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+
+    CONSTRAINT "product_variants_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "fiscal_positions" (
+    "id" SERIAL NOT NULL,
+    "name" TEXT NOT NULL,
+    "nameAr" TEXT,
+    "isTakeout" BOOLEAN NOT NULL DEFAULT false,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "fiscal_positions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "fiscal_position_tax_maps" (
+    "id" SERIAL NOT NULL,
+    "fiscalPositionId" INTEGER NOT NULL,
+    "srcTaxRateId" INTEGER NOT NULL,
+    "destTaxRateId" INTEGER,
+
+    CONSTRAINT "fiscal_position_tax_maps_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "order_presets" (
+    "id" SERIAL NOT NULL,
+    "name" TEXT NOT NULL,
+    "nameAr" TEXT,
+    "channel" "OrderChannel" NOT NULL DEFAULT 'DINE_IN',
+    "fiscalPositionId" INTEGER,
+    "pricelistId" INTEGER,
+    "identifyCustomer" BOOLEAN NOT NULL DEFAULT false,
+    "color" TEXT,
+    "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+
+    CONSTRAINT "order_presets_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "cash_roundings" (
+    "id" SERIAL NOT NULL,
+    "name" TEXT NOT NULL,
+    "precision" DOUBLE PRECISION NOT NULL DEFAULT 0.05,
+    "strategy" "CashRoundingStrategy" NOT NULL DEFAULT 'ADD_ROUND_LINE',
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+
+    CONSTRAINT "cash_roundings_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "payment_terminals" (
+    "id" SERIAL NOT NULL,
+    "name" TEXT NOT NULL,
+    "provider" "TerminalProvider" NOT NULL,
+    "identifier" TEXT,
+    "branchId" INTEGER,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "payment_terminals_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "loyalty_programs" (
+    "id" SERIAL NOT NULL,
+    "name" TEXT NOT NULL,
+    "nameAr" TEXT,
+    "type" "LoyaltyProgramType" NOT NULL DEFAULT 'LOYALTY',
+    "pointsPerCurrency" DOUBLE PRECISION NOT NULL DEFAULT 1,
+    "currency" TEXT NOT NULL DEFAULT 'QAR',
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "startsAt" TIMESTAMP(3),
+    "endsAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "loyalty_programs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "loyalty_rules" (
+    "id" SERIAL NOT NULL,
+    "programId" INTEGER NOT NULL,
+    "minAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "productCategoryId" INTEGER,
+    "productId" INTEGER,
+    "pointsAwarded" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "couponCode" TEXT,
+
+    CONSTRAINT "loyalty_rules_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "loyalty_rewards" (
+    "id" SERIAL NOT NULL,
+    "programId" INTEGER NOT NULL,
+    "type" "LoyaltyRewardType" NOT NULL DEFAULT 'DISCOUNT_PERCENT',
+    "discountValue" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "rewardProductId" INTEGER,
+    "pointsCost" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "description" TEXT,
+
+    CONSTRAINT "loyalty_rewards_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "loyalty_cards" (
+    "id" SERIAL NOT NULL,
+    "programId" INTEGER NOT NULL,
+    "code" TEXT NOT NULL,
+    "customerId" INTEGER,
+    "points" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "balance" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "expiresAt" TIMESTAMP(3),
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "loyalty_cards_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "iot_devices" (
+    "id" SERIAL NOT NULL,
+    "branchId" INTEGER NOT NULL,
+    "name" TEXT NOT NULL,
+    "type" "IotDeviceType" NOT NULL,
+    "connection" "ConnectionType" NOT NULL DEFAULT 'IP',
+    "identifier" TEXT,
+    "ipAddress" TEXT,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "iot_devices_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "self_order_configs" (
+    "id" SERIAL NOT NULL,
+    "branchId" INTEGER NOT NULL,
+    "name" TEXT NOT NULL,
+    "mode" "SelfOrderMode" NOT NULL DEFAULT 'QR_TABLE',
+    "posConfigId" INTEGER,
+    "pricelistId" INTEGER,
+    "payOnline" BOOLEAN NOT NULL DEFAULT false,
+    "requireTable" BOOLEAN NOT NULL DEFAULT true,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "self_order_configs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "order_courses" (
+    "id" SERIAL NOT NULL,
+    "orderId" INTEGER NOT NULL,
+    "courseNo" INTEGER NOT NULL,
+    "status" "KdsStatus" NOT NULL DEFAULT 'QUEUED',
+    "firedAt" TIMESTAMP(3),
+    "servedAt" TIMESTAMP(3),
+
+    CONSTRAINT "order_courses_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "users_badgeId_key" ON "users"("badgeId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "user_branches_userId_branchId_key" ON "user_branches"("userId", "branchId");
@@ -1550,6 +1828,51 @@ CREATE INDEX "stock_counts_branchId_idx" ON "stock_counts"("branchId");
 -- CreateIndex
 CREATE INDEX "stock_count_items_countId_idx" ON "stock_count_items"("countId");
 
+-- CreateIndex
+CREATE INDEX "product_attribute_values_attributeId_idx" ON "product_attribute_values"("attributeId");
+
+-- CreateIndex
+CREATE INDEX "product_attribute_lines_productId_idx" ON "product_attribute_lines"("productId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "product_attribute_lines_productId_attributeId_key" ON "product_attribute_lines"("productId", "attributeId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "product_variants_sku_key" ON "product_variants"("sku");
+
+-- CreateIndex
+CREATE INDEX "product_variants_productId_idx" ON "product_variants"("productId");
+
+-- CreateIndex
+CREATE INDEX "fiscal_position_tax_maps_fiscalPositionId_idx" ON "fiscal_position_tax_maps"("fiscalPositionId");
+
+-- CreateIndex
+CREATE INDEX "loyalty_rules_programId_idx" ON "loyalty_rules"("programId");
+
+-- CreateIndex
+CREATE INDEX "loyalty_rewards_programId_idx" ON "loyalty_rewards"("programId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "loyalty_cards_code_key" ON "loyalty_cards"("code");
+
+-- CreateIndex
+CREATE INDEX "loyalty_cards_programId_idx" ON "loyalty_cards"("programId");
+
+-- CreateIndex
+CREATE INDEX "loyalty_cards_customerId_idx" ON "loyalty_cards"("customerId");
+
+-- CreateIndex
+CREATE INDEX "iot_devices_branchId_idx" ON "iot_devices"("branchId");
+
+-- CreateIndex
+CREATE INDEX "self_order_configs_branchId_idx" ON "self_order_configs"("branchId");
+
+-- CreateIndex
+CREATE INDEX "order_courses_orderId_idx" ON "order_courses"("orderId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "order_courses_orderId_courseNo_key" ON "order_courses"("orderId", "courseNo");
+
 -- AddForeignKey
 ALTER TABLE "users" ADD CONSTRAINT "users_branchId_fkey" FOREIGN KEY ("branchId") REFERENCES "branches"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
@@ -1834,4 +2157,31 @@ ALTER TABLE "sales_quote_items" ADD CONSTRAINT "sales_quote_items_quoteId_fkey" 
 
 -- AddForeignKey
 ALTER TABLE "stock_count_items" ADD CONSTRAINT "stock_count_items_countId_fkey" FOREIGN KEY ("countId") REFERENCES "stock_counts"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "product_attribute_values" ADD CONSTRAINT "product_attribute_values_attributeId_fkey" FOREIGN KEY ("attributeId") REFERENCES "product_attributes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "product_attribute_lines" ADD CONSTRAINT "product_attribute_lines_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "product_attribute_lines" ADD CONSTRAINT "product_attribute_lines_attributeId_fkey" FOREIGN KEY ("attributeId") REFERENCES "product_attributes"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "product_variants" ADD CONSTRAINT "product_variants_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "fiscal_position_tax_maps" ADD CONSTRAINT "fiscal_position_tax_maps_fiscalPositionId_fkey" FOREIGN KEY ("fiscalPositionId") REFERENCES "fiscal_positions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "loyalty_rules" ADD CONSTRAINT "loyalty_rules_programId_fkey" FOREIGN KEY ("programId") REFERENCES "loyalty_programs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "loyalty_rewards" ADD CONSTRAINT "loyalty_rewards_programId_fkey" FOREIGN KEY ("programId") REFERENCES "loyalty_programs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "loyalty_cards" ADD CONSTRAINT "loyalty_cards_programId_fkey" FOREIGN KEY ("programId") REFERENCES "loyalty_programs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "order_courses" ADD CONSTRAINT "order_courses_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 

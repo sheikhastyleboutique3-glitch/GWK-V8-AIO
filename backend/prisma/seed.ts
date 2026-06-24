@@ -267,8 +267,48 @@ async function main() {
   await prisma.paymentMethodConfig.upsert({ where: { id: 3 }, update: {}, create: { id: 3, name: 'Talabat', nameAr: 'طلبات', type: 'AGGREGATOR', deliveryPlatformId: 1, sortOrder: 2 } });
   await prisma.paymentMethodConfig.upsert({ where: { id: 4 }, update: {}, create: { id: 4, name: 'Snoonu', nameAr: 'سنونو', type: 'AGGREGATOR', deliveryPlatformId: 2, sortOrder: 3 } });
   await prisma.taxRate.upsert({ where: { id: 1 }, update: {}, create: { id: 1, name: 'Standard', percent: 0, computation: 'PERCENT_EXCLUDED' } }); // Qatar: 0% VAT currently
-  const posConfig = await prisma.posConfig.upsert({ where: { id: 1 }, update: {}, create: { id: 1, name: 'Doha Front Till', branchId: branchDoha.id, allowSplitBill: true, allowTableMove: true } });
+  const posConfig = await prisma.posConfig.upsert({ where: { id: 1 }, update: {}, create: { id: 1, name: 'Doha Front Till', branchId: branchDoha.id, allowSplitBill: true, allowTableMove: true, allowTips: true } });
   console.log('✅ Payment methods (4) + tax + POS terminal');
+
+  // ==========================================================================
+  // V8.1: PRESETS, FISCAL POSITION, CASH ROUNDING, TERMINAL, LOYALTY, IoT, SELF-ORDER, VARIANTS
+  // ==========================================================================
+  const fpTakeout = await prisma.fiscalPosition.upsert({ where: { id: 1 }, update: {}, create: { id: 1, name: 'Takeout', nameAr: 'سفري', isTakeout: true } });
+  await prisma.orderPreset.upsert({ where: { id: 1 }, update: {}, create: { id: 1, name: 'Dine In', nameAr: 'محلي', channel: 'DINE_IN', color: '#16a34a', sortOrder: 0 } });
+  await prisma.orderPreset.upsert({ where: { id: 2 }, update: {}, create: { id: 2, name: 'Takeout', nameAr: 'سفري', channel: 'TAKEAWAY', fiscalPositionId: fpTakeout.id, color: '#f59e0b', sortOrder: 1 } });
+  await prisma.orderPreset.upsert({ where: { id: 3 }, update: {}, create: { id: 3, name: 'Delivery', nameAr: 'توصيل', channel: 'DELIVERY', color: '#0ea5e9', sortOrder: 2 } });
+  const rounding = await prisma.cashRounding.upsert({ where: { id: 1 }, update: {}, create: { id: 1, name: 'Round 0.05', precision: 0.05, strategy: 'ADD_ROUND_LINE' } });
+  await prisma.posConfig.update({ where: { id: posConfig.id }, data: { cashRoundingId: rounding.id, defaultPresetId: 1 } });
+  await prisma.paymentTerminal.upsert({ where: { id: 1 }, update: {}, create: { id: 1, name: 'Front Card Terminal', provider: 'STRIPE', identifier: 'tmr_doha_01', branchId: branchDoha.id } });
+  console.log('✅ Presets (3) + fiscal position + cash rounding + terminal');
+
+  // Loyalty + eWallet programs.
+  const loyalty = await prisma.loyaltyProgram.upsert({ where: { id: 1 }, update: {}, create: { id: 1, name: 'GWK Rewards', nameAr: 'مكافآت', type: 'LOYALTY', pointsPerCurrency: 1 } });
+  await prisma.loyaltyReward.create({ data: { programId: loyalty.id, type: 'DISCOUNT_FIXED', discountValue: 10, pointsCost: 100, description: '10 QAR off for 100 points' } });
+  await prisma.loyaltyProgram.upsert({ where: { id: 2 }, update: {}, create: { id: 2, name: 'eWallet', nameAr: 'محفظة', type: 'EWALLET', pointsPerCurrency: 0 } });
+  await prisma.loyaltyCard.upsert({ where: { code: 'EW-0001' }, update: {}, create: { programId: 2, code: 'EW-0001', balance: 200 } });
+  console.log('✅ Loyalty + eWallet programs');
+
+  // IoT / hardware peripherals.
+  await prisma.iotDevice.createMany({ data: [
+    { branchId: branchDoha.id, name: 'Front Barcode Scanner', type: 'BARCODE_SCANNER', connection: 'USB', identifier: 'USB-SCAN-01' },
+    { branchId: branchDoha.id, name: 'Counter Scale', type: 'SCALE', connection: 'USB', identifier: 'USB-SCALE-01' },
+    { branchId: branchDoha.id, name: 'Customer Display', type: 'CUSTOMER_DISPLAY', connection: 'IP', ipAddress: '192.168.1.210' },
+  ], skipDuplicates: true });
+  // Self-ordering: QR-at-table.
+  await prisma.selfOrderConfig.upsert({ where: { id: 1 }, update: {}, create: { id: 1, branchId: branchDoha.id, name: 'QR Table Ordering', mode: 'QR_TABLE', posConfigId: posConfig.id, requireTable: true } });
+  console.log('✅ IoT devices (3) + self-order config');
+
+  // Product variant demo: a "Size" attribute on the Latte.
+  const attrSize = await prisma.productAttribute.upsert({ where: { id: 1 }, update: {}, create: { id: 1, name: 'Size', nameAr: 'الحجم', displayType: 'RADIO' } });
+  const vS = await prisma.productAttributeValue.create({ data: { attributeId: attrSize.id, name: 'Small', nameAr: 'صغير', priceExtra: -2, sortOrder: 0 } });
+  const vL = await prisma.productAttributeValue.create({ data: { attributeId: attrSize.id, name: 'Large', nameAr: 'كبير', priceExtra: 3, sortOrder: 1 } });
+  await prisma.product.update({ where: { id: latte.id }, data: { hasVariants: true } });
+  await prisma.productAttributeLine.upsert({ where: { productId_attributeId: { productId: latte.id, attributeId: attrSize.id } }, update: { valueIds: [vS.id, vL.id] }, create: { productId: latte.id, attributeId: attrSize.id, valueIds: [vS.id, vL.id] } });
+  await prisma.productVariant.upsert({ where: { sku: 'MENU-002-S' }, update: {}, create: { productId: latte.id, sku: 'MENU-002-S', priceExtra: -2, attributeValueIds: [vS.id] } });
+  await prisma.productVariant.upsert({ where: { sku: 'MENU-002-L' }, update: {}, create: { productId: latte.id, sku: 'MENU-002-L', priceExtra: 3, attributeValueIds: [vL.id] } });
+  console.log('✅ Product attribute (Size) + 2 variants on Latte');
+
 
   // ==========================================================================
   // V8: RESTAURANT FLOOR + POSITIONED TABLES (visual floor plan)
