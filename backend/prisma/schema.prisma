@@ -292,6 +292,94 @@ enum PricelistType {
   TIME_WINDOW
 }
 
+// ---- V8.1 Odoo-19 parity enums ------------------------------------------------
+
+// How a configured payment method talks to the outside world (Odoo `pos.payment.method`).
+enum PaymentIntegration {
+  NONE // plain cash
+  TERMINAL // card via a payment terminal
+  QR_BANK // bank-app QR code
+  CASH_MACHINE // Cashdro / Glory automated cash drawer
+  ONLINE // online payment provider
+  DELIVERY // aggregator / Urban Piper online order
+}
+
+enum TerminalProvider {
+  ADYEN
+  STRIPE
+  VIVA
+  SIX
+  WORLDLINE
+  RAZORPAY
+  MERCADO_PAGO
+}
+
+// Cash machine hardware models (Odoo cash machine integration).
+enum CashMachineProvider {
+  CASHDRO
+  GLORY
+}
+
+// Variant attribute presentation (Odoo product attribute display type).
+enum AttributeDisplayType {
+  RADIO
+  SELECT
+  COLOR
+  MULTI
+}
+
+// Loyalty / promotion program families (Odoo `loyalty.program`).
+enum LoyaltyProgramType {
+  LOYALTY // points per spend
+  EWALLET // stored cash balance
+  GIFT_CARD // prepaid card programs
+  PROMOTION // automatic promotions
+  DISCOUNT // discount programs
+  COUPON // coupon codes
+  BUY_X_GET_Y // free-product promotions
+}
+
+enum LoyaltyRewardType {
+  DISCOUNT_PERCENT
+  DISCOUNT_FIXED
+  FREE_PRODUCT
+  SHIPPING
+}
+
+// Hardware / IoT peripherals (Odoo Hardware & network section).
+enum IotDeviceType {
+  IOT_BOX
+  RECEIPT_PRINTER
+  KITCHEN_PRINTER
+  BARCODE_SCANNER
+  SCALE
+  CUSTOMER_DISPLAY
+  CASH_DRAWER
+  PAYMENT_TERMINAL
+}
+
+// Self-ordering channels (Odoo self-order / kiosk).
+enum SelfOrderMode {
+  KIOSK // dedicated self-service kiosk
+  QR_TABLE // scan QR at the table
+  MOBILE // customer's own device
+}
+
+// Cash rounding strategy (Odoo cash rounding).
+enum CashRoundingStrategy {
+  ADD_ROUND_LINE
+  BIGGEST_TAX
+}
+
+// Booking lifecycle stage on the floor plan (Odoo bookings).
+enum BookingStage {
+  BOOKED
+  CHECKED_IN
+  SEATED
+  NO_SHOW
+  DONE
+}
+
 // =============================================================================
 // CORE ENTITIES
 // =============================================================================
@@ -341,6 +429,10 @@ model User {
   isActive    Boolean  @default(true)
   isApproved  Boolean  @default(false)
   language    String   @default("en")
+  // V8.1: POS employee login — fast PIN / scan badge + per-cashier rights.
+  posPin      String?
+  badgeId     String?  @unique
+  posRights   Json?
   branchId    Int?
   branch      Branch?  @relation(fields: [branchId], references: [id])
   createdAt   DateTime @default(now())
@@ -473,6 +565,11 @@ model Product {
   isSellable         Boolean             @default(true)
   productType        ProductType         @default(MENU)
   isAvailable        Boolean             @default(true)
+  // V8.1: retail / variant / serial attributes (Odoo product template).
+  barcode            String?
+  weighed            Boolean             @default(false) // sold by weight (scale)
+  tracksSerial       Boolean             @default(false) // serial/lot selected at POS
+  hasVariants        Boolean             @default(false)
   tracksExpiry       Boolean             @default(false)
   expiryTrackingType ExpiryTrackingType?
   shelfLifeDays      Int?
@@ -499,6 +596,8 @@ model Product {
   pricelistItems       PricelistItem[]
   comboChoices         ComboChoice[]
   productModifierGroups ProductModifierGroup[]
+  variants             ProductVariant[]
+  attributeLines       ProductAttributeLine[]
 
   @@index([categoryId])
   @@index([supplierId])
@@ -1053,6 +1152,10 @@ model PosConfig {
   defaultFloorId Int? // scalar; floors are branch-scoped
   allowSplitBill Boolean  @default(true)
   allowTableMove Boolean  @default(true)
+  // V8.1: tips, cash rounding, default service preset, self-order.
+  allowTips      Boolean  @default(false)
+  cashRoundingId Int?
+  defaultPresetId Int?
   iface          Json? // misc terminal UI flags
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
@@ -1134,6 +1237,17 @@ model PaymentMethodConfig {
   isCashCount        Boolean           @default(false) // counts toward the drawer
   opensDrawer        Boolean           @default(false)
   deliveryPlatformId Int? // links an AGGREGATOR method to its platform
+  // V8.1: real Odoo pos.payment.method integration.
+  integration        PaymentIntegration @default(NONE)
+  terminalProvider   TerminalProvider?
+  cashMachine        CashMachineProvider?
+  paymentTerminalId  Int?
+  journal            String? // accounting journal name
+  identifyCustomer   Boolean           @default(false)
+  oneClick           Boolean           @default(false)
+  onlineProvider     String?
+  intermediaryAccount String?
+  posConfigId        Int?
   isActive           Boolean           @default(true)
   sortOrder          Int               @default(0)
   createdAt          DateTime          @default(now())
@@ -1275,6 +1389,14 @@ model Order {
   table              RestaurantTable? @relation(fields: [tableId], references: [id])
   tableName          String?
   guestCount         Int          @default(1)
+  // V8.1: service preset (Dine In/Takeout/Delivery), takeout fiscal position,
+  // self-order channel, named tab, and cash rounding adjustment.
+  presetId           Int?
+  fiscalPositionId   Int?
+  isSelfOrder        Boolean      @default(false)
+  selfOrderMode      SelfOrderMode?
+  tabName            String?
+  roundingAmount     Float        @default(0)
   // Session-bound: an order must live inside an open PosSession + terminal.
   sessionId          Int?
   session            PosSession?  @relation(fields: [sessionId], references: [id])
@@ -1320,6 +1442,7 @@ model Order {
   items      OrderItem[]
   payments   Payment[]
   tableMoves OrderTableMove[]
+  courses    OrderCourse[]
 
   @@index([branchId, status])
   @@index([status])
@@ -1555,6 +1678,12 @@ model Reservation {
   partySize    Int               @default(2)
   reservedAt   DateTime
   status       ReservationStatus @default(BOOKED)
+  // V8.1: floor-plan booking (Odoo Appointments) — stage, duration, and the
+  // resource tables linked/merged to satisfy capacity.
+  stage          BookingStage @default(BOOKED)
+  durationMins   Int          @default(90)
+  linkedTableIds Int[]        @default([])
+  resourceName   String?
   notes        String?
   createdById  Int?
   createdAt    DateTime          @default(now())
@@ -1750,4 +1879,251 @@ model StockCountItem {
 
   @@index([countId])
   @@map("stock_count_items")
+}
+
+
+// =============================================================================
+// V8.1 — ODOO 19 PARITY EXPANSION
+// Product variants/attributes, fiscal positions, presets, cash rounding,
+// payment terminals, loyalty/eWallet programs, IoT devices, self-order, courses.
+// =============================================================================
+
+// ---- Product variants & attributes (Odoo product.template / variant) --------
+model ProductAttribute {
+  id          Int                  @id @default(autoincrement())
+  name        String
+  nameAr      String?
+  displayType AttributeDisplayType @default(SELECT)
+  isActive    Boolean              @default(true)
+  createdAt   DateTime             @default(now())
+
+  values ProductAttributeValue[]
+  lines  ProductAttributeLine[]
+
+  @@map("product_attributes")
+}
+
+model ProductAttributeValue {
+  id          Int              @id @default(autoincrement())
+  attributeId Int
+  attribute   ProductAttribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  name        String
+  nameAr      String?
+  priceExtra  Float            @default(0)
+  colorHex    String?
+  sortOrder   Int              @default(0)
+
+  @@index([attributeId])
+  @@map("product_attribute_values")
+}
+
+// Which attributes apply to a given product (the variant matrix source).
+model ProductAttributeLine {
+  id          Int              @id @default(autoincrement())
+  productId   Int
+  product     Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  attributeId Int
+  attribute   ProductAttribute @relation(fields: [attributeId], references: [id])
+  valueIds    Int[]            @default([]) // selected ProductAttributeValue ids
+
+  @@unique([productId, attributeId])
+  @@index([productId])
+  @@map("product_attribute_lines")
+}
+
+model ProductVariant {
+  id              Int     @id @default(autoincrement())
+  productId       Int
+  product         Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku             String  @unique
+  barcode         String?
+  priceExtra      Float   @default(0)
+  attributeValueIds Int[] @default([]) // combination of ProductAttributeValue ids
+  isActive        Boolean @default(true)
+
+  @@index([productId])
+  @@map("product_variants")
+}
+
+// ---- Fiscal positions (different taxes for takeout) -------------------------
+model FiscalPosition {
+  id        Int      @id @default(autoincrement())
+  name      String
+  nameAr    String?
+  isTakeout Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  taxMaps FiscalPositionTaxMap[]
+
+  @@map("fiscal_positions")
+}
+
+model FiscalPositionTaxMap {
+  id               Int            @id @default(autoincrement())
+  fiscalPositionId Int
+  fiscalPosition   FiscalPosition @relation(fields: [fiscalPositionId], references: [id], onDelete: Cascade)
+  srcTaxRateId     Int
+  destTaxRateId    Int?
+
+  @@index([fiscalPositionId])
+  @@map("fiscal_position_tax_maps")
+}
+
+// ---- Order presets (service types: Dine In / Takeout / Delivery) ------------
+model OrderPreset {
+  id               Int          @id @default(autoincrement())
+  name             String
+  nameAr           String?
+  channel          OrderChannel @default(DINE_IN)
+  fiscalPositionId Int?
+  pricelistId      Int?
+  identifyCustomer Boolean      @default(false)
+  color            String?
+  sortOrder        Int          @default(0)
+  isActive         Boolean      @default(true)
+
+  @@map("order_presets")
+}
+
+// ---- Cash rounding (Odoo cash rounding) -------------------------------------
+model CashRounding {
+  id        Int                  @id @default(autoincrement())
+  name      String
+  precision Float                @default(0.05) // round to nearest…
+  strategy  CashRoundingStrategy @default(ADD_ROUND_LINE)
+  isActive  Boolean              @default(true)
+
+  @@map("cash_roundings")
+}
+
+// ---- Payment terminals (Adyen/Stripe/Viva/SIX/Worldline) --------------------
+model PaymentTerminal {
+  id         Int              @id @default(autoincrement())
+  name       String
+  provider   TerminalProvider
+  identifier String? // terminal serial / device id
+  branchId   Int?
+  isActive   Boolean          @default(true)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@map("payment_terminals")
+}
+
+// ---- Loyalty / eWallet / promotion programs (Odoo loyalty.program) ----------
+model LoyaltyProgram {
+  id               Int                @id @default(autoincrement())
+  name             String
+  nameAr           String?
+  type             LoyaltyProgramType @default(LOYALTY)
+  pointsPerCurrency Float             @default(1) // points earned per 1 currency
+  currency         String             @default("QAR")
+  isActive         Boolean            @default(true)
+  startsAt         DateTime?
+  endsAt           DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  rules   LoyaltyRule[]
+  rewards LoyaltyReward[]
+  cards   LoyaltyCard[]
+
+  @@map("loyalty_programs")
+}
+
+model LoyaltyRule {
+  id              Int            @id @default(autoincrement())
+  programId       Int
+  program         LoyaltyProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  minAmount       Float          @default(0)
+  productCategoryId Int?
+  productId       Int?
+  pointsAwarded   Float          @default(0)
+  couponCode      String?
+
+  @@index([programId])
+  @@map("loyalty_rules")
+}
+
+model LoyaltyReward {
+  id               Int               @id @default(autoincrement())
+  programId        Int
+  program          LoyaltyProgram    @relation(fields: [programId], references: [id], onDelete: Cascade)
+  type             LoyaltyRewardType @default(DISCOUNT_PERCENT)
+  discountValue    Float             @default(0)
+  rewardProductId  Int?
+  pointsCost       Float             @default(0)
+  description      String?
+
+  @@index([programId])
+  @@map("loyalty_rewards")
+}
+
+model LoyaltyCard {
+  id         Int            @id @default(autoincrement())
+  programId  Int
+  program    LoyaltyProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  code       String         @unique
+  customerId Int?
+  points     Float          @default(0)
+  balance    Float          @default(0) // eWallet / gift-card balance
+  expiresAt  DateTime?
+  isActive   Boolean        @default(true)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@index([programId])
+  @@index([customerId])
+  @@map("loyalty_cards")
+}
+
+// ---- IoT / hardware peripherals (Odoo Hardware & network) -------------------
+model IotDevice {
+  id         Int            @id @default(autoincrement())
+  branchId   Int
+  name       String
+  type       IotDeviceType
+  connection ConnectionType @default(IP)
+  identifier String? // serial / MAC / device id
+  ipAddress  String?
+  isActive   Boolean        @default(true)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@index([branchId])
+  @@map("iot_devices")
+}
+
+// ---- Self-ordering / kiosk (Odoo self-order) --------------------------------
+model SelfOrderConfig {
+  id          Int           @id @default(autoincrement())
+  branchId    Int
+  name        String
+  mode        SelfOrderMode @default(QR_TABLE)
+  posConfigId Int?
+  pricelistId Int?
+  payOnline   Boolean       @default(false)
+  requireTable Boolean      @default(true)
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([branchId])
+  @@map("self_order_configs")
+}
+
+// ---- Course firing (Odoo "Fire Course N" workflow) --------------------------
+model OrderCourse {
+  id        Int       @id @default(autoincrement())
+  orderId   Int
+  order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  courseNo  Int
+  status    KdsStatus @default(QUEUED)
+  firedAt   DateTime?
+  servedAt  DateTime?
+
+  @@unique([orderId, courseNo])
+  @@index([orderId])
+  @@map("order_courses")
 }
