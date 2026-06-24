@@ -41,6 +41,7 @@ export default function POSPage() {
   const [channel, setChannel] = useState<Channel>('DINE_IN');
   const [tableName, setTableName] = useState('');
   const [deliveryPlatformId, setDeliveryPlatformId] = useState<number | undefined>(undefined);
+  const [presetId, setPresetId] = useState<number | undefined>(undefined);
   const [platformRef, setPlatformRef] = useState('');
   const [payMethod, setPayMethod] = useState<PayMethod>('CASH');
   const [customer, setCustomer] = useState<any>(null);
@@ -70,6 +71,11 @@ export default function POSPage() {
   const { data: discountRules } = useQuery({
     queryKey: ['discount-rules-active'],
     queryFn: () => api.get('/discount-rules', { params: { activeOnly: true } }).then((r) => r.data.data),
+    staleTime: 300_000,
+  });
+  const { data: presets } = useQuery({
+    queryKey: ['order-presets-active'],
+    queryFn: () => api.get('/order-presets', { params: { activeOnly: true } }).then((r) => r.data.data),
     staleTime: 300_000,
   });
   const { data: products, isLoading } = useQuery({
@@ -325,6 +331,7 @@ export default function POSPage() {
           tableName: tableName || undefined,
           customerId: customer?.id,
           couponCode: coupon?.code,
+          presetId: presetId,
           deliveryPlatformId: isAggregatorChannel(channel) ? deliveryPlatformId : undefined,
           platformRef: isAggregatorChannel(channel) ? (platformRef || undefined) : undefined,
           items: cart.map((l) => ({ productId: l.productId, quantity: l.quantity, unitPrice: l.unitPrice, modifiers: l.modifiers })),
@@ -349,6 +356,7 @@ export default function POSPage() {
       setCart([]);
       setTableName('');
       setPlatformRef('');
+      setPresetId(undefined);
       setCouponCode('');
       setCoupon(null);
       setGiftCardCode('');
@@ -487,6 +495,24 @@ export default function POSPage() {
             </div>
           ) : (
             <>
+              {(presets?.length ?? 0) > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {(presets || []).map((p: any) => (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        setPresetId(presetId === p.id ? undefined : p.id);
+                        setChannel(p.channel);
+                        if (isAggregatorChannel(p.channel)) setPayMethod('AGGREGATOR');
+                      }}
+                      style={presetId === p.id && p.color ? { backgroundColor: p.color, color: '#fff' } : {}}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium ${presetId === p.id ? 'text-white' : 'bg-gray-100 dark:bg-gray-800'}`}
+                    >
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="flex flex-wrap gap-2 mb-3">
                 {(['DINE_IN', 'TAKEAWAY', 'DELIVERY', 'QR', 'TALABAT', 'SNOONU'] as Channel[]).map((c) => (
                   <button
