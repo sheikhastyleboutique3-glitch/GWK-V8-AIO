@@ -78,26 +78,44 @@ GWK-V8-AIO/
 
 ## 🚀 Quick Start
 
+**Prerequisites:** Node.js 20 LTS · PostgreSQL 14+ (or Docker) · Git. Detailed OS-specific steps are in the install guides linked below.
+
 ```bash
-# 1. Database
+git clone https://github.com/sheikhastyleboutique3-glitch/GWK-V8-AIO.git
+cd GWK-V8-AIO
+
+# 1. Database (or use your own Postgres and skip this)
 docker compose up -d db
 
 # 2. Backend
 cd backend
-cp ../.env.example .env          # set DATABASE_URL + JWT secrets
+cp ../.env.example .env           # set DATABASE_URL + JWT secrets (openssl rand -hex 32)
 npm install
-npx prisma migrate deploy
-npx prisma db seed               # loads the demo restaurant
-npm run start:dev                # http://localhost:3000  (Swagger: /api)
+npx prisma generate
+npx prisma migrate deploy         # builds all tables from the clean baseline
+npx prisma db seed                # loads the demo restaurant
+npm run start:dev                 # API http://localhost:3000  (Swagger: /api)
 
-# 3. Frontend
-cd ../frontend && npm install && npm run dev   # http://localhost:5173
+# 3. Frontend  (second terminal)
+cd ../frontend && npm install && npm run dev   # UI http://localhost:5173
 ```
 
-**Demo login:** seeded admin — email from `backend/prisma/seed.ts`, password `Admin@1234` (change on first login).
-The demo ships 3 branches, a coffee/pastry menu with recipes & modifiers, a positioned floor plan (8 tables), 3 station printers, payment methods, a **combo**, a **Happy-Hour pricelist**, **loyalty + eWallet** programs, IoT devices, a QR self-order point, and Talabat/Snoonu platforms.
+**Demo login:** `admin@gwk.com` · password **`Admin@1234`** (change on first login).
 
-> 📦 **Full install guides:** [Windows](./INSTALL-WINDOWS.md) · [Hostinger VPS (Ubuntu)](./INSTALL-HOSTINGER-VPS.md)
+The seed ships **3 branches**, a coffee/pastry **menu with recipes & modifiers**, a positioned **floor plan (8 tables)**, **3 station printers**, payment methods, a **combo** (Coffee & Croissant), a **Happy-Hour pricelist** (−20% hot drinks), **loyalty + eWallet** programs, **IoT devices**, a **QR self-order** point, and **Talabat/Snoonu** platforms — plus 12 staff accounts (see [Demo Staff](#-demo-staff--workflows--permissions)).
+
+### ▶️ 90-second demo walkthrough
+Take a full ticket through the system the way a real shift runs:
+
+1. **Open the day** — sign in as **`cashier@gwk.com`** → **Sessions** → *Open session* with an opening cash count (e.g. 500). *(Orders are blocked until a branch session is open — this is the trading-day gate.)*
+2. **Take an order** — sign in as **`waiter@gwk.com`** → **Waiter** → pick a table → add a **Caffè Latte** (try the size **variant**), a **combo**, fire **Course 1** to the kitchen.
+3. **Kitchen** — sign in as **`barista@gwk.com`** / **`kitchen@gwk.com`** → **KDS** → bump tickets PREPARING → READY → SERVED.
+4. **Settle** — back as **cashier** → **POS** → load the waiter's bill → **split-tender** (cash + card-terminal) or **split-by-seat** → pay → receipt + KOT.
+5. **Self-order** — open **`/kiosk/1`** (no login) → browse the menu → place a QR order; it lands for staff to confirm.
+6. **Close the day** — cashier → **Sessions** → *Close* with the counted drawer → the over/short variance posts to the **finance journal**; view the **Z-report**.
+
+> 📦 **Full install guides:** [Windows (local/dev)](./INSTALL-WINDOWS.md) · [Hostinger VPS — Ubuntu (production)](./INSTALL-HOSTINGER-VPS.md)
+> 🖨️ **In-store printing:** [print agent](./agent/README.md) · 🧠 **Maintaining the project:** [docs/MEMORY.md](./docs/MEMORY.md) · [docs/SKILLS.md](./docs/SKILLS.md)
 
 ---
 
