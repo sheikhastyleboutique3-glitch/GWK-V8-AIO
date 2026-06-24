@@ -52,6 +52,15 @@ import { PayablesModule } from './modules/payables/payables.module';
 import { DeliveryPlatformsModule } from './modules/delivery-platforms/delivery-platforms.module';
 import { DiscountRulesModule } from './modules/discount-rules/discount-rules.module';
 import { PrintersModule } from './modules/printers/printers.module';
+// V8.1 — Odoo 19 parity expansion
+import { OrderPresetsModule } from './modules/order-presets/order-presets.module';
+import { FiscalPositionsModule } from './modules/fiscal-positions/fiscal-positions.module';
+import { PaymentTerminalsModule } from './modules/payment-terminals/payment-terminals.module';
+import { CashRoundingsModule } from './modules/cash-roundings/cash-roundings.module';
+import { LoyaltyModule } from './modules/loyalty/loyalty.module';
+import { IotDevicesModule } from './modules/iot-devices/iot-devices.module';
+import { SelfOrderConfigsModule } from './modules/self-order-configs/self-order-configs.module';
+import { ProductAttributesModule } from './modules/product-attributes/product-attributes.module';
 
 @Module({
   imports: [
@@ -114,6 +123,15 @@ import { PrintersModule } from './modules/printers/printers.module';
     DeliveryPlatformsModule,
     DiscountRulesModule,
     PrintersModule,
+    // V8.1 — Odoo 19 parity expansion
+    OrderPresetsModule,
+    FiscalPositionsModule,
+    PaymentTerminalsModule,
+    CashRoundingsModule,
+    LoyaltyModule,
+    IotDevicesModule,
+    SelfOrderConfigsModule,
+    ProductAttributesModule,
   ],
   providers: [
     // Apply rate limiting globally.
