@@ -58,6 +58,7 @@ import SelfOrderConfigsPage from './pages/SelfOrderConfigsPage';
 import ProductAttributesPage from './pages/ProductAttributesPage';
 import CombosPage from './pages/CombosPage';
 import PricelistsPage from './pages/PricelistsPage';
+import KioskPage from './pages/KioskPage';
 import SalesHistoryPage from './pages/SalesHistoryPage';
 import SessionsPage from './pages/SessionsPage';
 import LoadingSpinner from './components/LoadingSpinner';
@@ -110,6 +111,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/kiosk/:configId" element={<KioskPage />} />
       <Route
         path="/"
         element={

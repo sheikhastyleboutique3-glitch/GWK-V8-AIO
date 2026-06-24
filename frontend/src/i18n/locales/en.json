@@ -68,8 +68,20 @@
     "iotDevices": "IoT Devices",
     "selfOrder": "Self-Ordering"
   },
-  "cfg": {
-    "name": "Name",
+  "kiosk": {
+    "title": "Self-Order",
+    "all": "All",
+    "yourOrder": "Your order",
+    "tableNo": "Table number",
+    "empty": "Your cart is empty.",
+    "placeOrder": "Place order",
+    "noItems": "No items.",
+    "notFound": "Self-order point not found.",
+    "thankYou": "Thank you!",
+    "orderPlaced": "Order placed",
+    "newOrder": "New order"
+  },
+  "cfg": {    "name": "Name",
     "nameAr": "Name (Arabic)",
     "type": "Type",
     "channel": "Channel",

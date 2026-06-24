@@ -47,6 +47,8 @@ export interface CreateOrderInput {
   guestCount?: number;
   pricelistId?: number;
   combos?: { comboId: number; choiceIds: number[] }[];
+  isSelfOrder?: boolean;
+  selfOrderMode?: any;
   items?: OrderItemInput[];
 }
 
@@ -302,6 +304,8 @@ export class SalesService {
         presetId: dto.presetId ?? null,
         fiscalPositionId,
         guestCount: dto.guestCount ?? 1,
+        isSelfOrder: dto.isSelfOrder ?? false,
+        selfOrderMode: dto.selfOrderMode ?? null,
         customerId: dto.customerId ?? null,
         tableName: dto.tableName,
         serviceCharge: dto.serviceCharge ?? 0,
