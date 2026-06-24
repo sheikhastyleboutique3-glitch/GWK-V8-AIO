@@ -8,7 +8,7 @@ export class CombosService {
   findAll() {
     return this.prisma.combo.findMany({
       where: { isActive: true },
-      include: { lines: { include: { choices: true } } },
+      include: { lines: { include: { choices: { include: { product: { select: { id: true, name: true, nameAr: true } } } } } } },
       orderBy: { id: 'asc' },
     });
   }

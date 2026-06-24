@@ -53,6 +53,7 @@ export class CreateOrderDto {
   @IsOptional() @IsInt() presetId?: number;
   @IsOptional() @IsInt() guestCount?: number;
   @IsOptional() @IsInt() pricelistId?: number;
+  @IsOptional() @IsArray() combos?: { comboId: number; choiceIds: number[] }[];
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => OrderItemDto)
   items?: OrderItemDto[];
 }

@@ -39,6 +39,8 @@ export default function POSPage() {
   const [categoryId, setCategoryId] = useState<number | undefined>(undefined);
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartLine[]>([]);
+  const [comboCart, setComboCart] = useState<{ comboId: number; name: string; price: number; choiceIds: number[] }[]>([]);
+  const [comboPick, setComboPick] = useState<{ combo: any; sel: Record<number, number> } | null>(null);
   const [channel, setChannel] = useState<Channel>('DINE_IN');
   const [tableName, setTableName] = useState('');
   const [deliveryPlatformId, setDeliveryPlatformId] = useState<number | undefined>(undefined);
@@ -77,6 +79,11 @@ export default function POSPage() {
   const { data: presets } = useQuery({
     queryKey: ['order-presets-active'],
     queryFn: () => api.get('/order-presets', { params: { activeOnly: true } }).then((r) => r.data.data),
+    staleTime: 300_000,
+  });
+  const { data: combos } = useQuery({
+    queryKey: ['combos'],
+    queryFn: () => api.get('/combos').then((r) => r.data.data),
     staleTime: 300_000,
   });
   const { data: products, isLoading } = useQuery({
@@ -266,6 +273,27 @@ export default function POSPage() {
     setVariantProduct(null);
   };
 
+  // ---- Combos ----
+  const openCombo = (combo: any) => {
+    const sel: Record<number, number> = {};
+    (combo.lines || []).forEach((l: any) => { if (l.choices?.length) sel[l.id] = l.choices[0].id; });
+    setComboPick({ combo, sel });
+  };
+  const comboPickPrice = () => {
+    if (!comboPick) return 0;
+    const allChoices = (comboPick.combo.lines || []).flatMap((l: any) => l.choices || []);
+    const extras = Object.values(comboPick.sel).reduce((s: number, chId) => s + (allChoices.find((c: any) => c.id === chId)?.priceExtra ?? 0), 0);
+    return Math.round((comboPick.combo.basePrice + extras) * 100) / 100;
+  };
+  const confirmCombo = () => {
+    if (!comboPick) return;
+    const choiceIds = Object.values(comboPick.sel);
+    if (!choiceIds.length) return setComboPick(null);
+    setComboCart((prev) => [...prev, { comboId: comboPick.combo.id, name: comboPick.combo.name, price: comboPickPrice(), choiceIds }]);
+    setComboPick(null);
+  };
+  const removeCombo = (i: number) => setComboCart((prev) => prev.filter((_, idx) => idx !== i));
+
   const loadBill = (order: any) => {
     setLoadedOrderId(order.id);
     setCart([]);
@@ -299,7 +327,7 @@ export default function POSPage() {
     return cart;
   }, [mode, loadedOrder, cart]);
 
-  const cartSubtotal = useMemo(() => cart.reduce((s, l) => s + l.unitPrice * l.quantity, 0), [cart]);
+  const cartSubtotal = useMemo(() => cart.reduce((s, l) => s + l.unitPrice * l.quantity, 0) + comboCart.reduce((s, c) => s + c.price, 0), [cart, comboCart]);
   const subtotal = mode === 'existing' ? loadedOrder?.subtotal ?? 0 : cartSubtotal;
   const discount = mode === 'existing' ? (loadedOrder?.couponDiscount ?? 0) + (loadedOrder?.ruleDiscount ?? 0) : coupon?.discount ?? 0;
   const total = mode === 'existing' ? loadedOrder?.total ?? 0 : Math.max(0, cartSubtotal - (coupon?.discount ?? 0));
@@ -371,7 +399,7 @@ export default function POSPage() {
   const charge = useMutation({
     mutationFn: async () => {
       if (!branchId) throw new Error('Select a branch first');
-      if (!lines.length) throw new Error('Cart is empty');
+      if (!lines.length && !comboCart.length) throw new Error('Cart is empty');
       if (!tenders.length) throw new Error('Add at least one payment');
       if (paid + 1e-6 < total) throw new Error(`Payment is short by ${remaining.toFixed(2)}`);
 
@@ -389,6 +417,7 @@ export default function POSPage() {
           deliveryPlatformId: isAggregatorChannel(channel) ? deliveryPlatformId : undefined,
           platformRef: isAggregatorChannel(channel) ? (platformRef || undefined) : undefined,
           items: cart.map((l) => ({ productId: l.productId, quantity: l.quantity, unitPrice: l.unitPrice, modifiers: l.modifiers })),
+          combos: comboCart.map((c) => ({ comboId: c.comboId, choiceIds: c.choiceIds })),
         });
         orderId = created.data.id;
       }
@@ -419,6 +448,7 @@ export default function POSPage() {
       // Auto-print the customer receipt right after payment.
       printReceipt(order, businessInfo);
       setCart([]);
+      setComboCart([]);
       setTableName('');
       setPlatformRef('');
       setPresetId(undefined);
@@ -454,6 +484,43 @@ export default function POSPage() {
     <div>
       <PageHeader title={t('nav.pos')} subtitle={activeBranch?.name} />
       <PosSessionBar branchId={branchId} businessInfo={businessInfo} />
+      {comboPick && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setComboPick(null)}>
+          <div className="w-full max-w-md rounded-xl bg-white dark:bg-gray-900 p-4 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="text-sm font-semibold mb-3">🍱 {comboPick.combo.name}</div>
+            <div className="space-y-3">
+              {(comboPick.combo.lines || []).map((l: any) => (
+                <div key={l.id}>
+                  <div className="text-xs text-gray-500 mb-1">{l.name}</div>
+                  <div className="space-y-1">
+                    {(l.choices || []).map((ch: any) => (
+                      <label key={ch.id} className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-sm cursor-pointer">
+                        <span className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name={`combo-line-${l.id}`}
+                            checked={comboPick.sel[l.id] === ch.id}
+                            onChange={() => setComboPick({ ...comboPick, sel: { ...comboPick.sel, [l.id]: ch.id } })}
+                          />
+                          {ch.product?.name ?? `#${ch.productId}`}
+                        </span>
+                        {ch.priceExtra ? <span className="text-xs text-gray-400">+{Number(ch.priceExtra).toFixed(2)}</span> : null}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-between mt-4">
+              <span className="font-semibold">{comboPickPrice().toFixed(2)}</span>
+              <div className="flex gap-2">
+                <button onClick={() => setComboPick(null)} className="px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm">{t('common.cancel')}</button>
+                <button onClick={confirmCombo} className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium">{t('common.add')}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {variantProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setVariantProduct(null)}>
           <div className="w-full max-w-sm rounded-xl bg-white dark:bg-gray-900 p-4" onClick={(e) => e.stopPropagation()}>
@@ -701,8 +768,30 @@ export default function POSPage() {
                 </div>
               </div>
             ))}
-            {!lines.length && <p className="text-sm text-gray-400 py-8 text-center">Tap products to add them.</p>}
+            {comboCart.map((c, i) => (
+              <div key={`combo-${i}`} className="px-1 py-2">
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-sm font-medium flex-1 line-clamp-1">🍱 {c.name}</span>
+                  {mode === 'new' && <button onClick={() => removeCombo(i)} className="text-red-600 text-sm" aria-label="Remove">✕</button>}
+                  <span className="text-sm w-16 text-end">{c.price.toFixed(2)}</span>
+                </div>
+              </div>
+            ))}
+            {!lines.length && !comboCart.length && <p className="text-sm text-gray-400 py-8 text-center">Tap products to add them.</p>}
           </div>
+
+          {mode === 'new' && (combos?.length ?? 0) > 0 && (
+            <div className="border-t border-gray-200 dark:border-gray-800 mt-3 pt-3">
+              <div className="text-[10px] uppercase text-gray-400 mb-2">{t('pos.combos')}</div>
+              <div className="flex flex-wrap gap-2">
+                {(combos || []).filter((c: any) => c.isActive !== false).map((c: any) => (
+                  <button key={c.id} onClick={() => openCombo(c)} className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs font-medium">
+                    🍱 {c.name} · {Number(c.basePrice).toFixed(2)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Customer (loyalty / store credit) */}
           <div className="border-t border-gray-200 dark:border-gray-800 mt-3 pt-3">
@@ -819,7 +908,7 @@ export default function POSPage() {
               placeholder={remaining > 0 ? `Amount (${remaining.toFixed(2)})` : 'Amount'}
               className="flex-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
             />
-            <button onClick={addTender} disabled={!lines.length} className="px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm disabled:opacity-50">
+            <button onClick={addTender} disabled={!lines.length && !comboCart.length} className="px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm disabled:opacity-50">
               Add payment
             </button>
           </div>
@@ -876,7 +965,7 @@ export default function POSPage() {
               </>
             )}
             <button
-              disabled={!lines.length || remaining > 0 || charge.isPending || !posSession}
+              disabled={(!lines.length && !comboCart.length) || remaining > 0 || charge.isPending || !posSession}
               onClick={() => charge.mutate()}
               className="w-full mt-2 py-3 rounded-xl bg-primary text-white font-semibold disabled:opacity-50"
             >

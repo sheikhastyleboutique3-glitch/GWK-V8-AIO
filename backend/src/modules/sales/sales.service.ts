@@ -46,6 +46,7 @@ export interface CreateOrderInput {
   presetId?: number;
   guestCount?: number;
   pricelistId?: number;
+  combos?: { comboId: number; choiceIds: number[] }[];
   items?: OrderItemInput[];
 }
 
@@ -235,6 +236,38 @@ export class SalesService {
         modifiers: i.modifiers && i.modifiers.length ? (i.modifiers as Prisma.InputJsonValue) : undefined,
       };
     });
+
+    // Combo expansion: a Combo isn't a Product, so each combo explodes into its
+    // chosen component products as order lines. The combo's base price (+ any
+    // choice extras) is carried by the FIRST component line; the rest are 0, so
+    // the customer pays the combo price once while every component still deducts
+    // its own recipe stock at completion.
+    for (const c of dto.combos ?? []) {
+      const combo = await this.prisma.combo.findUnique({
+        where: { id: c.comboId },
+        include: { lines: { include: { choices: true } } },
+      });
+      if (!combo) continue;
+      const allChoices = combo.lines.flatMap((l) => l.choices);
+      const chosen = (c.choiceIds ?? [])
+        .map((id) => allChoices.find((ch) => ch.id === id))
+        .filter((ch): ch is NonNullable<typeof ch> => !!ch);
+      if (!chosen.length) continue;
+      const comboPrice = Math.round((combo.basePrice + chosen.reduce((s, ch) => s + (ch.priceExtra ?? 0), 0)) * 100) / 100;
+      chosen.forEach((ch, idx) => {
+        const unitPrice = idx === 0 ? comboPrice : 0;
+        items.push({
+          productId: ch.productId,
+          quantity: 1,
+          unitPrice,
+          discount: 0,
+          taxAmount: 0,
+          lineTotal: unitPrice,
+          notes: `Combo: ${combo.name}`,
+          modifiers: [{ optionId: -2, name: `Combo: ${combo.name}`, priceDelta: 0 }] as unknown as Prisma.InputJsonValue,
+        });
+      });
+    }
     const t = this.totals(
       items,
       dto.serviceCharge ?? 0,
