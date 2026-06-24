@@ -203,5 +203,19 @@ Network KOT printing runs on a store device — see [`agent/README.md`](./agent/
 ## 🔒 Audit-safe by design
 Transactions are never hard-deleted: orders use a state machine, order lines soft-void, payments soft-reverse, and every stock move is an immutable `InventoryTransaction` with before/after balances.
 
+## 📊 Status & Roadmap
+
+**Overall: ~88 / 100** toward a deployable v1.0 — ~96% Odoo-19 POS feature parity; the remaining gap is proving the runtime + tests, and on-site hardware.
+
+| Stage | State |
+|-------|-------|
+| **1. Build & document** | ✅ Done — full features, 90-model schema, all UIs, demo seed, session gate, docs |
+| **2. Prove the runtime** | ▶️ Next — live Postgres `migrate + seed` + a true end-to-end open→order→KDS→pay→close cycle |
+| **3. CI + tests** | ⏳ GitHub Actions (builds + validate + smoke) and e2e on sale/session paths |
+| **4. Business features** | ⏳ Self-order online payment, bookings UI, manager-approval enforcement, closing discipline |
+| **5. Hardware + pilot** | ⏳ On-site terminal/scale/cash-machine SDKs, single-branch pilot, security/load hardening |
+
+> Detailed roadmap & rationale live in [docs/MEMORY.md](./docs/MEMORY.md#status--roadmap-remaining-stages).
+
 ## License
 Proprietary — © GWK. All rights reserved.

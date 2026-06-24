@@ -63,3 +63,30 @@ Configuration → Payment Terminals (provider + identifier). At the till, the **
 - CORS → `ALLOWED_ORIGINS` must equal the UI origin exactly.
 - KDS not live → ensure the `/socket.io/` proxy + WebSocket upgrade headers.
 - Migration `P3009` (fresh DB) → ensure the DB is empty before first `migrate deploy`.
+
+## Upcoming-stage playbooks
+See the roadmap in `docs/MEMORY.md` → *Status & Roadmap*.
+
+### Stage 2 — prove the runtime (smoke test)
+On a machine with PostgreSQL:
+```bash
+cd backend
+cp ../.env.example .env            # real DATABASE_URL + JWT secrets
+npm ci && npx prisma generate
+npx prisma migrate deploy && npx prisma db seed
+npm run start:dev                  # then walk the demo path:
+# open session (cashier) → waiter order → fire course → KDS bump →
+# cashier split-tender → close session → check Z-report + finance journal
+```
+Log any runtime errors as issues; fix and re-run until the full cycle is clean.
+
+### Stage 3 — CI
+Add `.github/workflows/ci.yml` that on push/PR: installs deps, runs `prisma validate`,
+backend `npm run build`, frontend `npx tsc --noEmit && npm run build`, and (optionally)
+spins a Postgres service to run `migrate deploy` + seed as a smoke test.
+
+### Stage 4 — manager-approval enforcement
+The schema already has `DiscountRule.requiresManagerApproval`. To enforce: in
+`sales.service` (discount/void/refund paths) require a manager PIN via
+`auth.pinLogin` before applying; surface a PIN modal in the POS.
+

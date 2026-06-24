@@ -36,3 +36,18 @@ Multi-branch, bilingual EN/AR. One TypeScript stack end-to-end.
 
 ## Roles (12)
 SUPER_ADMIN, BRANCH_MANAGER, PROCUREMENT, WAREHOUSE, KITCHEN, BARISTA, PASTRY, CASHIER, CLEANER, WAITER, DRIVER, ACCOUNTANT.
+
+## Status & Roadmap (remaining stages)
+Current overall: **~88 / 100** toward a deployable v1.0. Feature/software is ~96% Odoo-19 parity; the gap is unproven runtime + no tests.
+
+**✅ Stage 1 — Build & document (DONE):** full feature set, 90-model schema, admin + POS + waiter + KDS + kiosk UIs, demo seed, session gate, README + install guides + MEMORY/SKILLS + print agent.
+
+**▶️ Stage 2 — Prove the runtime (NEXT, biggest lever):** run on a live PostgreSQL — `migrate deploy` + `seed` + a true end-to-end cycle (open session → waiter order → fire course → KDS → cashier split-tender → close → Z-report + finance journal). Expect to surface small fixes. Moves "verified runtime" ~15 → ~90.
+
+**Stage 3 — CI + tests:** GitHub Actions running both builds + Prisma validate + a smoke test; a handful of e2e tests on the sale/session paths.
+
+**Stage 4 — Business-decision features:** self-order online payment (Tap/Checkout.qa/Stripe), bookings/reservations management UI, enforce the existing `requiresManagerApproval` flag (PIN approval for discounts/voids/refunds), closing-discipline (block reopening an uncounted day).
+
+**Stage 5 — On-site hardware + pilot (sandbox-impossible):** live payment-terminal SDK (Adyen/Stripe/SIX/Worldline) at the capture seam, scale/scanner/cash-machine drivers via the IoT registry; then a single-branch pilot + security/load hardening. Lifts 95 → 100.
+
+> Keep this section current when a stage completes; mirror the short version in README "Status & Roadmap".
