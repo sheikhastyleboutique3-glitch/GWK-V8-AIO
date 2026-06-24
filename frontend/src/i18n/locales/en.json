@@ -528,6 +528,8 @@
     "combos": "Combos",
     "splitBySeat": "Split by seat",
     "splitBySeatDone": "Split into {{count}} seat ticket(s)",
+    "terminal": "Terminal",
+    "selectTerminal": "Select terminal…",
     "printReceipt": "Print receipt",
     "points": "Points",
     "credit": "Credit",

@@ -19,7 +19,7 @@ interface CartLine {
   modifiers?: ChosenModifier[];
 }
 type Channel = 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY' | 'QR' | 'TALABAT' | 'SNOONU' | 'AGGREGATOR';
-type PayMethod = 'CASH' | 'CARD' | 'GIFT_CARD' | 'STORE_CREDIT' | 'LOYALTY' | 'AGGREGATOR' | 'LOYALTY_CARD';
+type PayMethod = 'CASH' | 'CARD' | 'GIFT_CARD' | 'STORE_CREDIT' | 'LOYALTY' | 'AGGREGATOR' | 'LOYALTY_CARD' | 'TERMINAL';
 const AGGREGATOR_CHANNELS: Channel[] = ['TALABAT', 'SNOONU', 'AGGREGATOR'];
 const isAggregatorChannel = (c: Channel) => AGGREGATOR_CHANNELS.includes(c);
 interface Tender {
@@ -27,6 +27,7 @@ interface Tender {
   amount: number;
   giftCardCode?: string;
   loyaltyCode?: string;
+  terminalId?: number;
 }
 
 export default function POSPage() {
@@ -50,6 +51,7 @@ export default function POSPage() {
   const [customer, setCustomer] = useState<any>(null);
   const [customerSearch, setCustomerSearch] = useState('');
   const [giftCardCode, setGiftCardCode] = useState('');
+  const [selectedTerminalId, setSelectedTerminalId] = useState<number | undefined>(undefined);
   const [tenderAmount, setTenderAmount] = useState('');
   const [tenders, setTenders] = useState<Tender[]>([]);
   const [couponCode, setCouponCode] = useState('');
@@ -84,6 +86,11 @@ export default function POSPage() {
   const { data: combos } = useQuery({
     queryKey: ['combos'],
     queryFn: () => api.get('/combos').then((r) => r.data.data),
+    staleTime: 300_000,
+  });
+  const { data: terminals } = useQuery({
+    queryKey: ['payment-terminals'],
+    queryFn: () => api.get('/payment-terminals').then((r) => r.data.data),
     staleTime: 300_000,
   });
   const { data: products, isLoading } = useQuery({
@@ -352,6 +359,7 @@ export default function POSPage() {
     if (!(amt > 0)) return toast.error('Enter a payment amount');
     if (payMethod === 'GIFT_CARD' && !giftCardCode.trim()) return toast.error('Enter a gift card code');
     if (payMethod === 'LOYALTY_CARD' && !giftCardCode.trim()) return toast.error('Enter a loyalty / eWallet card code');
+    if (payMethod === 'TERMINAL' && !selectedTerminalId) return toast.error('Select a payment terminal');
     setTenders((prev) => [
       ...prev,
       {
@@ -359,6 +367,7 @@ export default function POSPage() {
         amount: +amt.toFixed(2),
         ...(payMethod === 'GIFT_CARD' ? { giftCardCode: giftCardCode.trim() } : {}),
         ...(payMethod === 'LOYALTY_CARD' ? { loyaltyCode: giftCardCode.trim() } : {}),
+        ...(payMethod === 'TERMINAL' ? { terminalId: selectedTerminalId } : {}),
       },
     ]);
     setTenderAmount('');
@@ -441,6 +450,11 @@ export default function POSPage() {
             amount: ten.amount,
             reference: `loyalty:${ten.loyaltyCode}`,
           });
+          continue;
+        }
+        // Card terminal: run the capture (records the CARD payment server-side).
+        if (ten.method === 'TERMINAL' && ten.terminalId) {
+          await api.post(`/payment-terminals/${ten.terminalId}/capture`, { orderId, amount: ten.amount });
           continue;
         }
         await api.post(`/sales/orders/${orderId}/payments`, {
@@ -895,6 +909,7 @@ export default function POSPage() {
               'CARD',
               'GIFT_CARD',
               'LOYALTY_CARD',
+              ...((terminals?.length ?? 0) > 0 ? ['TERMINAL'] : []),
               ...(activeCustomer ? ['STORE_CREDIT', 'LOYALTY'] : []),
               ...(isAggregatorChannel(channel) ? ['AGGREGATOR'] : []),
             ] as PayMethod[]).map((m) => (
@@ -903,7 +918,7 @@ export default function POSPage() {
                 onClick={() => setPayMethod(m)}
                 className={`flex-1 min-w-[4rem] px-2 py-1.5 rounded-lg text-xs ${payMethod === m ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800'}`}
               >
-                {m === 'AGGREGATOR' ? t('pos.platformPaid') : m === 'LOYALTY_CARD' ? t('pos.loyaltyCard') : m.replace('_', ' ')}
+                {m === 'AGGREGATOR' ? t('pos.platformPaid') : m === 'LOYALTY_CARD' ? t('pos.loyaltyCard') : m === 'TERMINAL' ? t('pos.terminal') : m.replace('_', ' ')}
               </button>
             ))}
           </div>
@@ -914,6 +929,18 @@ export default function POSPage() {
               placeholder={payMethod === 'LOYALTY_CARD' ? t('pos.loyaltyCardCode') : 'Gift card code'}
               className="mt-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
             />
+          )}
+          {payMethod === 'TERMINAL' && (
+            <select
+              value={selectedTerminalId ?? ''}
+              onChange={(e) => setSelectedTerminalId(e.target.value ? parseInt(e.target.value, 10) : undefined)}
+              className="mt-2 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
+            >
+              <option value="">{t('pos.selectTerminal')}</option>
+              {(terminals || []).filter((tm: any) => tm.isActive !== false).map((tm: any) => (
+                <option key={tm.id} value={tm.id}>{tm.name} ({tm.provider})</option>
+              ))}
+            </select>
           )}
           <div className="flex gap-2 mt-2">
             <input

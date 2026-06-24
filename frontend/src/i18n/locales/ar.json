@@ -535,6 +535,8 @@
     "combos": "وجبات مركبة",
     "splitBySeat": "تقسيم حسب المقعد",
     "splitBySeatDone": "تم التقسيم إلى {{count}} فاتورة",
+    "terminal": "جهاز الدفع",
+    "selectTerminal": "اختر الجهاز…",
     "printReceipt": "طباعة الفاتورة",
     "points": "النقاط",
     "credit": "الرصيد",
