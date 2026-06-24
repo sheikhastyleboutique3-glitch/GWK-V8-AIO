@@ -213,7 +213,7 @@ async function main() {
   const vanLatte  = await menuItem('MENU-004', 'Vanilla Latte',      'لاتيه فانيليا',    catHot.id, 17, [{ id: p.cof2.id, qty: 0.018, unit: kg.id }, { id: p.dai1.id, qty: 0.20, unit: ltr.id }, { id: p.cof3.id, qty: 0.03, unit: ltr.id }]);
   const icedLatte = await menuItem('MENU-010', 'Iced Latte',         'لاتيه مثلج',       catCold.id, 17, [{ id: p.cof2.id, qty: 0.018, unit: kg.id }, { id: p.dai1.id, qty: 0.20, unit: ltr.id }]);
   await menuItem('MENU-011', 'Fresh Lemon & Mint', 'ليمون ونعناع',     catCold.id, 14, [{ id: p.pro1.id, qty: 0.10, unit: kg.id }, { id: p.pro2.id, qty: 0.01, unit: kg.id }, { id: p.pas3.id, qty: 0.02, unit: kg.id }]);
-  await menuItem('MENU-020', 'Butter Croissant', 'كرواسون بالزبدة', catPastries.id, 9, [{ id: p.pas1.id, qty: 0.06, unit: kg.id }, { id: p.pas2.id, qty: 0.03, unit: kg.id }, { id: p.dai3.id, qty: 0.2, unit: pcs.id }]);
+  const croissant = await menuItem('MENU-020', 'Butter Croissant', 'كرواسون بالزبدة', catPastries.id, 9, [{ id: p.pas1.id, qty: 0.06, unit: kg.id }, { id: p.pas2.id, qty: 0.03, unit: kg.id }, { id: p.dai3.id, qty: 0.2, unit: pcs.id }]);
   await menuItem('MENU-030', 'Chocolate Cake',   'كيكة شوكولاتة',   catSweets.id,   18, [{ id: p.pas1.id, qty: 0.05, unit: kg.id }, { id: p.pas3.id, qty: 0.04, unit: kg.id }, { id: p.pas4.id, qty: 0.02, unit: kg.id }, { id: p.pas2.id, qty: 0.03, unit: kg.id }, { id: p.dai3.id, qty: 1, unit: pcs.id }]);
   await menuItem('MENU-031', 'Cheesecake',       'تشيز كيك',        catSweets.id,   20, [{ id: p.dai2.id, qty: 0.08, unit: ltr.id }, { id: p.pas3.id, qty: 0.03, unit: kg.id }, { id: p.pas1.id, qty: 0.02, unit: kg.id }, { id: p.dai3.id, qty: 1, unit: pcs.id }]);
   await menuItem('MENU-040', 'Club Sandwich',    'ساندويتش كلوب',   catBites.id,    22, [{ id: p.pas1.id, qty: 0.08, unit: kg.id }, { id: p.dai3.id, qty: 1, unit: pcs.id }]);
@@ -308,6 +308,23 @@ async function main() {
   await prisma.productVariant.upsert({ where: { sku: 'MENU-002-S' }, update: {}, create: { productId: latte.id, sku: 'MENU-002-S', priceExtra: -2, attributeValueIds: [vS.id] } });
   await prisma.productVariant.upsert({ where: { sku: 'MENU-002-L' }, update: {}, create: { productId: latte.id, sku: 'MENU-002-L', priceExtra: 3, attributeValueIds: [vL.id] } });
   console.log('✅ Product attribute (Size) + 2 variants on Latte');
+
+  // Combo: "Coffee & Croissant" — pick a coffee + the croissant for one price.
+  const combo = await prisma.combo.upsert({ where: { id: 1 }, update: {}, create: { id: 1, name: 'Coffee & Croissant', nameAr: 'قهوة وكرواسون', basePrice: 20 } });
+  const comboLine1 = await prisma.comboLine.create({ data: { comboId: combo.id, name: 'Pick a coffee', minSelect: 1, maxSelect: 1 } });
+  await prisma.comboChoice.createMany({ data: [
+    { comboLineId: comboLine1.id, productId: espresso.id, priceExtra: 0 },
+    { comboLineId: comboLine1.id, productId: latte.id, priceExtra: 2 },
+    { comboLineId: comboLine1.id, productId: cappucino.id, priceExtra: 2 },
+  ] });
+  const comboLine2 = await prisma.comboLine.create({ data: { comboId: combo.id, name: 'Your pastry', minSelect: 1, maxSelect: 1 } });
+  await prisma.comboChoice.create({ data: { comboLineId: comboLine2.id, productId: croissant.id, priceExtra: 0 } });
+  console.log('✅ Combo (Coffee & Croissant)');
+
+  // Pricelist: "Happy Hour" — 20% off hot drinks.
+  const pricelist = await prisma.pricelist.upsert({ where: { id: 1 }, update: {}, create: { id: 1, name: 'Happy Hour', type: 'TIME_WINDOW', currency: 'QAR' } });
+  await prisma.pricelistItem.create({ data: { pricelistId: pricelist.id, categoryId: catHot.id, percentPrice: 20, minQty: 0 } });
+  console.log('✅ Pricelist (Happy Hour −20% hot drinks)');
 
 
   // ==========================================================================

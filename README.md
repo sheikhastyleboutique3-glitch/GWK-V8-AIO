@@ -1,85 +1,111 @@
-# GWK V8 AIO — All-In-One Restaurant ERP & POS
+<div align="center">
 
-**GWK V8 AIO** is a multi-branch, bilingual (EN/AR) **Restaurant ERP + Point of Sale** built for parity with **Odoo 19.0 POS (Bar/Restaurant Edition)**. It unifies front-of-house (POS, waiter floor plan, KDS), back-of-house (inventory, FEFO batches, recipes/BOM, production, procurement), and finance (sessions & cash control, aggregator reconciliation, accounts payable/receivable) in a single stack.
+# 🍽️ GWK V8 AIO
+### All-In-One Restaurant ERP & Point of Sale
 
-> Built on the proven GWK V7 engine and expanded to Odoo-19 architecture: POS sessions with opening/closing cash control, visual floor mapping, decoupled warehouse-vs-menu catalog, recipe-driven stock deduction, and IP/USB KOT printer routing.
+**Odoo 19.0 POS (Bar/Restaurant) parity** · Multi-branch · Bilingual (EN / AR) · Touch-first
 
----
+[![Stack](https://img.shields.io/badge/backend-NestJS%2010-e0234e)](#)
+[![ORM](https://img.shields.io/badge/ORM-Prisma%205-2d3748)](#)
+[![DB](https://img.shields.io/badge/db-PostgreSQL-336791)](#)
+[![Frontend](https://img.shields.io/badge/frontend-React%2018%20%2B%20Vite-61dafb)](#)
+[![Lang](https://img.shields.io/badge/language-TypeScript-3178c6)](#)
 
-## Tech Stack — and why
-
-| Layer | Choice | Why it's the right tool for an ERP/POS |
-|-------|--------|----------------------------------------|
-| **Backend** | **TypeScript + NestJS 10** | Modular DI architecture maps cleanly to ERP domains; one language across the stack; strong typing for money/stock correctness. |
-| **ORM / DB** | **Prisma 5 + PostgreSQL** | Transactional integrity (serializable transactions for sales/stock), relational modeling for a 80+ table schema, type-safe queries. |
-| **Frontend** | **React 18 + Vite + TailwindCSS** | Fast touch-first POS UI, responsive waiter/cashier layouts, instant HMR dev loop. |
-| **Realtime** | **WebSockets (Socket.IO)** | Live KDS/prep-display updates and table-state sync. |
-| **Printing** | **ESC/POS over IP/USB** via an on-prem print agent | Standard thermal protocol; routing config lives in the DB, byte-push stays local. |
-
-TypeScript end-to-end is deliberately chosen: a POS needs a shared, strongly-typed money/stock model between server and client, and NestJS + Prisma give transactional safety without a polyglot stack.
+</div>
 
 ---
 
-## Odoo 19.0 POS Parity — what's inside
+## Overview
 
-- **POS Sessions & Cash Control** — every order lives inside an open `PosSession` bound to a `PosConfig` (register). Opening control counts the float; closing control computes **expected vs counted** cash and posts the discrepancy to the finance journal. Denomination breakdowns via `PosCashCount` / `PosCashCountLine`.
-- **Restaurant Floor & Table Mapping** — `RestaurantFloor` + positioned `RestaurantTable` (x/y/width/height/shape) with live status, seat counts, table moves (`OrderTableMove`), and split-bill lineage (`Order.parentOrderId`).
-- **Decoupled Menu Management** — `ProductType` (`RAW` / `SEMI_FINISHED` / `MENU`) cleanly separates warehouse stock from the customer-facing till; `Recipe` / `RecipeComponent` is the bridge that deducts fractional ingredients via the FEFO engine on sale.
-- **Prep Display (KDS) & Printers** — `OrderItem.kdsStatus` lifecycle (QUEUED → PREPARING → READY → SERVED), `PreparationDisplay` screens, and `Printer` routing (`Category.printerId`, IP/USB/IOT) for Kitchen / Barista / Pastry.
-- **Payments Ledger** — configurable `PaymentMethodConfig` (cash-count flag, drawer, aggregator link), third-party `DeliveryPlatform` (Talabat/Snoonu) commission & payout reconciliation kept out of the cash drawer.
-- **Taxes, Pricelists, Combos, Modifiers** — `TaxRate`/`ProductTax`, `Pricelist`/`PricelistItem`, `Combo`/`ComboLine`/`ComboChoice`, `ModifierGroup`/`ModifierOption`.
-- **V8.1 full-parity expansion** — product **variants/attributes** (`ProductAttribute`/`ProductVariant`) + serial/lot & weighed flags; **fiscal positions** (takeout tax) + **service presets** (Dine-In/Takeout/Delivery); **cash rounding**; **payment terminals** (Adyen/Stripe/Viva/SIX/Worldline), cash machines & QR-bank integration on `PaymentMethodConfig`; **loyalty/eWallet/promotion programs** (`LoyaltyProgram`/`Rule`/`Reward`/`Card`); **IoT/hardware registry** (scanner, scale, customer display, drawer); **self-ordering/kiosk** (`SelfOrderConfig`); **course firing** (`OrderCourse`); **employee PIN/badge login**; richer **bookings** (stage/duration/linked tables).
-- **Management Reporting** — immutable food-cost/gross-profit snapshots per order, `StockCount` variance/shrinkage audit, append-only `FinanceEntry` journal, audit log.
+**GWK V8 AIO** unifies the entire restaurant operation in one TypeScript stack:
 
-> **Audit-safe by design:** transactions are never hard-deleted — orders use a state machine (`DRAFT → IN_PROGRESS → READY → PAID → DONE → INVOICED`, plus `VOIDED`/`REFUNDED`), order lines soft-void (`isVoided`), and payments soft-reverse (`isReversed`).
+- **Front of house** — Cashier POS, Waiter floor plan, Kitchen Display (KDS), self-order kiosk/QR
+- **Back of house** — Inventory with FEFO batch tracking, recipes/BOM, production, procurement, transfers
+- **Finance** — POS sessions & cash control, aggregator reconciliation, accounts receivable/payable, immutable food-cost & gross-profit snapshots
+
+It is built for parity with **Odoo 19.0 Point of Sale** while keeping the proven multi-branch back-office engine.
 
 ---
 
-## Repository Layout
+## ✨ Feature Highlights
+
+| Domain | Capabilities |
+|--------|--------------|
+| **POS Checkout** | Split tender, split-by-seat, discounts & coupons, **service presets** (Dine-In / Takeout / Delivery), **pricelists**, **combos**, **product variants**, modifiers, **serial/lot capture**, tips |
+| **Sessions & Cash** | Opening/closing **cash control** with denomination counts, expected-vs-counted variance posted to the finance journal, X/Z reports |
+| **Restaurant** | Visual **floor & table mapping** (x/y/shape), table transfer/merge, **course firing** (Fire Course N), bookings |
+| **Kitchen** | **KDS** live queues, **printer routing** per category (Kitchen / Barista / Pastry) + on-prem **ESC/POS print agent** |
+| **Menu** | Decoupled warehouse vs. menu (`ProductType`), **recipe BOM** auto-deduction via FEFO on every sale |
+| **Payments** | Configurable methods, **payment terminals** (Adyen/Stripe/Viva/SIX/Worldline seam), **loyalty / eWallet** redeem, gift cards, third-party **aggregators** (Talabat/Snoonu) with commission & payout reconciliation |
+| **Self-Order** | Public **kiosk / QR** ordering at `/kiosk/:configId` |
+| **People** | 12 roles, manager approval gate, **employee PIN/badge login** |
+| **Reporting** | Food cost %, gross profit, stocktake variance/shrinkage, append-only finance ledger, audit log |
+| **Config** | 10 admin screens: presets, payment methods/terminals, cash rounding, fiscal positions, pricelists, combos, attributes/variants, IoT devices, self-order, printers |
+
+---
+
+## 🧱 Tech Stack & Why
+
+| Layer | Choice | Rationale |
+|-------|--------|-----------|
+| Backend | **NestJS 10 (TypeScript)** | Modular DI maps cleanly to ERP domains; one language across the stack |
+| ORM / DB | **Prisma 5 + PostgreSQL** | Serializable transactions for sales/stock correctness; 90-model relational schema |
+| Frontend | **React 18 + Vite + Tailwind** | Fast touch-first POS UI, instant HMR |
+| Realtime | **WebSockets (Socket.IO)** | Live KDS / table-state sync |
+| Printing | **ESC/POS over IP/USB** via on-prem agent | Standard thermal protocol; routing config in DB, byte-push stays local |
+
+---
+
+## 📁 Repository Layout
 
 ```
 GWK-V8-AIO/
-├── backend/            NestJS 10 + Prisma 5 API
+├── backend/        NestJS 10 + Prisma 5 API (50+ feature modules)
 │   ├── prisma/
-│   │   ├── schema.prisma          # full Odoo-19-parity schema (80+ models)
-│   │   ├── migrations/            # single clean baseline (00000000000000_init)
-│   │   └── seed.ts                # demo data (branches, menu, floor, printers…)
-│   └── src/modules/               # auth, products, inventory, sales, kds, pos-sessions,
-│                                  # printers, delivery-platforms, discount-rules, …
-├── frontend/           React 18 + Vite + Tailwind (POS, Waiter, KDS, Admin)
-├── docker-compose.yml  Postgres + backend + frontend
-└── INSTALL.md          Step-by-step installation & operations guide
+│   │   ├── schema.prisma     # 90-model Odoo-19-parity schema
+│   │   ├── migrations/       # single clean baseline (00000000000000_init)
+│   │   └── seed.ts           # full demo (menu, recipes, floor, combos, loyalty…)
+│   └── src/modules/
+├── frontend/       React 18 + Vite + Tailwind (POS, Waiter, KDS, Kiosk, Admin)
+├── agent/          On-prem ESC/POS KOT print agent (zero-dep Node)
+├── docker-compose.yml
+├── INSTALL-WINDOWS.md          # local dev on Windows
+├── INSTALL-HOSTINGER-VPS.md    # production on Hostinger VPS (Ubuntu)
+└── docs/  MEMORY.md · SKILLS.md
 ```
-
-See **[INSTALL.md](./INSTALL.md)** for full setup, environment variables, migration, seeding, and production deployment.
 
 ---
 
-## Quick Start (local dev)
+## 🚀 Quick Start
 
 ```bash
-# 1. Postgres (Docker)
+# 1. Database
 docker compose up -d db
 
 # 2. Backend
 cd backend
-cp ../.env.example .env            # set DATABASE_URL + JWT_SECRET
+cp ../.env.example .env          # set DATABASE_URL + JWT secrets
 npm install
-npx prisma migrate deploy          # applies the clean baseline
-npx prisma db seed                 # loads the demo restaurant
-npm run start:dev                  # http://localhost:3000  (Swagger at /api)
+npx prisma migrate deploy
+npx prisma db seed               # loads the demo restaurant
+npm run start:dev                # http://localhost:3000  (Swagger: /api)
 
 # 3. Frontend
-cd ../frontend
-npm install
-npm run dev                        # http://localhost:5173
+cd ../frontend && npm install && npm run dev   # http://localhost:5173
 ```
 
-### Demo logins
-After seeding, sign in with the seeded admin (see `backend/prisma/seed.ts` — default `Admin@1234`). The demo includes 3 branches, a menu (coffee/pastry/sweets/bites) with recipes, modifiers, a positioned floor plan with 8 tables, 3 station printers, payment methods, and Talabat/Snoonu platforms.
+**Demo login:** seeded admin — email from `backend/prisma/seed.ts`, password `Admin@1234` (change on first login).
+The demo ships 3 branches, a coffee/pastry menu with recipes & modifiers, a positioned floor plan (8 tables), 3 station printers, payment methods, a **combo**, a **Happy-Hour pricelist**, **loyalty + eWallet** programs, IoT devices, a QR self-order point, and Talabat/Snoonu platforms.
+
+> 📦 **Full install guides:** [Windows](./INSTALL-WINDOWS.md) · [Hostinger VPS (Ubuntu)](./INSTALL-HOSTINGER-VPS.md)
 
 ---
 
-## License
+## 🖨️ On-prem print agent
+Network KOT printing runs on a store device — see [`agent/README.md`](./agent/README.md).
 
+## 🔒 Audit-safe by design
+Transactions are never hard-deleted: orders use a state machine, order lines soft-void, payments soft-reverse, and every stock move is an immutable `InventoryTransaction` with before/after balances.
+
+## License
 Proprietary — © GWK. All rights reserved.
