@@ -107,6 +107,21 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    label: 'configuration',
+    items: [
+      { key: 'orderPresets',      path: '/order-presets',      icon: ReceiptPercentIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'paymentMethods',    path: '/payment-methods',    icon: CurrencyDollarIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'paymentTerminals',  path: '/payment-terminals',  icon: CurrencyDollarIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'cashRoundings',     path: '/cash-roundings',     icon: CurrencyDollarIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'fiscalPositions',   path: '/fiscal-positions',   icon: ReceiptPercentIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'pricelists',        path: '/pricelists',         icon: ReceiptPercentIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'combos',            path: '/combos',             icon: TagIcon,            roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'productAttributes', path: '/product-attributes', icon: TagIcon,            roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'iotDevices',        path: '/iot-devices',        icon: PrinterIcon,        roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'selfOrder',         path: '/self-order',         icon: BuildingStorefrontIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+    ],
+  },
+  {
     label: 'admin',
     items: [
       { key: 'branches', path: '/branches', icon: BuildingOffice2Icon, roles: ['SUPER_ADMIN'] },

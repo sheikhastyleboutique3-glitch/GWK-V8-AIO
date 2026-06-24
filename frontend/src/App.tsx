@@ -48,6 +48,16 @@ import DeliveryPlatformsPage from './pages/DeliveryPlatformsPage';
 import DiscountRulesPage from './pages/DiscountRulesPage';
 import PrintersPage from './pages/PrintersPage';
 import LoyaltyPage from './pages/LoyaltyPage';
+import OrderPresetsPage from './pages/OrderPresetsPage';
+import PaymentMethodsPage from './pages/PaymentMethodsPage';
+import PaymentTerminalsPage from './pages/PaymentTerminalsPage';
+import CashRoundingsPage from './pages/CashRoundingsPage';
+import FiscalPositionsPage from './pages/FiscalPositionsPage';
+import IotDevicesPage from './pages/IotDevicesPage';
+import SelfOrderConfigsPage from './pages/SelfOrderConfigsPage';
+import ProductAttributesPage from './pages/ProductAttributesPage';
+import CombosPage from './pages/CombosPage';
+import PricelistsPage from './pages/PricelistsPage';
 import SalesHistoryPage from './pages/SalesHistoryPage';
 import SessionsPage from './pages/SessionsPage';
 import LoadingSpinner from './components/LoadingSpinner';
@@ -270,6 +280,24 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        {[
+          { path: 'order-presets', el: <OrderPresetsPage /> },
+          { path: 'payment-methods', el: <PaymentMethodsPage /> },
+          { path: 'payment-terminals', el: <PaymentTerminalsPage /> },
+          { path: 'cash-roundings', el: <CashRoundingsPage /> },
+          { path: 'fiscal-positions', el: <FiscalPositionsPage /> },
+          { path: 'iot-devices', el: <IotDevicesPage /> },
+          { path: 'self-order', el: <SelfOrderConfigsPage /> },
+          { path: 'product-attributes', el: <ProductAttributesPage /> },
+          { path: 'combos', el: <CombosPage /> },
+          { path: 'pricelists', el: <PricelistsPage /> },
+        ].map((r) => (
+          <Route
+            key={r.path}
+            path={r.path}
+            element={<ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER']}>{r.el}</ProtectedRoute>}
+          />
+        ))}
         <Route
           path="promotions"
           element={
