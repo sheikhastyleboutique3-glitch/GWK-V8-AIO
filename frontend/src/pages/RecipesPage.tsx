@@ -31,9 +31,14 @@ export default function RecipesPage() {
     queryKey: ['recipes'],
     queryFn: () => api.get('/recipes').then((r) => r.data.data),
   });
-  const { data: products } = useQuery({
-    queryKey: ['products-for-recipes'],
-    queryFn: () => api.get('/products', { params: { limit: 500 } }).then((r) => r.data.data),
+  const { data: menuProducts } = useQuery({
+    queryKey: ['menu-products-for-recipes'],
+    queryFn: () => api.get('/products', { params: { sellable: true, productType: 'MENU' } }).then((r) => r.data.data),
+    staleTime: 60_000,
+  });
+  const { data: rawProducts } = useQuery({
+    queryKey: ['raw-products-for-recipes'],
+    queryFn: () => api.get('/products', { params: { productType: 'RAW' } }).then((r) => r.data.data),
     staleTime: 60_000,
   });
   const { data: units } = useQuery({
@@ -42,9 +47,11 @@ export default function RecipesPage() {
     staleTime: 60_000,
   });
 
-  const productList: any[] = Array.isArray(products) ? products : products?.items ?? [];
+  const menuList: any[] = Array.isArray(menuProducts) ? menuProducts : [];
+  const rawList: any[] = Array.isArray(rawProducts) ? rawProducts : [];
+  const allProducts = [...menuList, ...rawList];
   const productName = (id: number) => {
-    const p = productList.find((x) => x.id === id);
+    const p = allProducts.find((x) => x.id === id);
     return p ? p.name : `#${id}`;
   };
 
@@ -116,7 +123,7 @@ export default function RecipesPage() {
           <select value={productId} onChange={(e) => setProductId(e.target.value)}
             className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm">
             <option value="">{t('recipes.selectProduct')}</option>
-            {productList.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>)}
+            {menuList.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>)}
           </select>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('recipes.namePlaceholder')}
             className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm" />
@@ -151,7 +158,7 @@ export default function RecipesPage() {
                 <select value={row.componentProductId} onChange={(e) => updateRow(i, { componentProductId: e.target.value })}
                   className="flex-1 min-w-[10rem] rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm">
                   <option value="">{t('recipes.selectComponent')}</option>
-                  {productList.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  {rawList.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.unit?.abbreviation || ''})</option>)}
                 </select>
                 <input type="number" value={row.quantity} onChange={(e) => updateRow(i, { quantity: e.target.value })} placeholder={t('recipes.qty')}
                   className="w-24 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm" />
