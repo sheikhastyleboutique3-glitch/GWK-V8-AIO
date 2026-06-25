@@ -9,7 +9,7 @@ import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 import PosSessionBar from '../components/PosSessionBar';
 import ModifierModal, { ModGroup, ChosenModifier } from '../components/ModifierModal';
-import { printReceipt } from '../lib/thermalPrint';
+import { printReceipt, printKot } from '../lib/thermalPrint';
 
 interface CartLine {
   itemId?: number; // present when the line lives on a persisted (loaded) order
@@ -519,11 +519,11 @@ export default function POSPage() {
           combos: comboCart.map((c) => ({ comboId: c.comboId, choiceIds: c.choiceIds })),
         });
         orderId = created.data.id;
-        // Auto-fire to kitchen (send KOT) for new orders
+        // Auto-fire to kitchen + print KOT for new orders
         try {
-          await api.post(`/sales/orders/${orderId}/courses/1/fire`);
+          const fireRes = await api.post(`/sales/orders/${orderId}/courses/1/fire`);
+          if (fireRes.data?.data) printKot(fireRes.data.data, { splitByStation: true });
         } catch {
-          // Non-blocking: if fire fails, order still proceeds to payment
           toast('Note: Kitchen fire pending — items may not show on KDS yet', { icon: '⚠️' });
         }
       }
@@ -1284,16 +1284,23 @@ export default function POSPage() {
                 onClick={async () => {
                   if (mode === 'existing' && loadedOrderId) {
                     try {
-                      await api.post(`/sales/orders/${loadedOrderId}/courses/1/fire`);
-                      toast.success('🔥 Sent to kitchen! Items now on KDS.', { duration: 3000 });
+                      const res = await api.post(`/sales/orders/${loadedOrderId}/courses/1/fire`);
+                      const firedOrder = res.data?.data;
+                      // Print KOT to kitchen printer (same as waiter)
+                      if (firedOrder) {
+                        printKot(firedOrder, { splitByStation: true });
+                      }
+                      toast.success('🔥 Sent to kitchen + KOT printed!', { duration: 3000 });
                       qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
                       qc.invalidateQueries({ queryKey: ['kds-board'] });
                     } catch (e: any) {
                       const msg = e.response?.data?.message || 'Failed to fire to kitchen';
                       toast.error(`❌ Kitchen fire failed: ${msg}\n\nCheck: Is the order open? Does it have items?`, { duration: 5000 });
                     }
+                  } else if (mode === 'new' && lines.length > 0) {
+                    toast('Add items to cart first, then click Payment. Kitchen fire happens automatically on new orders.');
                   } else {
-                    toast('Create or load an order first, then fire to kitchen');
+                    toast('Load an existing order or add items first');
                   }
                 }}
                 className="px-2 py-2 rounded-lg bg-orange-100 dark:bg-orange-500/10 text-orange-700 hover:bg-orange-200 dark:hover:bg-orange-500/20 text-center font-medium"
