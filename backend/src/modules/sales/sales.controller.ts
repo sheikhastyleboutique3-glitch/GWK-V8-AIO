@@ -29,6 +29,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { OrderChannel, OrderStatus, PaymentMethod, Role } from '@prisma/client';
+import { Transform } from 'class-transformer';
 
 export class OrderItemDto {
   @IsInt() productId: number;
@@ -37,7 +38,7 @@ export class OrderItemDto {
   @IsOptional() @IsNumber() discount?: number;
   @IsOptional() @IsNumber() taxAmount?: number;
   @IsOptional() @IsString() notes?: string;
-  @IsOptional() @IsArray() modifiers?: any[];
+  @IsOptional() @Transform(({ obj }) => obj.modifiers, { toClassOnly: true }) modifiers?: any;
 }
 
 export class CreateOrderDto {

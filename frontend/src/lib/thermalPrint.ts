@@ -236,13 +236,6 @@ export function printKot(
   const items = opts.items ?? order.items ?? [];
   if (!items.length) return;
 
-  // DEBUG: show what modifiers look like in the data
-  const debugInfo = items.map((it: any) => `${it.product?.name || it.name || '#?'}: modifiers=${JSON.stringify(it.modifiers)}`).join('\n');
-  if (typeof window !== 'undefined') {
-    console.log('[KOT DEBUG] Items:', debugInfo);
-    window.alert('[KOT DEBUG] Check modifiers:\n\n' + debugInfo);
-  }
-
   if (opts.splitByStation) {
     const groups = new Map<string, OrderItemLike[]>();
     for (const it of items) {
