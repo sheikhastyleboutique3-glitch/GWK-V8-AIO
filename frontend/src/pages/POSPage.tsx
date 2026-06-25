@@ -1506,6 +1506,7 @@ export default function POSPage() {
         </div>
       </div>
     </div>
+      )}
 
       {/* ═══ ODOO-STYLE FULL-SCREEN PAYMENT ═══ */}
       {showPayment && (
@@ -1624,7 +1625,6 @@ export default function POSPage() {
         </div>
       )}
 
-      )}
     </div>
   );
 }
