@@ -533,15 +533,27 @@ export default function WaiterPage() {
                         </div>
                       )}
                       <div className="text-xs text-gray-500">
-                        {it.quantity} × {Number(it.unitPrice).toFixed(2)}
+                        {Number(it.unitPrice).toFixed(2)}
                         <span className="ms-2 text-[10px] uppercase tracking-wide text-gray-400">{it.kdsStatus}</span>
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold">{(it.unitPrice * it.quantity).toFixed(2)}</span>
+                  <div className="flex items-center gap-1.5">
                     {!splitMode && (
-                      <button onClick={() => removeItem.mutate(it.id)} className="text-red-600 text-sm" aria-label="Remove">✕</button>
+                      <>
+                        <button onClick={() => {
+                          if (it.quantity <= 1) { removeItem.mutate(it.id); return; }
+                          api.patch(`/sales/orders/${activeOrderId}/items/${it.id}`, { quantity: it.quantity - 1 }).then(() => {
+                            qc.invalidateQueries({ queryKey: ['waiter-order', activeOrderId] });
+                          });
+                        }} className="w-6 h-6 rounded bg-gray-100 dark:bg-gray-800 text-xs font-bold">−</button>
+                        <span className="text-sm font-semibold w-5 text-center">{it.quantity}</span>
+                        <button onClick={() => {
+                          // Use addItem to increment (triggers merge logic on backend)
+                          addItem.mutate({ product: { id: it.productId, salePrice: it.unitPrice }, modifiers: it.modifiers ? it.modifiers.map((m: any) => ({ optionId: m?.optionId, name: m?.name, nameAr: m?.nameAr, priceDelta: 0 })) : undefined, priceDelta: 0 });
+                        }} className="w-6 h-6 rounded bg-gray-100 dark:bg-gray-800 text-xs font-bold">+</button>
+                        <button onClick={() => removeItem.mutate(it.id)} className="text-red-600 text-sm ms-1" aria-label="Remove">✕</button>
+                      </>
                     )}
                   </div>
                 </div>

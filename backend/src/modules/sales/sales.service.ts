@@ -363,20 +363,35 @@ export class SalesService {
   async addItem(orderId: number, dto: OrderItemInput) {
     await this.assertOpen(orderId);
 
-    // Check for existing identical item (same product + same modifiers + same price)
-    // that has NOT been fired to kitchen yet — merge quantities instead of duplicates.
-    // Items already fired (firedAt != null) are NEVER merged — they're already on KOT.
+    // Merge logic: find an existing unfired line with same product + price + modifiers.
+    // If found, increment its quantity instead of creating a duplicate row.
     const existingItems = await this.prisma.orderItem.findMany({
-      where: { orderId, productId: dto.productId, unitPrice: dto.unitPrice, isVoided: false, firedAt: null },
+      where: { orderId, productId: dto.productId, isVoided: false },
     });
-    const modJson = dto.modifiers && dto.modifiers.length ? JSON.stringify(dto.modifiers) : null;
+
+    // Build a fingerprint from modifier content (key-order independent)
+    const modFingerprint = (mods: any): string => {
+      if (!mods) return 'NONE';
+      const arr = Array.isArray(mods) ? mods : [];
+      if (!arr.length) return 'NONE';
+      return arr
+        .map((m: any) => `${m?.optionId ?? 'x'}:${(m?.name || m?.nameAr || '').toLowerCase()}`)
+        .sort()
+        .join('|');
+    };
+
+    const newFP = modFingerprint(dto.modifiers);
+    const newPrice = Math.round((dto.unitPrice ?? 0) * 100);
+
+    // Only merge with unfired items (firedAt is null/undefined)
     const match = existingItems.find((it) => {
-      const itModJson = it.modifiers ? JSON.stringify(it.modifiers) : null;
-      return itModJson === modJson;
+      if (it.firedAt) return false; // already sent to kitchen — never merge
+      const itPrice = Math.round(it.unitPrice * 100);
+      if (itPrice !== newPrice) return false;
+      return modFingerprint(it.modifiers) === newFP;
     });
 
     if (match) {
-      // Merge: increment quantity on existing unfired line
       const newQty = match.quantity + (dto.quantity || 1);
       await this.prisma.orderItem.update({
         where: { id: match.id },
@@ -386,7 +401,6 @@ export class SalesService {
         },
       });
     } else {
-      // New line (different product/modifiers/price, or previous one already fired)
       await this.prisma.orderItem.create({
         data: {
           orderId,
@@ -397,7 +411,9 @@ export class SalesService {
           taxAmount: dto.taxAmount ?? 0,
           lineTotal: dto.quantity * dto.unitPrice - (dto.discount ?? 0) + (dto.taxAmount ?? 0),
           notes: dto.notes,
-          modifiers: dto.modifiers && dto.modifiers.length ? (dto.modifiers as Prisma.InputJsonValue) : undefined,
+          modifiers: dto.modifiers && (Array.isArray(dto.modifiers) ? dto.modifiers.length : true)
+            ? (dto.modifiers as Prisma.InputJsonValue)
+            : undefined,
         },
       });
     }
@@ -415,13 +431,21 @@ export class SalesService {
     return this.recompute(orderId);
   }
 
-  /** Update an individual order item (notes, void, seat). */
-  async updateItem(orderId: number, itemId: number, dto: { notes?: string; isVoided?: boolean; voidReason?: string; seat?: number }, userId?: number) {
+  /** Update an individual order item (notes, void, seat, quantity). */
+  async updateItem(orderId: number, itemId: number, dto: { notes?: string; isVoided?: boolean; voidReason?: string; seat?: number; quantity?: number; discount?: number }, userId?: number) {
     const item = await this.prisma.orderItem.findFirst({ where: { id: itemId, orderId } });
     if (!item) throw new NotFoundException(`Item ${itemId} not found on order ${orderId}`);
     const data: any = {};
     if (dto.notes !== undefined) data.notes = dto.notes;
     if (dto.seat !== undefined) data.seat = dto.seat;
+    if (dto.quantity !== undefined && dto.quantity > 0) {
+      data.quantity = dto.quantity;
+      data.lineTotal = dto.quantity * item.unitPrice - item.discount + item.taxAmount;
+    }
+    if (dto.discount !== undefined) {
+      data.discount = dto.discount;
+      data.lineTotal = (dto.quantity ?? item.quantity) * item.unitPrice - dto.discount + item.taxAmount;
+    }
     if (dto.isVoided === true) {
       data.isVoided = true;
       data.voidReason = dto.voidReason || 'Cancelled';
