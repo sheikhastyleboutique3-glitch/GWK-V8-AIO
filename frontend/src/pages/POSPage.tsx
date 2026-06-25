@@ -662,6 +662,8 @@ export default function POSPage() {
   const [splitModal, setSplitModal] = useState(false);
   const [splitSelected, setSplitSelected] = useState<Record<number, number>>({});
   const [splitPayMethod, setSplitPayMethod] = useState<'CASH' | 'CARD' | 'later'>('later');
+  // ---- Numpad target: which line item is selected ----
+  const [selectedLineIdx, setSelectedLineIdx] = useState<number>(-1);
 
   // Open a table from the floor plan → switch to order view
   const openTableOrder = async (table: any) => {
@@ -1268,7 +1270,8 @@ export default function POSPage() {
 
           <div className="flex-1 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800 -mx-1 min-h-[6rem]">
             {lines.map((l, i) => (
-              <div key={l.itemId ?? `${l.productId}-${i}`} className="px-1 py-2"
+              <div key={l.itemId ?? `${l.productId}-${i}`} className={`px-1 py-2 cursor-pointer rounded ${selectedLineIdx === i ? 'bg-primary/10 ring-1 ring-primary' : ''}`}
+                onClick={() => setSelectedLineIdx(i)}
                 onDoubleClick={async () => {
                   // Double-click: add a note to this specific item (shows on KOT)
                   if (mode === 'existing' && l.itemId) {
@@ -1608,6 +1611,11 @@ export default function POSPage() {
           {/* ─── NUMPAD (Odoo-style Qty / %Disc / Price entry) ─── */}
           {lines.length > 0 && (
             <div className="border-t border-gray-200 dark:border-gray-800 mt-2 pt-2">
+              {selectedLineIdx >= 0 && selectedLineIdx < lines.length && (
+                <div className="text-[10px] text-primary font-medium mb-1">
+                  Selected: {lines[selectedLineIdx].name} (×{lines[selectedLineIdx].quantity})
+                </div>
+              )}
               <div className="grid grid-cols-4 gap-1 text-xs">
                 {[7,8,9,'Qty',4,5,6,'%Disc',1,2,3,'Price','+/-',0,'.',''
                 ].map((key, idx) => {
@@ -1617,42 +1625,45 @@ export default function POSPage() {
                     <button key={idx}
                       className={`py-2 rounded ${isAction ? 'bg-primary/10 text-primary font-medium' : 'bg-gray-50 dark:bg-gray-800 hover:bg-gray-100'} text-center text-sm`}
                       onClick={async () => {
-                        if (!lines.length) return;
-                        const lastIdx = lines.length - 1;
-                        const lastLine = lines[lastIdx];
+                        const targetIdx = selectedLineIdx >= 0 && selectedLineIdx < lines.length ? selectedLineIdx : lines.length - 1;
+                        const line = lines[targetIdx];
+                        if (!line) return;
+
                         if (key === 'Qty') {
-                          const q = window.prompt('Quantity:', String(lastLine.quantity));
-                          if (q && parseInt(q, 10) > 0) {
-                            if (mode === 'new') {
-                              setQtyAt(lastIdx, parseInt(q, 10));
-                            } else if (lastLine.itemId) {
-                              // For existing orders, we can't directly set qty — remove and re-add
-                              // Instead show a toast with instruction
-                              toast('Use ×1 buttons on the item to adjust quantity');
-                            }
+                          const q = window.prompt(`Quantity for "${line.name}":`, String(line.quantity));
+                          if (!q || parseInt(q, 10) <= 0) return;
+                          const newQty = parseInt(q, 10);
+                          if (mode === 'new') {
+                            setQtyAt(targetIdx, newQty);
+                          } else if (line.itemId) {
+                            try {
+                              await api.patch(`/sales/orders/${loadedOrderId}/items/${line.itemId}`, { quantity: newQty });
+                              qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
+                              toast.success(`Qty → ${newQty}`);
+                            } catch (e: any) { toast.error(e.response?.data?.message || 'Failed'); }
                           }
                         } else if (key === '%Disc') {
-                          const pct = window.prompt('Discount % for last item:', '10');
-                          if (pct) {
-                            const disc = (lastLine.unitPrice * lastLine.quantity * parseFloat(pct)) / 100;
-                            if (mode === 'existing' && lastLine.itemId) {
-                              try {
-                                await api.patch(`/sales/orders/${loadedOrderId}/items/${lastLine.itemId}`, { discount: disc });
-                                toast.success(`-${disc.toFixed(2)} discount applied`);
-                                qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
-                              } catch { toast.error('Failed to apply discount'); }
-                            } else {
-                              toast.success(`-${disc.toFixed(2)} discount applied`);
-                            }
+                          const pct = window.prompt(`Discount % for "${line.name}":`, '10');
+                          if (!pct || parseFloat(pct) <= 0) return;
+                          const percent = parseFloat(pct);
+                          const discAmt = Math.round(line.unitPrice * line.quantity * percent) / 100;
+                          if (mode === 'existing' && line.itemId) {
+                            try {
+                              await api.patch(`/sales/orders/${loadedOrderId}/items/${line.itemId}`, { discount: discAmt });
+                              qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
+                              toast.success(`-${discAmt.toFixed(2)} (${percent}%) discount applied`);
+                            } catch (e: any) { toast.error(e.response?.data?.message || 'Failed'); }
+                          } else {
+                            toast.success(`-${discAmt.toFixed(2)} (${percent}%) discount`);
                           }
                         } else if (key === 'Price') {
-                          const p = window.prompt('New price:', String(lastLine.unitPrice));
-                          if (p) {
-                            if (mode === 'new') {
-                              setPriceAt(lastIdx, parseFloat(p) || 0);
-                            } else {
-                              toast('Price change not available on existing orders');
-                            }
+                          const p = window.prompt(`New price for "${line.name}":`, String(line.unitPrice));
+                          if (!p) return;
+                          const newPrice = parseFloat(p);
+                          if (mode === 'new') {
+                            setPriceAt(targetIdx, newPrice || 0);
+                          } else {
+                            toast('Price change requires manager override — use %Disc instead');
                           }
                         }
                       }}
