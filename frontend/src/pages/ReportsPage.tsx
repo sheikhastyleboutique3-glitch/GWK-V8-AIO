@@ -102,7 +102,7 @@ export default function ReportsPage() {
     { key: 'price-history',   label: 'Price Trends',    icon: '📉' },
   ];
 
-  const EXPORTS = ['requisitions', 'inventory', 'purchase-orders', 'wastage'];
+  const EXPORTS = ['requisitions', 'inventory', 'purchase-orders', 'wastage', 'sales-orders', 'customers', 'tax-report', 'expiry-alerts', 'low-stock'];
   const [exportingType, setExportingType] = useState<string | null>(null);
 
   const buildExportPath = (type: string) => {

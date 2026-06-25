@@ -193,9 +193,10 @@ export class ReportsService {
             ...(branchId ? { branchId } : {}),
             ...(status ? { status: status as any } : {}),
             ...(from || to ? { completedAt: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to + 'T23:59:59.999Z') } : {}) } } : {}),
+            ...(search ? { orderNo: { contains: search, mode: 'insensitive' } } : {}),
           },
           include: {
-            items: { include: { product: { select: { name: true, nameAr: true, sku: true } } } },
+            items: { include: { product: { select: { name: true, nameAr: true, sku: true, category: { select: { name: true } } } } } },
             payments: true,
             customer: { select: { name: true, phone: true } },
             branch: { select: { name: true } },
@@ -204,10 +205,20 @@ export class ReportsService {
           orderBy: { createdAt: 'desc' },
           take: 5000,
         });
-        let csv = UTF8_BOM + row(['OrderNo','Branch','Status','Channel','Table','Customer','CustomerPhone','CreatedBy','CreatedAt','CompletedAt','Subtotal','Discount','Tax','ServiceCharge','Tip','Total','PaidTotal','FoodCost','GrossProfit','PaymentMethods','ItemCount']);
+        // Line-item expansion: each product gets its own CSV row (like Odoo)
+        let csv = UTF8_BOM + row(['OrderNo','Branch','Status','Channel','Table','Customer','CustomerPhone','CreatedBy','CreatedAt','CompletedAt','SKU','ProductName','ProductNameAr','Category','Qty','UnitPrice','Discount','LineTotal','Modifiers','Notes','OrderSubtotal','OrderDiscount','OrderTax','OrderServiceCharge','OrderTip','OrderTotal','OrderPaid','FoodCost','GrossProfit','PaymentMethods']);
         for (const o of data) {
           const methods = (o.payments || []).filter((p: any) => !p.isReversed).map((p: any) => `${p.method}:${p.amount}`).join('; ');
-          csv += row([o.orderNo, o.branch?.name || '', o.status, o.channel, o.tableName || '', o.customer?.name || '', o.customer?.phone || '', o.createdBy ? `${o.createdBy.firstName} ${o.createdBy.lastName}` : '', o.createdAt.toISOString(), o.completedAt?.toISOString() || '', o.subtotal, o.discountTotal, o.taxTotal, o.serviceCharge, o.tip, o.total, o.paidTotal, o.foodCost, o.grossProfit, methods, o.items.length]);
+          const base = [o.orderNo, o.branch?.name || '', o.status, o.channel, o.tableName || '', o.customer?.name || '', o.customer?.phone || '', o.createdBy ? `${o.createdBy.firstName} ${o.createdBy.lastName}` : '', o.createdAt.toISOString(), o.completedAt?.toISOString() || ''];
+          const orderTotals = [o.subtotal, o.discountTotal, o.taxTotal, o.serviceCharge, o.tip, o.total, o.paidTotal, o.foodCost, o.grossProfit, methods];
+          if (o.items.length === 0) {
+            csv += row([...base, '', '', '', '', '', '', '', '', '', '', ...orderTotals]);
+          } else {
+            for (const item of o.items) {
+              const mods = Array.isArray(item.modifiers) ? (item.modifiers as any[]).map((m: any) => m?.name || m?.nameAr || '').filter(Boolean).join(', ') : '';
+              csv += row([...base, item.product?.sku || '', item.product?.name || '', item.product?.nameAr || '', (item.product as any)?.category?.name || '', item.quantity, item.unitPrice, item.discount, item.lineTotal, mods, item.notes || '', ...orderTotals]);
+            }
+          }
         }
         return csv;
       }

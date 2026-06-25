@@ -7,11 +7,38 @@ import { useAuth } from '../contexts/AuthContext';
 import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 import StatusBadge from '../components/StatusBadge';
+import AdvancedFilterBuilder, { FilterField, FilterPreset, FilterRule } from '../components/AdvancedFilterBuilder';
+import GroupBySelect, { groupData, GroupedData } from '../components/GroupBySelect';
 import { printReceipt } from '../lib/thermalPrint';
 import { downloadReceiptPdf, downloadDailySalesPdf } from '../lib/pdf';
 
 const STATUSES = ['', 'OPEN', 'HELD', 'COMPLETED', 'VOIDED', 'REFUNDED'];
 const PAYMENT_METHODS = ['CASH', 'CARD', 'BANK_TRANSFER', 'WALLET', 'QR', 'STORE_CREDIT', 'LOYALTY', 'GIFT_CARD', 'AGGREGATOR', 'ON_ACCOUNT'];
+
+// Filter field definitions for the AdvancedFilterBuilder
+const FILTER_FIELDS: FilterField[] = [
+  { key: 'search', label: 'Order # / Table / Customer', type: 'text' },
+  { key: 'status', label: 'Status', type: 'select', options: STATUSES.filter(Boolean).map(s => ({ value: s, label: s })) },
+  { key: 'channel', label: 'Channel', type: 'select', options: ['DINE_IN', 'TAKEAWAY', 'DELIVERY', 'TALABAT', 'SNOONU'].map(c => ({ value: c, label: c.replace('_', ' ') })) },
+  { key: 'completedAt', label: 'Date', type: 'date' },
+  { key: 'total', label: 'Total Amount', type: 'number' },
+];
+
+// Group By field options
+const GROUP_FIELDS = [
+  { key: 'status', label: 'Status' },
+  { key: 'channel', label: 'Channel' },
+  { key: 'tableName', label: 'Table' },
+];
+
+// Saved filter presets (localStorage)
+const PRESETS_KEY = 'gwk-sales-history-presets';
+function loadPresets(): FilterPreset[] {
+  try { return JSON.parse(localStorage.getItem(PRESETS_KEY) || '[]'); } catch { return []; }
+}
+function savePresets(presets: FilterPreset[]) {
+  localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
+}
 
 export default function SalesHistoryPage() {
   const { t } = useTranslation();
@@ -24,16 +51,30 @@ export default function SalesHistoryPage() {
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [openId, setOpenId] = useState<number | null>(null);
+  // Advanced filter params (from filter builder)
+  const [advFilters, setAdvFilters] = useState<Record<string, string>>({});
+  // Group by
+  const [groupByFields, setGroupByFields] = useState<string[]>([]);
+  // Saved presets
+  const [presets, setPresets] = useState<FilterPreset[]>(loadPresets());
   // Payment correction modal state
   const [correcting, setCorrecting] = useState<{ orderId: number; paymentId: number; currentMethod: string; amount: number } | null>(null);
   const [newMethod, setNewMethod] = useState('');
   const [correctionReason, setCorrectionReason] = useState('');
 
+  // Merge simple filters + advanced filters for the API call
+  const apiParams = useMemo(() => ({
+    ...(branchId ? { branchId } : {}),
+    ...(status ? { status } : {}),
+    ...(search ? { search } : {}),
+    ...advFilters,
+  }), [branchId, status, search, advFilters]);
+
   const { data: orders, isLoading } = useQuery({
-    queryKey: ['sales-history', branchId ?? 'all', status],
+    queryKey: ['sales-history', apiParams],
     queryFn: () =>
       api
-        .get('/sales/orders', { params: { ...(branchId ? { branchId } : {}), ...(status ? { status } : {}) } })
+        .get('/sales/orders', { params: apiParams })
         .then((r) => r.data.data),
     refetchInterval: 30_000,
   });
@@ -42,7 +83,6 @@ export default function SalesHistoryPage() {
   const { data: settings } = useQuery({
     queryKey: ['settings-receipt'],
     queryFn: () => api.get('/settings').then((r) => r.data.data),
-    
   });
   const businessInfo = useMemo(() => {
     const m: Record<string, string> = {};
@@ -95,6 +135,12 @@ export default function SalesHistoryPage() {
     };
   }, [filtered]);
 
+  // Group data when Group By is active
+  const grouped = useMemo(() => {
+    if (!groupByFields.length || !filtered?.length) return null;
+    return groupData(filtered, groupByFields, 'total');
+  }, [filtered, groupByFields]);
+
   return (
     <div>
       <PageHeader title={t('nav.salesHistory')} subtitle={activeBranch?.name} />
@@ -104,7 +150,26 @@ export default function SalesHistoryPage() {
         <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm">
           {STATUSES.map((s) => <option key={s} value={s}>{s ? s.replace('_', ' ') : t('salesHistory.allStatuses')}</option>)}
         </select>
+        <GroupBySelect fields={GROUP_FIELDS} value={groupByFields} onChange={setGroupByFields} />
       </div>
+
+      {/* Advanced Filter Builder */}
+      <AdvancedFilterBuilder
+        fields={FILTER_FIELDS}
+        onApply={(params) => setAdvFilters(params)}
+        presets={presets}
+        onSavePreset={(name, rules) => {
+          const updated = [...presets, { name, rules }];
+          setPresets(updated);
+          savePresets(updated);
+          toast.success(`Filter "${name}" saved`);
+        }}
+        onDeletePreset={(name) => {
+          const updated = presets.filter((p) => p.name !== name);
+          setPresets(updated);
+          savePresets(updated);
+        }}
+      />
 
       {/* Summary of the filtered completed orders */}
       <div className="grid grid-cols-3 gap-3 mb-4">
@@ -134,9 +199,57 @@ export default function SalesHistoryPage() {
         >
           📄 {t('salesHistory.dailySalesPdf')}
         </button>
+        <button
+          onClick={() => {
+            // CSV export passes ALL active filters (filter alignment)
+            const params = new URLSearchParams({ type: 'sales-orders', ...apiParams });
+            window.open(`/api/reports/export/sales-orders/csv?${params.toString()}`, '_blank');
+          }}
+          className="px-3 py-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 text-xs font-medium"
+        >
+          📊 Export CSV
+        </button>
       </div>
 
-      {isLoading ? <LoadingSpinner /> : (
+      {isLoading ? <LoadingSpinner /> : grouped ? (
+        /* Grouped view */
+        <div className="space-y-3">
+          {grouped.map((group) => (
+            <details key={group.key} className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden" open>
+              <summary className="px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center justify-between">
+                <span className="font-medium text-sm">{group.label || '—'} <span className="text-gray-400">({group.count})</span></span>
+                <span className="text-sm font-bold text-emerald-600">{group.total.toFixed(2)}</span>
+              </summary>
+              <div className="border-t border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
+                {group.children ? group.children.map((sub) => (
+                  <details key={sub.key} className="px-4">
+                    <summary className="py-2 cursor-pointer text-xs text-gray-600 flex justify-between">
+                      <span>{sub.label} ({sub.count})</span>
+                      <span className="font-semibold">{sub.total.toFixed(2)}</span>
+                    </summary>
+                    <div className="pb-2 space-y-1">
+                      {sub.items.map((o: any) => (
+                        <div key={o.id} className="flex justify-between text-xs px-2">
+                          <span>{o.orderNo} · {o.tableName || o.channel}</span>
+                          <span>{Number(o.total).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )) : group.items.map((o: any) => (
+                  <div key={o.id} className="px-4 py-2 flex justify-between text-xs">
+                    <span>{o.orderNo} · {new Date(o.createdAt).toLocaleString()} · {o.tableName || o.channel}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">{Number(o.total).toFixed(2)}</span>
+                      <StatusBadge status={o.status} size="sm" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </details>
+          ))}
+        </div>
+      ) : (
         <div className="space-y-2">
           {filtered.map((o: any) => (
             <div key={o.id} className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
