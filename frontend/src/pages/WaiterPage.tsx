@@ -72,6 +72,12 @@ export default function WaiterPage() {
   const orderForTable = (name: string): OrderRow | undefined =>
     (activeOrders || []).find((o) => o.tableName === name);
 
+  const ordersForTable = (name: string): OrderRow[] =>
+    (activeOrders || []).filter((o) => o.tableName === name);
+
+  // Multi-order table picker state
+  const [waiterTablePicker, setWaiterTablePicker] = useState<{ table: TableRow; orders: OrderRow[] } | null>(null);
+
   // ---- Menu data (only needed once a table is open) ----
   const { data: categories } = useQuery({
     queryKey: ['categories'],
@@ -140,11 +146,18 @@ export default function WaiterPage() {
 
   const openTable = useMutation({
     mutationFn: async (table: TableRow) => {
-      const existing = orderForTable(table.name);
-      if (existing) {
+      const tableOrders = ordersForTable(table.name);
+      if (tableOrders.length > 1) {
+        // Multiple orders — show picker (return null to signal no auto-open)
+        setWaiterTablePicker({ table, orders: tableOrders });
+        return null;
+      }
+      if (tableOrders.length === 1) {
+        const existing = tableOrders[0];
         if (existing.status === 'HELD') await api.patch(`/sales/orders/${existing.id}/resume`, {});
         return existing.id;
       }
+      // No orders — create new
       const { data } = await api.post('/sales/orders', {
         branchId,
         channel: 'DINE_IN',
@@ -157,6 +170,7 @@ export default function WaiterPage() {
       return data.data.id as number;
     },
     onSuccess: (orderId, table) => {
+      if (orderId === null) return; // picker is showing, don't navigate
       setSelectedTable(table);
       setActiveOrderId(orderId);
       refreshTablesAndOrders();
@@ -315,8 +329,9 @@ export default function WaiterPage() {
           <div className="relative rounded-2xl overflow-hidden border-2 border-gray-200 dark:border-gray-700 w-full"
             style={{ maxWidth: 900, height: 'clamp(300px, 60vw, 500px)', background: '#f0fdf4' }}>
             {(tables || []).filter((tb: TableRow) => tb.isActive).map((table: TableRow) => {
-              const ord = orderForTable(table.name);
-              const isOccupied = table.status === 'OCCUPIED' || !!ord;
+              const tableOrders = ordersForTable(table.name);
+              const ord = tableOrders[0];
+              const isOccupied = table.status === 'OCCUPIED' || tableOrders.length > 0;
               const isBillReq = table.status === 'BILL_REQUESTED';
               const isReserved = table.status === 'RESERVED';
               const bgColor = isBillReq ? 'bg-red-400/80' : isOccupied ? 'bg-amber-400/80' : isReserved ? 'bg-sky-400/80' : 'bg-emerald-400/80';
@@ -331,7 +346,8 @@ export default function WaiterPage() {
                 >
                   <span className="text-sm">{table.name}</span>
                   <span className="text-[10px] opacity-80">{table.seats} 👤</span>
-                  {ord && (
+                  {tableOrders.length > 1 && <span className="absolute top-1 right-1 min-w-[18px] h-[18px] bg-white rounded-full flex items-center justify-center text-[9px] font-bold text-gray-900">{tableOrders.length}</span>}
+                  {ord && tableOrders.length <= 1 && (
                     <span className="mt-0.5 text-[9px] bg-white/30 rounded px-1">
                       {ord.status === 'HELD' ? '⏸' : `#${ord.orderNo.slice(-4)}`}
                     </span>
@@ -340,6 +356,50 @@ export default function WaiterPage() {
               );
             })}
             {!tables?.length && <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">{t('waiter.noTables')}</div>}
+          </div>
+        )}
+
+        {/* Table order picker for multi-order tables */}
+        {waiterTablePicker && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setWaiterTablePicker(null)}>
+            <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-base font-bold mb-1">{t('pos.tableOrders')}</h3>
+              <p className="text-xs text-gray-500 mb-3">{waiterTablePicker.table.name} — {waiterTablePicker.orders.length} {t('pos.activeOrders')}</p>
+              <div className="space-y-2 mb-4 max-h-[50vh] overflow-y-auto">
+                {waiterTablePicker.orders.map((o) => (
+                  <button
+                    key={o.id}
+                    onClick={() => {
+                      setSelectedTable(waiterTablePicker.table);
+                      setActiveOrderId(o.id);
+                      setWaiterTablePicker(null);
+                      refreshTablesAndOrders();
+                    }}
+                    className="w-full text-left px-3 py-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-primary hover:bg-primary/5 transition"
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium">{o.orderNo.slice(-6)}</span>
+                      <span className="text-sm font-bold">{Number(o.total).toFixed(2)}</span>
+                    </div>
+                    <div className="text-[11px] text-gray-500 mt-0.5">{o.status}</div>
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={async () => {
+                  try {
+                    const { data } = await api.post('/sales/orders', { branchId, channel: 'DINE_IN', tableName: waiterTablePicker.table.name });
+                    setSelectedTable(waiterTablePicker.table);
+                    setActiveOrderId(data.data.id);
+                    setWaiterTablePicker(null);
+                    refreshTablesAndOrders();
+                  } catch (e: any) { toast.error(e.response?.data?.message || 'Failed'); }
+                }}
+                className="w-full py-2.5 rounded-xl bg-primary text-white text-sm font-semibold"
+              >
+                + {t('pos.newOrderForTable')}
+              </button>
+            </div>
           </div>
         )}
       </div>

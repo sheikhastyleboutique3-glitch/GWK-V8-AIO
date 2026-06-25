@@ -143,7 +143,7 @@ export function printReceipt(order: OrderLike, info: BusinessInfo = {}) {
     .map(
       (it) => {
         const mods = Array.isArray(it.modifiers) ? it.modifiers : (typeof it.modifiers === 'string' ? JSON.parse(it.modifiers) : []);
-        const modText = mods.filter((m: any) => m?.name).map((m: any) => m.name).join(', ');
+        const modText = mods.map((m: any) => m?.name || m?.nameAr).filter(Boolean).join(', ');
         return `
       <div class="row"><span>${it.quantity} x ${esc(it.product?.name ?? `#${it.productId}`)}${it.product?.nameAr ? ` / ${esc(it.product.nameAr)}` : ''}</span><span>${money(it.unitPrice * it.quantity)}</span></div>
       ${modText ? `<div class="row sm muted"><span>+ ${esc(modText)}</span><span></span></div>` : ''}
@@ -190,7 +190,7 @@ function kotSection(order: OrderLike, items: OrderItemLike[], opts: { station?: 
     .map(
       (it) => {
         const mods = Array.isArray(it.modifiers) ? it.modifiers : (typeof it.modifiers === 'string' ? JSON.parse(it.modifiers) : []);
-        const modText = mods.filter((m: any) => m?.name).map((m: any) => m.name).join(', ');
+        const modText = mods.map((m: any) => m?.name || m?.nameAr).filter(Boolean).join(', ');
         return `
       <div class="krow"><span class="qty">${it.quantity}x</span><span>${esc(it.product?.name ?? `#${it.productId}`)}${it.product?.nameAr ? ` / ${esc(it.product.nameAr)}` : ''}</span></div>
       ${modText ? `<div class="sm muted" style="padding-left:2em;">→ ${esc(modText)}</div>` : ''}
