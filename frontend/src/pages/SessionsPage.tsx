@@ -7,6 +7,7 @@ import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 import StatusBadge from '../components/StatusBadge';
 import { printSessionReport } from '../lib/thermalPrint';
+import { downloadSessionReportPdf } from '../lib/pdf';
 
 export default function SessionsPage() {
   const { t } = useTranslation();
@@ -81,6 +82,9 @@ export default function SessionsPage() {
                       </div>
                       <button onClick={() => printSessionReport(report, businessInfo)} className="mt-3 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs font-medium">
                         🖨 {report.session?.status === 'CLOSED' ? t('sessions.printZ') : t('sessions.printX')}
+                      </button>
+                      <button onClick={() => downloadSessionReportPdf({ data: report, businessName: businessInfo.businessName, branchName: businessInfo.branchName })} className="mt-3 ms-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium">
+                        📄 {t('sessions.downloadPdf')}
                       </button>
                     </>
                   )}

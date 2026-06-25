@@ -23,6 +23,7 @@ import {
 import { Type } from 'class-transformer';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { SalesService } from './sales.service';
+import { AuditService } from '../audit/audit.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -78,6 +79,11 @@ export class ApplyDiscountRuleDto {
   @IsOptional() @IsString() reason?: string;
 }
 
+export class CorrectPaymentDto {
+  @IsEnum(PaymentMethod) newMethod: PaymentMethod;
+  @IsString() reason: string;
+}
+
 export class TransferTableDto {
   @IsString() tableName: string;
 }
@@ -100,7 +106,7 @@ const POS_ROLES: Role[] = [
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('sales/orders')
 export class SalesController {
-  constructor(private svc: SalesService) {}
+  constructor(private svc: SalesService, private audit: AuditService) {}
 
   @Get()
   findAll(
@@ -220,6 +226,26 @@ export class SalesController {
   @Post(':id/refund') @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
   refund(@Param('id', ParseIntPipe) id: number, @CurrentUser('id') userId: number) {
     return this.svc.refund(id, userId);
+  }
+
+  @Patch(':id/payments/:paymentId/correct') @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
+  async correctPaymentMethod(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('paymentId', ParseIntPipe) paymentId: number,
+    @Body() dto: CorrectPaymentDto,
+    @CurrentUser('id') userId: number,
+  ) {
+    const result = await this.svc.correctPaymentMethod(id, paymentId, dto.newMethod, dto.reason, userId);
+    // Audit trail
+    await this.audit.create({
+      userId,
+      action: 'PAYMENT_METHOD_CORRECTION',
+      entity: 'Payment',
+      entityId: String(paymentId),
+      oldValues: { method: result.correction.oldMethod, amount: result.correction.amount },
+      newValues: { method: result.correction.newMethod, amount: result.correction.amount, reason: dto.reason },
+    });
+    return result;
   }
 
   @Post(':id/payments') @Roles(...POS_ROLES)

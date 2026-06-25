@@ -98,6 +98,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'insights',
     items: [
       { key: 'reports',       path: '/reports',       icon: ChartBarIcon,                roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'PROCUREMENT'] },
+      { key: 'posReports',    path: '/pos-reports',   icon: ChartBarIcon,                roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
       { key: 'salesHistory',  path: '/sales-history', icon: DocumentTextIcon,            roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER'] },
       { key: 'sessions',      path: '/sessions',      icon: CurrencyDollarIcon,          roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER'] },
       { key: 'receivables',   path: '/receivables',   icon: DocumentTextIcon,            roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'PROCUREMENT', 'CASHIER'] },
