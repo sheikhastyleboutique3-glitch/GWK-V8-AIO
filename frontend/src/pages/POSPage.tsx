@@ -1356,76 +1356,7 @@ export default function POSPage() {
             </div>
           )}
 
-          {/* Payment composer (split tender) */}
-          <div className="flex flex-wrap gap-2 mt-3">
-            {([
-              'CASH',
-              'CARD',
-              'QR',
-              'GIFT_CARD',
-              'LOYALTY_CARD',
-              ...((terminals?.length ?? 0) > 0 ? ['TERMINAL'] : []),
-              ...(activeCustomer ? ['STORE_CREDIT', 'LOYALTY', 'ON_ACCOUNT'] : []),
-              ...(isAggregatorChannel(channel) ? ['AGGREGATOR'] : []),
-            ] as PayMethod[]).map((m) => (
-              <button
-                key={m}
-                onClick={() => setPayMethod(m)}
-                className={`flex-1 min-w-[4rem] px-2 py-1.5 rounded-lg text-xs ${payMethod === m ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800'}`}
-              >
-                {m === 'AGGREGATOR' ? t('pos.platformPaid') : m === 'LOYALTY_CARD' ? t('pos.loyaltyCard') : m === 'TERMINAL' ? t('pos.terminal') : m === 'ON_ACCOUNT' ? 'Account' : m === 'QR' ? 'QR Pay' : m.replace('_', ' ')}
-              </button>
-            ))}
-          </div>
-          {(payMethod === 'GIFT_CARD' || payMethod === 'LOYALTY_CARD') && (
-            <input
-              value={giftCardCode}
-              onChange={(e) => setGiftCardCode(e.target.value)}
-              placeholder={payMethod === 'LOYALTY_CARD' ? t('pos.loyaltyCardCode') : 'Gift card code'}
-              className="mt-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
-            />
-          )}
-          {payMethod === 'TERMINAL' && (
-            <select
-              value={selectedTerminalId ?? ''}
-              onChange={(e) => setSelectedTerminalId(e.target.value ? parseInt(e.target.value, 10) : undefined)}
-              className="mt-2 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
-            >
-              <option value="">{t('pos.selectTerminal')}</option>
-              {(terminals || []).filter((tm: any) => tm.isActive !== false).map((tm: any) => (
-                <option key={tm.id} value={tm.id}>{tm.name} ({tm.provider})</option>
-              ))}
-            </select>
-          )}
-          <div className="flex gap-2 mt-2">
-            <input
-              type="number"
-              value={tenderAmount}
-              onChange={(e) => setTenderAmount(e.target.value)}
-              placeholder={remaining > 0 ? `Amount (${remaining.toFixed(2)})` : 'Amount'}
-              className="flex-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
-            />
-            <button onClick={addTender} disabled={!lines.length && !comboCart.length} className="px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm disabled:opacity-50">
-              Add payment
-            </button>
-          </div>
-          {tenders.length > 0 && (
-            <div className="mt-2 space-y-1">
-              {tenders.map((ten, i) => (
-                <div key={i} className="flex justify-between items-center text-xs bg-gray-50 dark:bg-gray-800/60 rounded px-2 py-1">
-                  <span>
-                    {ten.method.replace('_', ' ')}
-                    {ten.giftCardCode ? ` · ${ten.giftCardCode}` : ''}
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <span className="font-medium">{ten.amount.toFixed(2)}</span>
-                    <button onClick={() => removeTender(i)} className="text-red-600" aria-label="Remove payment">✕</button>
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
+          {/* ─── TOTALS + PAYMENT BUTTON ─── */}
           <div className="border-t border-gray-200 dark:border-gray-800 mt-3 pt-3">
             <div className="flex justify-between text-sm text-gray-500">
               <span>Subtotal</span>
@@ -1434,7 +1365,7 @@ export default function POSPage() {
             {discount > 0 && (
               <div className="flex justify-between text-sm text-green-600">
                 <span>Coupon {appliedCouponCode}</span>
-                <span>−{discount.toFixed(2)}</span>
+                <span>-{discount.toFixed(2)}</span>
               </div>
             )}
             <div className="flex justify-between text-lg font-bold my-2">
@@ -1442,38 +1373,17 @@ export default function POSPage() {
               <span>{total.toFixed(2)}</span>
             </div>
             {tenders.length > 0 && (
-              <>
-                <div className="flex justify-between text-sm text-gray-500">
-                  <span>Paid</span>
-                  <span>{paid.toFixed(2)}</span>
-                </div>
-                {remaining > 0 && (
-                  <div className="flex justify-between text-sm text-amber-600">
-                    <span>Remaining</span>
-                    <span>{remaining.toFixed(2)}</span>
-                  </div>
-                )}
-                {change > 0 && (
-                  <div className="flex justify-between text-sm text-green-600">
-                    <span>Change</span>
-                    <span>{change.toFixed(2)}</span>
-                  </div>
-                )}
-              </>
+              <div className="flex justify-between text-sm text-emerald-600 mb-2">
+                <span>Paid</span>
+                <span>{paid.toFixed(2)}{change > 0 ? ` (change: ${change.toFixed(2)})` : ''}</span>
+              </div>
             )}
-            <button
-              disabled={(!lines.length && !comboCart.length) || remaining > 0 || charge.isPending || !posSession}
-              onClick={() => charge.mutate()}
-              className="w-full mt-2 py-3 rounded-xl bg-primary text-white font-semibold disabled:opacity-50"
-            >
-              {charge.isPending ? 'Processing…' : !posSession ? t('pos.session.openSessionFirst') : remaining > 0 ? `Add ${remaining.toFixed(2)} to complete` : 'Complete sale'}
-            </button>
             <button
               disabled={(!lines.length && !comboCart.length) || !posSession}
               onClick={() => setShowPayment(true)}
-              className="w-full mt-2 py-3 rounded-xl bg-emerald-600 text-white font-semibold disabled:opacity-50 text-lg"
+              className="w-full py-3 rounded-xl bg-emerald-600 text-white font-bold text-lg disabled:opacity-50"
             >
-              💳 Payment
+              {!posSession ? t('pos.session.openSessionFirst') : `💳 Payment${total > 0 ? ` · ${total.toFixed(2)}` : ''}`}
             </button>
           </div>
 
