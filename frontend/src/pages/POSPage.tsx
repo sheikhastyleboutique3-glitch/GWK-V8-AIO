@@ -364,9 +364,11 @@ export default function POSPage() {
   const pickVariant = (v: any) => {
     if (!variantProduct) return;
     const base = variantProduct.product.salePrice ?? variantProduct.product.costPrice ?? 0;
-    const prod = { ...variantProduct.product, name: `${variantProduct.product.name} · ${v.sku}` };
-    // Pass a display-only modifier so variant lines stay distinct in the cart.
-    addLine(prod, base + (v.priceExtra ?? 0), [{ optionId: v.id, name: v.sku, priceDelta: 0 }] as any);
+    const variantLabel = v.sku || v.name || `Variant #${v.id}`;
+    const prod = { ...variantProduct.product, name: `${variantProduct.product.name} · ${variantLabel}` };
+    // Store variant as modifier (for KOT display) with both name and nameAr populated
+    const variantMod = { optionId: v.id, name: variantLabel, nameAr: variantLabel, priceDelta: v.priceExtra ?? 0 };
+    addLine(prod, base + (v.priceExtra ?? 0), [variantMod] as any);
     setVariantProduct(null);
   };
 
