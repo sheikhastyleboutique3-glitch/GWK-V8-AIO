@@ -538,13 +538,22 @@ export class SalesService {
     // behavior: course 1 picks up all "unassigned" items so a single fire
     // sends everything to the kitchen — matching Odoo's behaviour where items
     // without explicit course go with the first fire).
-    const courseFilter = courseNo === 1
-      ? { orderId, firedAt: null, OR: [{ courseNo: 1 }, { courseNo: null }] }
-      : { orderId, courseNo, firedAt: null };
-    await this.prisma.orderItem.updateMany({
-      where: courseFilter as any,
-      data: { firedAt: now },
-    });
+    if (courseNo === 1) {
+      // Course 1 fires both explicitly-assigned AND unassigned (null) items
+      await this.prisma.orderItem.updateMany({
+        where: { orderId, courseNo: 1, firedAt: null },
+        data: { firedAt: now },
+      });
+      await this.prisma.orderItem.updateMany({
+        where: { orderId, courseNo: null, firedAt: null },
+        data: { firedAt: now },
+      });
+    } else {
+      await this.prisma.orderItem.updateMany({
+        where: { orderId, courseNo, firedAt: null },
+        data: { firedAt: now },
+      });
+    }
     this.events.emit(KDS_CHANGED, { branchId: order.branchId });
     return this.findOne(orderId);
   }
