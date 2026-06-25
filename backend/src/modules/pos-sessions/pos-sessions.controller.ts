@@ -22,7 +22,6 @@ export class CloseSessionDto {
   @IsNumber() @Min(0) closingCounted: number;
   @IsOptional() denominations?: { denomination: number; count: number }[];
 }
-}
 
 const POS_ROLES: Role[] = [Role.SUPER_ADMIN, Role.BRANCH_MANAGER, Role.CASHIER];
 
