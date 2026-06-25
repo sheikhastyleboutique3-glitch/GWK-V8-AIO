@@ -25,8 +25,12 @@ export default function ProductionPage() {
     refetchInterval: 20_000,
   });
   const { data: products } = useQuery({
-    queryKey: ['products-all'],
-    queryFn: () => api.get('/products').then((r) => r.data.data),
+    queryKey: ['products-with-recipes'],
+    queryFn: () => api.get('/products', { params: { productType: 'SEMI_FINISHED' } }).then(async (r) => {
+      // Also include MENU items — both can have production orders
+      const menu = await api.get('/products', { params: { productType: 'MENU' } }).then((r2) => r2.data.data);
+      return [...(r.data.data || []), ...(menu || [])];
+    }),
     staleTime: 300_000,
   });
 
@@ -68,7 +72,8 @@ export default function ProductionPage() {
       <PageHeader title={t('nav.production')} subtitle={activeBranch?.name} />
 
       <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 mb-5">
-        <h3 className="font-semibold text-sm mb-3">New production run</h3>
+        <h3 className="font-semibold text-sm mb-1">New production run</h3>
+        <p className="text-xs text-gray-500 mb-3">Select a menu or semi-finished item that has a recipe. The system will consume its raw ingredients from stock.</p>
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
           <select
             value={productId}
