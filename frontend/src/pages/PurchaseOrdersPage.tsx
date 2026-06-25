@@ -81,8 +81,9 @@ export default function PurchaseOrdersPage() {
       const rcv: Record<number, { receivedQty: string; unitPrice: string; dateReceived: string; manufactureDate: string; expiryDate: string }> = {};
       const today = new Date().toISOString().slice(0, 10);
       (full.items || []).forEach((it: any) => {
+        const remaining = Math.max(0, (it.orderedQty || 0) - (it.receivedQty || 0));
         rcv[it.id] = {
-          receivedQty: String(it.receivedQty || it.orderedQty),
+          receivedQty: String(remaining),
           unitPrice: String(it.unitPrice),
           dateReceived: today,
           manufactureDate: '',
@@ -672,25 +673,36 @@ export default function PurchaseOrdersPage() {
             {/* RECEIVE MODE */}
             {mode === 'receive' && (
               <div className="space-y-4">
-                <p className="text-xs text-gray-500">{t('po.receiveHint') !== 'po.receiveHint' ? t('po.receiveHint') : 'Enter the actual received quantity and unit price. Price changes are recorded in price history.'}</p>
+                <p className="text-xs text-gray-500">Enter the quantity received in THIS delivery. The system accumulates partial receipts automatically.</p>
                 <div className="border border-gray-100 rounded-xl overflow-hidden">
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
                       <tr>
-                        <th className="text-start px-3 py-2">{t('po.product') !== 'po.product' ? t('po.product') : 'Product'}</th>
-                        <th className="text-center px-3 py-2">{t('po.ordered') !== 'po.ordered' ? t('po.ordered') : 'Ordered'}</th>
-                        <th className="text-center px-3 py-2 w-24">{t('po.received') !== 'po.received' ? t('po.received') : 'Received'}</th>
-                        <th className="text-end px-3 py-2 w-28">{t('po.unitPrice') !== 'po.unitPrice' ? t('po.unitPrice') : 'Unit Price'}</th>
+                        <th className="text-start px-3 py-2">Product</th>
+                        <th className="text-center px-3 py-2">Ordered</th>
+                        <th className="text-center px-3 py-2">Prev. Recv</th>
+                        <th className="text-center px-3 py-2 w-24">This Delivery</th>
+                        <th className="text-end px-3 py-2 w-28">Unit Price</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                      {detailPO.items?.map((it: any) => (
+                      {detailPO.items?.map((it: any) => {
+                        const prevReceived = it.receivedQty || 0;
+                        const remaining = Math.max(0, (it.orderedQty || 0) - prevReceived);
+                        return (
                         <Fragment key={it.id}>
                         <tr>
-                          <td className="px-3 py-2 text-gray-800">{isRTL ? it.product?.nameAr : it.product?.name}<br/><span className="text-gray-400 text-xs">{t('po.was') !== 'po.was' ? t('po.was') : 'cost'}: {detailPO.currency} {(it.product?.costPrice ?? 0).toFixed(2)}</span></td>
+                          <td className="px-3 py-2 text-gray-800">
+                            {isRTL ? it.product?.nameAr : it.product?.name}
+                            <br/><span className="text-gray-400 text-xs">cost: {detailPO.currency} {(it.product?.costPrice ?? 0).toFixed(2)}</span>
+                          </td>
                           <td className="px-3 py-2 text-center text-gray-500">{it.orderedQty}</td>
+                          <td className="px-3 py-2 text-center">
+                            <span className={prevReceived > 0 ? 'text-emerald-600 font-medium' : 'text-gray-400'}>{prevReceived}</span>
+                            {remaining > 0 && <div className="text-[10px] text-amber-600">({remaining} left)</div>}
+                          </td>
                           <td className="px-3 py-2">
-                            <input type="number" min={0} step="any" value={receiveItems[it.id]?.receivedQty ?? ''} onChange={e => setReceiveItems(p => ({ ...p, [it.id]: { ...p[it.id], receivedQty: e.target.value } }))} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-center" />
+                            <input type="number" min={0} max={remaining} step="any" value={receiveItems[it.id]?.receivedQty ?? ''} onChange={e => setReceiveItems(p => ({ ...p, [it.id]: { ...p[it.id], receivedQty: e.target.value } }))} placeholder={String(remaining)} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-center" />
                           </td>
                           <td className="px-3 py-2">
                             <input type="number" min={0} step="any" value={receiveItems[it.id]?.unitPrice ?? ''} onChange={e => setReceiveItems(p => ({ ...p, [it.id]: { ...p[it.id], unitPrice: e.target.value } }))} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-end" />
@@ -731,7 +743,8 @@ export default function PurchaseOrdersPage() {
                           </tr>
                         )}
                         </Fragment>
-                      ))}
+                      );
+                      })}
                     </tbody>
                   </table>
                 </div>

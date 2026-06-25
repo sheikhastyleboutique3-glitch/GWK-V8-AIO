@@ -188,7 +188,7 @@ export class PurchaseOrdersService {
       // and auto-advances the status to FULLY_RECEIVED.
       const items = po.items
         .filter((i) => (i.receivedQty || 0) < i.orderedQty)
-        .map((i) => ({ itemId: i.id, receivedQty: i.orderedQty }));
+        .map((i) => ({ itemId: i.id, receivedQty: i.orderedQty - (i.receivedQty || 0) }));
       if (items.length) {
         return this.receive(id, { items }, userId);
       }
@@ -319,8 +319,19 @@ export class PurchaseOrdersService {
         const item = po.items.find((i) => i.id === line.itemId);
         if (!item) continue;
 
-        const newReceived = Math.max(0, Number(line.receivedQty) || 0);
-        const delta = newReceived - (item.receivedQty || 0);
+        // The caller sends the ADDITIONAL qty received in this delivery, NOT
+        // the new cumulative total. We add it to the existing receivedQty.
+        const additionalQty = Math.max(0, Number(line.receivedQty) || 0);
+        if (additionalQty === 0) continue;
+        const previouslyReceived = item.receivedQty || 0;
+        const newReceived = previouslyReceived + additionalQty;
+        // Guard against over-receiving.
+        if (newReceived > item.orderedQty + 1e-9) {
+          throw new BadRequestException(
+            `Over-receive: ${item.product.name} ordered ${item.orderedQty}, already received ${previouslyReceived}, trying to add ${additionalQty} (max additional: ${+(item.orderedQty - previouslyReceived).toFixed(4)}).`,
+          );
+        }
+        const delta = additionalQty;
         const finalPrice = line.unitPrice != null ? Number(line.unitPrice) : item.unitPrice;
 
         // 1) Increase inventory for the newly received quantity only.
