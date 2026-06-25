@@ -37,6 +37,7 @@ interface OrderLike {
   orderNo: string;
   tableName?: string | null;
   channel?: string;
+  notes?: string | null;
   subtotal?: number;
   couponCode?: string | null;
   couponDiscount?: number;
@@ -192,6 +193,7 @@ function kotSection(order: OrderLike, items: OrderItemLike[], opts: { station?: 
       ${order.tableName ? `<div class="c b lg">Table ${esc(order.tableName)}</div>` : ''}
       <div class="c sm">${esc(order.orderNo)} &middot; ${esc(when)}</div>
       ${opts.waiter ? `<div class="c sm">Waiter: ${esc(opts.waiter)}</div>` : ''}
+      ${order.notes ? `<div class="c sm b" style="margin-top:4px;border:1px dashed #000;padding:2px 4px;">📝 ${esc(order.notes)}</div>` : ''}
       <div class="hr"></div>
       ${rows || '<div class="c sm">No items</div>'}
       <div class="hr"></div>
