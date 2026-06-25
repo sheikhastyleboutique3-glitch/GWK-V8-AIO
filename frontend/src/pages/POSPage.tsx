@@ -38,6 +38,11 @@ export default function POSPage() {
   const branchId = activeBranch?.id;
   const canRefund = user?.role === 'SUPER_ADMIN' || user?.role === 'BRANCH_MANAGER';
 
+  // ─── TOP-LEVEL VIEW SWITCH (Odoo-style: Floor Plan / Order / Orders) ───
+  const [posView, setPosView] = useState<'floor' | 'order' | 'orders'>('floor');
+  const [orderSearchQ, setOrderSearchQ] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState<string>('all');
+
   const [categoryId, setCategoryId] = useState<number | undefined>(undefined);
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -562,10 +567,197 @@ export default function POSPage() {
     onError: (e: any) => toast.error(e.response?.data?.message || e.message || 'Refund failed'),
   });
 
+  // ─── Floor plan data (for the integrated floor view) ───
+  const { data: floors } = useQuery({
+    queryKey: ['pos-floors', branchId],
+    queryFn: () => api.get('/floors', { params: { branchId } }).then((r) => r.data.data),
+    enabled: !!branchId,
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+  });
+  const [activeFloorIdx, setActiveFloorIdx] = useState(0);
+  const activeFloor = (floors || [])[activeFloorIdx] || null;
+
+  // ─── Orders list (for the Orders tab) ───
+  const { data: allOrders } = useQuery({
+    queryKey: ['pos-all-orders', branchId, orderStatusFilter],
+    queryFn: () => api.get('/sales/orders', { params: { branchId, ...(orderStatusFilter !== 'all' ? { status: orderStatusFilter } : {}) } }).then((r) => r.data.data),
+    enabled: posView === 'orders' && !!branchId,
+    refetchInterval: 15_000,
+  });
+
+  const filteredOrders = useMemo(() => {
+    if (!allOrders) return [];
+    if (!orderSearchQ.trim()) return allOrders;
+    const q = orderSearchQ.toLowerCase();
+    return allOrders.filter((o: any) =>
+      o.orderNo?.toLowerCase().includes(q) ||
+      o.customer?.name?.toLowerCase().includes(q) ||
+      o.tableName?.toLowerCase().includes(q)
+    );
+  }, [allOrders, orderSearchQ]);
+
+  // Open a table from the floor plan → switch to order view
+  const openTableOrder = async (table: any) => {
+    try {
+      // Check if there's an existing order for this table
+      const existing = pendingBills?.find((o: any) => o.tableName === table.name);
+      if (existing) {
+        loadBill(existing);
+      } else {
+        // Create a new order for this table
+        const { data } = await api.post('/sales/orders', { branchId, channel: 'DINE_IN', tableName: table.name });
+        setLoadedOrderId(data.data.id);
+        setTableName(table.name);
+        qc.invalidateQueries({ queryKey: ['pos-pending'] });
+      }
+      setPosView('order');
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || 'Failed to open table');
+    }
+  };
+
   return (
+    <div className="h-full flex flex-col">
+      {/* ─── ODOO-STYLE TOP NAV BAR ─── */}
+      <div className="bg-gray-900 text-white px-4 py-2 flex items-center gap-4 rounded-t-xl -mx-4 -mt-4 mb-4 no-print">
+        <span className="font-bold text-sm">{activeBranch?.name || 'POS'}</span>
+        <div className="flex gap-1 ms-4">
+          <button onClick={() => setPosView('floor')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${posView === 'floor' ? 'bg-primary text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}>
+            🏠 Floor Plan
+          </button>
+          <button onClick={() => setPosView('order')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${posView === 'order' ? 'bg-primary text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}>
+            🛒 Order
+          </button>
+          <button onClick={() => setPosView('orders')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${posView === 'orders' ? 'bg-primary text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}>
+            📋 Orders {pendingBills?.length ? `(${pendingBills.length})` : ''}
+          </button>
+        </div>
+        <div className="ms-auto flex items-center gap-2 text-xs text-gray-400">
+          <PosSessionBar branchId={branchId} businessInfo={businessInfo} />
+        </div>
+      </div>
+
+      {/* ─── FLOOR PLAN VIEW ─── */}
+      {posView === 'floor' && (
+        <div>
+          {/* Floor tabs */}
+          {(floors?.length ?? 0) > 0 && (
+            <div className="flex gap-2 mb-4">
+              {(floors || []).map((f: any, idx: number) => (
+                <button key={f.id} onClick={() => setActiveFloorIdx(idx)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium ${activeFloorIdx === idx ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800'}`}>
+                  {f.name}
+                </button>
+              ))}
+            </div>
+          )}
+          {/* Floor canvas with positioned tables */}
+          {activeFloor ? (
+            <div className="relative rounded-2xl overflow-hidden border-2 border-gray-200 dark:border-gray-700"
+              style={{ width: '100%', maxWidth: 900, height: 500, background: activeFloor.background || '#e9d5ff' }}>
+              {(activeFloor.tables || []).filter((t: any) => t.isActive).map((table: any) => {
+                const hasOrder = pendingBills?.some((o: any) => o.tableName === table.name);
+                const isOccupied = table.status === 'OCCUPIED' || hasOrder;
+                const isRound = table.shape === 'ROUND';
+                const bgColor = isOccupied ? 'bg-red-400/80' : 'bg-emerald-400/80';
+                return (
+                  <button
+                    key={table.id}
+                    onClick={() => openTableOrder(table)}
+                    className={`absolute flex flex-col items-center justify-center text-white font-bold shadow-lg hover:scale-105 transition-transform ${bgColor} ${isRound ? 'rounded-full' : 'rounded-xl'}`}
+                    style={{ left: table.posX, top: table.posY, width: table.width, height: table.height }}
+                  >
+                    <span className="text-sm">{table.name}</span>
+                    <span className="text-[10px] opacity-80">{table.seats} 👤</span>
+                    {hasOrder && <span className="absolute top-1 right-1 w-3 h-3 bg-white rounded-full flex items-center justify-center text-[8px] text-gray-900">✓</span>}
+                  </button>
+                );
+              })}
+              {!(activeFloor.tables || []).filter((t: any) => t.isActive).length && (
+                <div className="absolute inset-0 flex items-center justify-center text-white/70 text-sm">
+                  No tables. Go to Tables page to set up your floor plan.
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-16 text-gray-400">
+              <p>No floor plan configured. Go to <strong>Tables</strong> page to create areas and tables.</p>
+              <button onClick={() => setPosView('order')} className="mt-4 px-4 py-2 rounded-lg bg-primary text-white text-sm">
+                Go to Order Screen →
+              </button>
+            </div>
+          )}
+          {/* New Order button (for non-table orders like takeaway) */}
+          <div className="mt-4">
+            <button onClick={() => { setTableName(''); setPosView('order'); }} className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium">
+              + New Order (no table)
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── ORDERS LIST VIEW ─── */}
+      {posView === 'orders' && (
+        <div>
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <button onClick={() => { setPosView('order'); setLoadedOrderId(null); setCart([]); }} className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium">+ New Order</button>
+            <input value={orderSearchQ} onChange={(e) => setOrderSearchQ(e.target.value)} placeholder="Search orders..."
+              className="flex-1 min-w-[180px] rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm" />
+            <select value={orderStatusFilter} onChange={(e) => setOrderStatusFilter(e.target.value)}
+              className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm">
+              <option value="all">All</option>
+              <option value="OPEN">Open</option>
+              <option value="HELD">Held</option>
+              <option value="COMPLETED">Paid</option>
+              <option value="VOIDED">Voided</option>
+              <option value="REFUNDED">Refunded</option>
+            </select>
+          </div>
+          <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 dark:bg-gray-900/50 text-gray-500 text-xs uppercase">
+                <tr>
+                  <th className="text-left px-3 py-2">Date</th>
+                  <th className="text-left px-3 py-2">Receipt #</th>
+                  <th className="text-left px-3 py-2">Customer</th>
+                  <th className="text-left px-3 py-2">Table</th>
+                  <th className="text-right px-3 py-2">Total</th>
+                  <th className="text-left px-3 py-2">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                {(filteredOrders || []).map((o: any) => (
+                  <tr key={o.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer"
+                    onClick={() => { loadBill(o); setPosView('order'); }}>
+                    <td className="px-3 py-2 text-xs">{new Date(o.createdAt).toLocaleString()}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{o.orderNo}</td>
+                    <td className="px-3 py-2">{o.customer?.name || '—'}</td>
+                    <td className="px-3 py-2">{o.tableName || '—'}</td>
+                    <td className="px-3 py-2 text-right font-semibold">{Number(o.total).toFixed(2)}</td>
+                    <td className="px-3 py-2">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                        o.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
+                        o.status === 'OPEN' || o.status === 'HELD' ? 'bg-amber-100 text-amber-700' :
+                        o.status === 'VOIDED' ? 'bg-red-100 text-red-700' :
+                        'bg-gray-100 text-gray-600'
+                      }`}>{o.status === 'COMPLETED' ? 'Paid' : o.status}</span>
+                    </td>
+                  </tr>
+                ))}
+                {!filteredOrders?.length && <tr><td colSpan={6} className="px-3 py-8 text-center text-gray-400">No orders found.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ─── ORDER VIEW (existing checkout screen) ─── */}
+      {posView === 'order' && (
     <div>
-      <PageHeader title={t('nav.pos')} subtitle={activeBranch?.name} />
-      <PosSessionBar branchId={branchId} businessInfo={businessInfo} />
       {comboPick && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setComboPick(null)}>
           <div className="w-full max-w-md rounded-xl bg-white dark:bg-gray-900 p-4 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -1227,6 +1419,8 @@ export default function POSPage() {
           )}
         </div>
       </div>
+    </div>
+      )}
     </div>
   );
 }
