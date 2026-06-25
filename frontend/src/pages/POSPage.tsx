@@ -770,6 +770,8 @@ export default function POSPage() {
                   ))}
                 </div>
               )}
+              {/* Raw channel selector — only shown if NO presets are configured */}
+              {!(presets?.length) && (
               <div className="flex flex-wrap gap-2 mb-3">
                 {(['DINE_IN', 'TAKEAWAY', 'DELIVERY', 'QR', 'TALABAT', 'SNOONU'] as Channel[]).map((c) => (
                   <button
@@ -788,6 +790,7 @@ export default function POSPage() {
                   </button>
                 ))}
               </div>
+              )}
               {channel === 'DINE_IN' && (
                 <div className="mb-3">
                   <div className="text-[10px] uppercase text-gray-400 mb-1.5">Select Table</div>
