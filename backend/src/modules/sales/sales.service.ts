@@ -528,32 +528,29 @@ export class SalesService {
     const order = await this.prisma.order.findUnique({ where: { id: orderId } });
     if (!order) throw new NotFoundException(`Order ${orderId} not found`);
     const now = new Date();
-    // Mark the course as fired — items stay QUEUED until kitchen starts them
-    await this.prisma.orderCourse.upsert({
-      where: { orderId_courseNo: { orderId, courseNo } },
-      update: { firedAt: now },
-      create: { orderId, courseNo, status: KdsStatus.QUEUED, firedAt: now },
+
+    // Upsert the course record (tracks firing state per course).
+    const existing = await this.prisma.orderCourse.findFirst({
+      where: { orderId, courseNo },
     });
-    // Fire items matching this course OR items with no course assigned (default
-    // behavior: course 1 picks up all "unassigned" items so a single fire
-    // sends everything to the kitchen — matching Odoo's behaviour where items
-    // without explicit course go with the first fire).
-    if (courseNo === 1) {
-      // Course 1 fires both explicitly-assigned AND unassigned (null) items
-      await this.prisma.orderItem.updateMany({
-        where: { orderId, courseNo: 1, firedAt: null },
-        data: { firedAt: now },
-      });
-      await this.prisma.orderItem.updateMany({
-        where: { orderId, courseNo: null, firedAt: null },
+    if (existing) {
+      await this.prisma.orderCourse.update({
+        where: { id: existing.id },
         data: { firedAt: now },
       });
     } else {
-      await this.prisma.orderItem.updateMany({
-        where: { orderId, courseNo, firedAt: null },
-        data: { firedAt: now },
+      await this.prisma.orderCourse.create({
+        data: { orderId, courseNo, status: KdsStatus.QUEUED, firedAt: now },
       });
     }
+
+    // Fire all items on this course that haven't been fired yet.
+    // courseNo defaults to 1 for all items, so firing course 1 fires everything.
+    await this.prisma.orderItem.updateMany({
+      where: { orderId, courseNo, firedAt: null },
+      data: { firedAt: now },
+    });
+
     this.events.emit(KDS_CHANGED, { branchId: order.branchId });
     return this.findOne(orderId);
   }
