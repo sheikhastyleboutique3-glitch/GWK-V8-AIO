@@ -88,7 +88,7 @@ export default function MenuPage() {
     setUploading(true);
     try {
       const fd = new FormData();
-      fd.append('file', file);
+      fd.append('image', file);
       await api.post(`/products/${productId}/image`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       toast.success(t('menu.imageUploaded'));
       refresh();
@@ -252,8 +252,7 @@ export default function MenuPage() {
       )}
 
       {/* Add / Edit Form Modal */}
-      {showForm && (
-        <Modal onClose={() => setShowForm(false)} title={editId ? 'Edit Menu Item' : 'New Menu Item'}>
+      <Modal open={showForm} onClose={() => setShowForm(false)} title={editId ? 'Edit Menu Item' : 'New Menu Item'} size="lg">
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -384,7 +383,6 @@ export default function MenuPage() {
             </div>
           </div>
         </Modal>
-      )}
     </div>
   );
 }

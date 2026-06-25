@@ -97,7 +97,7 @@ export default function POSPage() {
     queryKey: ['pos-products', categoryId, search],
     queryFn: () =>
       api
-        .get('/products', { params: { sellable: true, available: true, ...(categoryId && { categoryId }), ...(search && { search }) } })
+        .get('/products', { params: { sellable: true, available: true, productType: 'MENU', ...(categoryId && { categoryId }), ...(search && { search }) } })
         .then((r) => r.data.data),
     staleTime: 60_000,
   });
