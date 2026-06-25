@@ -1442,16 +1442,26 @@ export default function POSPage() {
                 onClick={async () => {
                   if (mode === 'existing' && loadedOrderId) {
                     try {
-                      // Fire to kitchen (sets firedAt on items for KDS)
+                      // Get fresh order data to check which items are already fired
+                      const { data: freshData } = await api.get(`/sales/orders/${loadedOrderId}`);
+                      const freshOrder = freshData.data;
+                      const alreadyFiredIds = new Set(
+                        (freshOrder.items || []).filter((it: any) => it.firedAt).map((it: any) => it.id)
+                      );
+
+                      // Fire to kitchen (sets firedAt on unfired items)
                       await api.post(`/sales/orders/${loadedOrderId}/courses/1/fire`);
 
-                      // Print KOT from loadedOrder data (already has modifiers from fetch)
-                      const orderData = loadedOrder;
-                      if (orderData?.items?.length) {
-                        printKot(orderData, { splitByStation: true });
+                      // Print KOT only for items that were NOT already fired
+                      const newItems = (freshOrder.items || []).filter((it: any) => !it.isVoided && !alreadyFiredIds.has(it.id));
+                      if (newItems.length > 0) {
+                        printKot(freshOrder, { items: newItems, splitByStation: true });
+                      } else {
+                        // All items were already fired — nothing new to print
+                        toast('All items already sent to kitchen', { icon: '✓' });
                       }
 
-                      toast.success('🔥 Sent to kitchen + KOT printed!', { duration: 3000 });
+                      toast.success('🔥 Sent to kitchen!', { duration: 3000 });
                       qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
                       qc.invalidateQueries({ queryKey: ['kds-board'] });
                     } catch (e: any) {
