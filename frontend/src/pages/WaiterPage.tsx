@@ -288,8 +288,8 @@ export default function WaiterPage() {
         {tablesLoading ? (
           <LoadingSpinner />
         ) : (
-          <div className="relative rounded-2xl overflow-hidden border-2 border-gray-200 dark:border-gray-700"
-            style={{ width: '100%', maxWidth: 900, height: 500, background: '#f0fdf4' }}>
+          <div className="relative rounded-2xl overflow-hidden border-2 border-gray-200 dark:border-gray-700 w-full"
+            style={{ maxWidth: 900, height: 'clamp(300px, 60vw, 500px)', background: '#f0fdf4' }}>
             {(tables || []).filter((tb: TableRow) => tb.isActive).map((table: TableRow) => {
               const ord = orderForTable(table.name);
               const isOccupied = table.status === 'OCCUPIED' || !!ord;

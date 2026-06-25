@@ -1,0 +1,14 @@
+{
+  "name": "GWK Restaurant POS",
+  "short_name": "GWK POS",
+  "description": "All-in-one Restaurant ERP & Point of Sale",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#1e40af",
+  "icons": [
+    { "src": "/vite.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "categories": ["business", "food"]
+}

@@ -649,7 +649,7 @@ export default function POSPage() {
   return (
     <div className="h-full flex flex-col">
       {/* ─── ODOO-STYLE TOP NAV BAR ─── */}
-      <div className="bg-gray-900 text-white px-4 py-2 flex items-center gap-4 rounded-t-xl -mx-4 -mt-4 mb-4 no-print">
+      <div className="bg-gray-900 text-white px-3 md:px-4 py-2 flex items-center gap-2 md:gap-4 rounded-t-xl -mx-4 -mt-4 mb-4 no-print overflow-x-auto">
         <span className="font-bold text-sm">{activeBranch?.name || 'POS'}</span>
         <div className="flex gap-1 ms-4">
           <button onClick={() => setPosView('floor')}
@@ -715,11 +715,13 @@ export default function POSPage() {
 
           {/* Floor canvas with positioned tables */}
           {activeFloor ? (
-            <div className="relative rounded-2xl overflow-hidden border-2 border-gray-200 dark:border-gray-700"
-              style={{ width: '100%', maxWidth: 900, height: 500, background: activeFloor.background || '#e9d5ff' }}
+            <div className="relative rounded-2xl overflow-hidden border-2 border-gray-200 dark:border-gray-700 w-full"
+              style={{ maxWidth: 900, height: 'clamp(300px, 60vw, 500px)', background: activeFloor.background || '#e9d5ff' }}
               onMouseMove={floorEditMode ? handleFloorDrag : undefined}
               onMouseUp={floorEditMode ? handleFloorDragEnd : undefined}
-              onMouseLeave={floorEditMode ? handleFloorDragEnd : undefined}>
+              onMouseLeave={floorEditMode ? handleFloorDragEnd : undefined}
+              onTouchMove={floorEditMode ? (e) => { const t = e.touches[0]; handleFloorDrag({ clientX: t.clientX, clientY: t.clientY } as any); } : undefined}
+              onTouchEnd={floorEditMode ? handleFloorDragEnd : undefined}>
               {(activeFloor.tables || []).filter((t: any) => t.isActive).map((table: any) => {
                 const hasOrder = pendingBills?.some((o: any) => o.tableName === table.name);
                 const isOccupied = table.status === 'OCCUPIED' || hasOrder;
@@ -730,6 +732,7 @@ export default function POSPage() {
                   <div
                     key={table.id}
                     onMouseDown={floorEditMode ? (e) => { e.preventDefault(); setFloorDragging({ id: table.id, startX: e.clientX, startY: e.clientY, origX: pos.posX, origY: pos.posY }); } : undefined}
+                    onTouchStart={floorEditMode ? (e) => { const t = e.touches[0]; setFloorDragging({ id: table.id, startX: t.clientX, startY: t.clientY, origX: pos.posX, origY: pos.posY }); } : undefined}
                     onClick={!floorEditMode ? () => openTableOrder(table) : undefined}
                     onDoubleClick={floorEditMode ? () => {
                       const name = window.prompt('Table name:', table.name);
@@ -1428,9 +1431,9 @@ export default function POSPage() {
             <span className="text-sm text-gray-400">{loadedOrderId ? `Order #${loadedOrder?.orderNo?.slice(-6) || ''}` : 'New Order'}</span>
           </div>
 
-          <div className="flex-1 flex">
+          <div className="flex-1 flex flex-col md:flex-row overflow-y-auto">
             {/* LEFT: Payment methods + Summary */}
-            <div className="w-64 border-r border-gray-200 dark:border-gray-800 flex flex-col">
+            <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-gray-200 dark:border-gray-800 flex flex-col">
               <div className="p-4 flex-1">
                 <div className="text-xs font-semibold text-gray-400 uppercase mb-3">Payment Method</div>
                 <div className="space-y-2">
@@ -1474,7 +1477,7 @@ export default function POSPage() {
             </div>
 
             {/* CENTER: Remaining + Numpad */}
-            <div className="flex-1 flex flex-col items-center justify-center p-8">
+            <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-8">
               <div className="grid grid-cols-3 gap-8 text-center mb-8">
                 <div>
                   <div className="text-sm text-gray-400">Remaining</div>
@@ -1496,7 +1499,7 @@ export default function POSPage() {
               </div>
 
               {/* Numpad */}
-              <div className="grid grid-cols-4 gap-3 w-80">
+              <div className="grid grid-cols-4 gap-2 md:gap-3 w-full max-w-xs md:max-w-sm">
                 {['1','2','3','+10','4','5','6','+20','7','8','9','+50','+/-','0','.','⌫'].map((key) => (
                   <button key={key} onClick={() => {
                     if (key === '⌫') setPayNumpad((p) => p.slice(0, -1));
@@ -1507,7 +1510,7 @@ export default function POSPage() {
                     }
                     else setPayNumpad((p) => p + key);
                   }}
-                  className={`py-4 rounded-xl text-xl font-bold transition ${key.startsWith('+') ? 'bg-primary/10 text-primary' : key === '⌫' ? 'bg-red-50 dark:bg-red-500/10 text-red-600' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
+                  className={`py-3 md:py-4 rounded-xl text-lg md:text-xl font-bold transition ${key.startsWith('+') ? 'bg-primary/10 text-primary' : key === '⌫' ? 'bg-red-50 dark:bg-red-500/10 text-red-600' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
                     {key}
                   </button>
                 ))}
@@ -1515,7 +1518,7 @@ export default function POSPage() {
             </div>
 
             {/* RIGHT: Customer + actions */}
-            <div className="w-48 border-l border-gray-200 dark:border-gray-800 p-4">
+            <div className="w-full md:w-48 border-t md:border-t-0 md:border-l border-gray-200 dark:border-gray-800 p-4 flex md:flex-col gap-2">
               {activeCustomer && (
                 <div className="mb-4">
                   <div className="text-xs text-gray-400 mb-1">Customer</div>
