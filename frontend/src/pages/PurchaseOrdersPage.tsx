@@ -711,7 +711,7 @@ export default function PurchaseOrdersPage() {
                         {/* Batch expiry intake (Requirement #4) — only when the item tracks expiry */}
                         {it.product?.tracksExpiry && (
                           <tr className="bg-amber-50/40">
-                            <td colSpan={4} className="px-3 pb-3 pt-1">
+                            <td colSpan={5} className="px-3 pb-3 pt-1">
                               {it.product?.expiryTrackingType === 'SHELF_LIFE_DAYS' ? (
                                 <div className="flex flex-wrap items-end gap-3">
                                   <div>
