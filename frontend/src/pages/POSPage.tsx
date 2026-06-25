@@ -141,6 +141,14 @@ export default function POSPage() {
     };
   }, [settings, activeBranch]);
 
+  // Tables for the current branch (used in the floor plan picker inside POS).
+  const { data: posTables } = useQuery({
+    queryKey: ['pos-tables', branchId],
+    queryFn: () => api.get('/tables', { params: { branchId } }).then((r) => r.data.data),
+    enabled: !!branchId,
+    staleTime: 15_000,
+  });
+
   // POS session guard — selling requires an open cash session (Odoo POS behaviour).
   const { data: posSession } = useQuery({
     queryKey: ['pos-session-current', branchId],
@@ -781,12 +789,31 @@ export default function POSPage() {
                 ))}
               </div>
               {channel === 'DINE_IN' && (
-                <input
-                  value={tableName}
-                  onChange={(e) => setTableName(e.target.value)}
-                  placeholder="Table (optional)"
-                  className="mb-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
-                />
+                <div className="mb-3">
+                  <div className="text-[10px] uppercase text-gray-400 mb-1.5">Select Table</div>
+                  <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                    <button
+                      onClick={() => setTableName('')}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs border ${!tableName ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-gray-200 dark:border-gray-700 text-gray-500'}`}
+                    >No table</button>
+                    {(posTables || []).filter((t: any) => t.isActive).map((t: any) => {
+                      const selected = tableName === t.name;
+                      const statusColor = t.status === 'AVAILABLE' ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-500/10'
+                        : t.status === 'OCCUPIED' ? 'border-amber-300 bg-amber-50 dark:bg-amber-500/10'
+                        : 'border-gray-200 dark:border-gray-700';
+                      return (
+                        <button
+                          key={t.id}
+                          onClick={() => setTableName(t.name)}
+                          className={`px-2.5 py-1.5 rounded-lg text-xs border transition ${selected ? 'ring-2 ring-primary font-bold' : ''} ${statusColor}`}
+                        >
+                          {t.name}
+                          <span className="text-[9px] text-gray-400 ml-1">({t.seats})</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
               {isAggregatorChannel(channel) && (
                 <div className="mb-3 space-y-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-2">
