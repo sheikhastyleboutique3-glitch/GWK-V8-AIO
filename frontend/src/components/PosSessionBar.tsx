@@ -22,11 +22,18 @@ export default function PosSessionBar({ branchId, businessInfo }: { branchId?: n
     enabled: !!branchId,
     refetchInterval: 30_000,
   });
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['pos-session-current'] });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['pos-session-current', branchId] });
+    qc.invalidateQueries({ queryKey: ['pos-session-current'] });
+  };
 
   const openMut = useMutation({
     mutationFn: () => api.post('/pos-sessions/open', { branchId, openingFloat: parseFloat(float) || 0 }),
-    onSuccess: () => { toast.success(t('pos.session.opened')); setFloat(''); invalidate(); },
+    onSuccess: async () => {
+      toast.success(t('pos.session.opened'));
+      setFloat('');
+      await qc.refetchQueries({ queryKey: ['pos-session-current', branchId] });
+    },
     onError: (e: any) => toast.error(e.response?.data?.message || 'Failed'),
   });
   const cashMut = useMutation({
@@ -37,7 +44,11 @@ export default function PosSessionBar({ branchId, businessInfo }: { branchId?: n
   });
   const closeMut = useMutation({
     mutationFn: (counted: number) => api.post(`/pos-sessions/${session.id}/close`, { closingCounted: counted }).then((r) => r.data.data),
-    onSuccess: (rep) => { printSessionReport(rep, businessInfo); toast.success(t('pos.session.closed')); invalidate(); },
+    onSuccess: async (rep) => {
+      printSessionReport(rep, businessInfo);
+      toast.success(t('pos.session.closed'));
+      await qc.refetchQueries({ queryKey: ['pos-session-current', branchId] });
+    },
     onError: (e: any) => toast.error(e.response?.data?.message || 'Failed'),
   });
   const xreport = useMutation({

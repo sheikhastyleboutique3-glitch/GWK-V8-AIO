@@ -41,6 +41,7 @@ export class PosSessionsService {
       data: {
         sessionNo: await this.genNo(branchId),
         branchId,
+        status: PosSessionStatus.OPEN,
         openingFloat: openingFloat ?? 0,
         openedById: userId ?? null,
       },
