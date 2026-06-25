@@ -1362,6 +1362,21 @@ export default function POSPage() {
               >📝 Note</button>
               <button
                 onClick={() => {
+                  if (mode === 'existing' && loadedOrder) {
+                    printReceipt(loadedOrder, businessInfo);
+                    toast.success('Bill printed');
+                  } else if (mode === 'new' && lines.length > 0) {
+                    // Print a preview bill for new (unsaved) orders
+                    const preview = { orderNo: 'PREVIEW', tableName, items: lines.map(l => ({ productId: l.productId, product: { name: l.name }, quantity: l.quantity, unitPrice: l.unitPrice, modifiers: l.modifiers })), total, subtotal };
+                    printReceipt(preview as any, businessInfo);
+                  } else {
+                    toast('Add items first');
+                  }
+                }}
+                className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
+              >🧾 Bill</button>
+              <button
+                onClick={() => {
                   const count = window.prompt('Number of guests:', String(mode === 'existing' ? loadedOrder?.guestCount || 1 : 1));
                   if (count && mode === 'existing' && loadedOrderId) {
                     api.patch(`/sales/orders/${loadedOrderId}`, { guestCount: parseInt(count, 10) || 1 });

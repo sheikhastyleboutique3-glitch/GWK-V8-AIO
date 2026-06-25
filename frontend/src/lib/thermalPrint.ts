@@ -138,7 +138,7 @@ export function printReceipt(order: OrderLike, info: BusinessInfo = {}) {
   const itemRows = items
     .map(
       (it) => `
-      <div class="row"><span>${it.quantity} x ${esc(it.product?.name ?? `#${it.productId}`)}</span><span>${money(it.unitPrice * it.quantity)}</span></div>
+      <div class="row"><span>${it.quantity} x ${esc(it.product?.name ?? `#${it.productId}`)}${it.product?.nameAr ? ` / ${esc(it.product.nameAr)}` : ''}</span><span>${money(it.unitPrice * it.quantity)}</span></div>
       ${it.modifiers && it.modifiers.length ? `<div class="row sm muted"><span>+ ${esc(it.modifiers.map((m) => m.name).filter(Boolean).join(', '))}</span><span></span></div>` : ''}
       <div class="row sm muted"><span>@ ${money(it.unitPrice)}</span><span></span></div>`,
     )
@@ -181,7 +181,7 @@ function kotSection(order: OrderLike, items: OrderItemLike[], opts: { station?: 
   const rows = items
     .map(
       (it) => `
-      <div class="krow"><span class="qty">${it.quantity}x</span><span>${esc(it.product?.name ?? `#${it.productId}`)}</span></div>
+      <div class="krow"><span class="qty">${it.quantity}x</span><span>${esc(it.product?.name ?? `#${it.productId}`)}${it.product?.nameAr ? ` / ${esc(it.product.nameAr)}` : ''}</span></div>
       ${it.modifiers && it.modifiers.length ? `<div class="sm muted">→ ${esc(it.modifiers.map((m) => m.name).filter(Boolean).join(', '))}</div>` : ''}
       ${it.notes ? `<div class="sm muted">* ${esc(it.notes)}</div>` : ''}`,
     )
