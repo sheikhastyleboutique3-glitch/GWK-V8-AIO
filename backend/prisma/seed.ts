@@ -189,14 +189,17 @@ async function main() {
   const catBites    = await prisma.category.upsert({ where: { id: 13 }, update: { station: 'HOT KITCHEN' },     create: { id: 13, name: 'Light Bites',     nameAr: 'وجبات خفيفة',   icon: '🥪', sortOrder: 14, station: 'HOT KITCHEN' } });
 
   // Helper: create a sellable menu item + its recipe (BOM) in one go.
+  // `price` is the SALE price (what the customer pays); costPrice is computed
+  // later from the recipe BOM but we seed a rough estimate (~30% of sale).
   const menuItem = async (
     sku: string, name: string, nameAr: string, categoryId: number, price: number,
     components: Array<{ id: number; qty: number; unit: number }>,
   ) => {
+    const estimatedCost = Math.round(price * 0.3 * 100) / 100;
     const prod = await prisma.product.upsert({
       where: { sku },
-      update: { isSellable: true, productType: 'MENU', costPrice: price, categoryId, name, nameAr },
-      create: { sku, name, nameAr, categoryId, unitId: pcs.id, costPrice: price, isSellable: true, productType: 'MENU', taxCategory: 'FOOD', allergens: [] },
+      update: { isSellable: true, productType: 'MENU', salePrice: price, costPrice: estimatedCost, categoryId, name, nameAr },
+      create: { sku, name, nameAr, categoryId, unitId: pcs.id, salePrice: price, costPrice: estimatedCost, isSellable: true, productType: 'MENU', taxCategory: 'FOOD', allergens: [] },
     });
     await prisma.recipe.create({
       data: {

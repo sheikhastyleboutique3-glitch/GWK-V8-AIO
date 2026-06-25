@@ -220,7 +220,7 @@ export default function POSPage() {
         const found = prev.find((l) => l.productId === p.id && !l.modifiers?.length);
         if (found) return prev.map((l) => (l === found ? { ...l, quantity: l.quantity + 1 } : l));
       }
-      return [...prev, { productId: p.id, name: p.name, unitPrice: unitPrice ?? p.costPrice ?? 0, quantity: 1, modifiers }];
+      return [...prev, { productId: p.id, name: p.name, unitPrice: unitPrice ?? p.salePrice ?? p.costPrice ?? 0, quantity: 1, modifiers }];
     });
     setCoupon(null);
   };
@@ -235,7 +235,7 @@ export default function POSPage() {
       api.post(`/sales/orders/${loadedOrderId}/items`, {
         productId: p.product.id,
         quantity: 1,
-        unitPrice: p.unitPrice ?? p.product.costPrice ?? 0,
+        unitPrice: p.unitPrice ?? p.product.salePrice ?? p.product.costPrice ?? 0,
         modifiers: p.modifiers,
       }),
     onSuccess: refetchLoaded,
@@ -274,11 +274,11 @@ export default function POSPage() {
       const serial = window.prompt(t('pos.enterSerial', { name: p.name }) as string, '');
       if (serial === null) return;
       if (serial.trim()) {
-        addLine(p, p.costPrice ?? 0, [{ optionId: -1, name: `S/N ${serial.trim()}`, priceDelta: 0 }] as any);
+        addLine(p, p.salePrice ?? p.costPrice ?? 0, [{ optionId: -1, name: `S/N ${serial.trim()}`, priceDelta: 0 }] as any);
         return;
       }
     }
-    addLine(p, p.costPrice ?? 0, undefined);
+    addLine(p, p.salePrice ?? p.costPrice ?? 0, undefined);
   };
 
   const pickVariant = (v: any) => {
@@ -570,7 +570,7 @@ export default function POSPage() {
           groups={modProduct.groups}
           onClose={() => setModProduct(null)}
           onConfirm={(mods, delta) => {
-            addLine(modProduct.product, (modProduct.product.costPrice ?? 0) + delta, mods);
+            addLine(modProduct.product, (modProduct.product.salePrice ?? modProduct.product.costPrice ?? 0) + delta, mods);
             setModProduct(null);
           }}
         />
@@ -650,7 +650,10 @@ export default function POSPage() {
                   </div>
                   <div className="p-2">
                     <div className="font-medium text-sm text-gray-900 dark:text-gray-100 line-clamp-2">{p.name}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">{p.sku}</div>
+                    <div className="flex justify-between items-center mt-0.5">
+                      <span className="text-xs text-gray-500">{p.sku}</span>
+                      <span className="text-xs font-semibold text-primary">{Number(p.salePrice || p.costPrice || 0).toFixed(2)}</span>
+                    </div>
                   </div>
                 </button>
               ))}

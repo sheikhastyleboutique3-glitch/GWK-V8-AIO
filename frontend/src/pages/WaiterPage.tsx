@@ -146,7 +146,7 @@ export default function WaiterPage() {
       api.post(`/sales/orders/${activeOrderId}/items`, {
         productId: p.id,
         quantity: 1,
-        unitPrice: p.costPrice ?? 0,
+        unitPrice: p.salePrice ?? p.costPrice ?? 0,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['waiter-order', activeOrderId] });
@@ -372,7 +372,7 @@ export default function WaiterPage() {
                     <div className="p-2">
                       <div className="font-medium text-sm text-gray-900 dark:text-gray-100 line-clamp-2">{p.name}</div>
                       <div className="flex items-center justify-between mt-1">
-                        <span className="text-xs text-gray-500">{p.sku}</span>
+                        <span className="text-xs font-semibold text-primary">{Number(p.salePrice || p.costPrice || 0).toFixed(2)}</span>
                         {qty !== undefined && (
                           <span className={`text-[11px] font-medium ${qty <= 0 ? 'text-red-600' : 'text-gray-500'}`}>
                             {t('waiter.stock')}: {qty}
