@@ -133,14 +133,14 @@ export class TablesController {
     return this.svc.createTable(dto);
   }
 
-  @Patch('tables/:id') @Roles(...MANAGE)
-  updateTable(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateTableDto) {
-    return this.svc.updateTable(id, dto);
-  }
-
   @Patch('tables/bulk-positions') @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
   bulkUpdatePositions(@Body() dto: BulkPositionDto) {
     return this.svc.bulkUpdatePositions(dto.tables);
+  }
+
+  @Patch('tables/:id') @Roles(...MANAGE)
+  updateTable(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateTableDto) {
+    return this.svc.updateTable(id, dto);
   }
 
   @Delete('tables/:id') @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
