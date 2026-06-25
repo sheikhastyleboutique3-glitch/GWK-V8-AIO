@@ -1,31 +1,87 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { ReservationStatus, TableStatus } from '@prisma/client';
+import { ReservationStatus, TableShape, TableStatus } from '@prisma/client';
 
 @Injectable()
 export class TablesService {
   constructor(private prisma: PrismaService) {}
 
+  // ---- Floors (areas / zones) ----
+  listFloors(branchId?: number) {
+    return this.prisma.restaurantFloor.findMany({
+      where: { ...(branchId ? { branchId } : {}), isActive: true },
+      include: { tables: { where: { isActive: true }, orderBy: { name: 'asc' } } },
+      orderBy: { sortOrder: 'asc' },
+    });
+  }
+
+  createFloor(dto: { branchId: number; name: string; nameAr?: string; background?: string }) {
+    return this.prisma.restaurantFloor.create({
+      data: { branchId: dto.branchId, name: dto.name, nameAr: dto.nameAr, background: dto.background },
+    });
+  }
+
+  async updateFloor(id: number, dto: { name?: string; nameAr?: string; background?: string; sortOrder?: number; isActive?: boolean }) {
+    const f = await this.prisma.restaurantFloor.findUnique({ where: { id } });
+    if (!f) throw new NotFoundException(`Floor ${id} not found`);
+    return this.prisma.restaurantFloor.update({ where: { id }, data: dto });
+  }
+
+  async removeFloor(id: number) {
+    const f = await this.prisma.restaurantFloor.findUnique({ where: { id } });
+    if (!f) throw new NotFoundException(`Floor ${id} not found`);
+    return this.prisma.restaurantFloor.update({ where: { id }, data: { isActive: false } });
+  }
+
   // ---- Tables ----
-  listTables(branchId?: number) {
+  listTables(branchId?: number, floorId?: number) {
     return this.prisma.restaurantTable.findMany({
-      where: branchId ? { branchId } : undefined,
+      where: { ...(branchId ? { branchId } : {}), ...(floorId ? { floorId } : {}) },
+      include: { floor: { select: { id: true, name: true } } },
       orderBy: { name: 'asc' },
     });
   }
 
-  createTable(dto: { branchId: number; name: string; seats?: number }) {
+  createTable(dto: { branchId: number; name: string; seats?: number; floorId?: number; shape?: TableShape; posX?: number; posY?: number; width?: number; height?: number }) {
     return this.prisma.restaurantTable.create({
-      data: { branchId: dto.branchId, name: dto.name, seats: dto.seats ?? 2 },
+      data: {
+        branchId: dto.branchId,
+        name: dto.name,
+        seats: dto.seats ?? 2,
+        floorId: dto.floorId ?? null,
+        shape: dto.shape ?? TableShape.SQUARE,
+        posX: dto.posX ?? 0,
+        posY: dto.posY ?? 0,
+        width: dto.width ?? 80,
+        height: dto.height ?? 80,
+      },
     });
   }
 
   async updateTable(
     id: number,
-    dto: { name?: string; seats?: number; status?: TableStatus; isActive?: boolean },
+    dto: {
+      name?: string; seats?: number; status?: TableStatus; isActive?: boolean;
+      floorId?: number | null; shape?: TableShape;
+      posX?: number; posY?: number; width?: number; height?: number;
+    },
   ) {
     await this.getTable(id);
-    return this.prisma.restaurantTable.update({ where: { id }, data: dto });
+    return this.prisma.restaurantTable.update({ where: { id }, data: dto as any });
+  }
+
+  /** Bulk update positions (drag-and-drop save all at once). */
+  async bulkUpdatePositions(updates: { id: number; posX: number; posY: number; width?: number; height?: number; shape?: TableShape; seats?: number }[]) {
+    const results = [];
+    for (const u of updates) {
+      const data: any = { posX: u.posX, posY: u.posY };
+      if (u.width != null) data.width = u.width;
+      if (u.height != null) data.height = u.height;
+      if (u.shape != null) data.shape = u.shape;
+      if (u.seats != null) data.seats = u.seats;
+      results.push(await this.prisma.restaurantTable.update({ where: { id: u.id }, data }));
+    }
+    return results;
   }
 
   async getTable(id: number) {
