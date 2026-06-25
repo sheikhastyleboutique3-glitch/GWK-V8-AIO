@@ -42,6 +42,28 @@ export default function POSPage() {
   const [posView, setPosView] = useState<'floor' | 'order' | 'orders'>('floor');
   const [orderSearchQ, setOrderSearchQ] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('all');
+  // Floor plan edit mode (pencil toggle)
+  const [floorEditMode, setFloorEditMode] = useState(false);
+  const [floorDragging, setFloorDragging] = useState<{ id: number; startX: number; startY: number; origX: number; origY: number } | null>(null);
+  const [floorResizing, setFloorResizing] = useState<{ id: number; startX: number; startY: number; origW: number; origH: number } | null>(null);
+  const [floorLocalPos, setFloorLocalPos] = useState<Record<number, { posX: number; posY: number; width: number; height: number }>>({});
+  const [floorDirty, setFloorDirty] = useState(false);
+
+  const handleFloorDrag = (e: React.MouseEvent) => {
+    if (floorDragging) {
+      const dx = e.clientX - floorDragging.startX;
+      const dy = e.clientY - floorDragging.startY;
+      setFloorLocalPos((p) => ({ ...p, [floorDragging.id]: { ...p[floorDragging.id], posX: Math.max(0, floorDragging.origX + dx), posY: Math.max(0, floorDragging.origY + dy) } }));
+      setFloorDirty(true);
+    }
+    if (floorResizing) {
+      const dx = e.clientX - floorResizing.startX;
+      const dy = e.clientY - floorResizing.startY;
+      setFloorLocalPos((p) => ({ ...p, [floorResizing.id]: { ...p[floorResizing.id], width: Math.max(50, floorResizing.origW + dx), height: Math.max(50, floorResizing.origH + dy) } }));
+      setFloorDirty(true);
+    }
+  };
+  const handleFloorDragEnd = () => { setFloorDragging(null); setFloorResizing(null); };
 
   const [categoryId, setCategoryId] = useState<number | undefined>(undefined);
   const [search, setSearch] = useState('');
@@ -570,6 +592,16 @@ export default function POSPage() {
   const [activeFloorIdx, setActiveFloorIdx] = useState(0);
   const activeFloor = (floors || [])[activeFloorIdx] || null;
 
+  // Sync local positions when floor changes
+  useMemo(() => {
+    if (!activeFloor) return;
+    const pos: Record<number, { posX: number; posY: number; width: number; height: number }> = {};
+    (activeFloor.tables || []).filter((t: any) => t.isActive).forEach((t: any) => {
+      if (!floorLocalPos[t.id]) pos[t.id] = { posX: t.posX, posY: t.posY, width: t.width, height: t.height };
+    });
+    if (Object.keys(pos).length) setFloorLocalPos((prev) => ({ ...prev, ...pos }));
+  }, [activeFloor?.id, activeFloor?.tables?.length]);
+
   // ─── Orders list (for the Orders tab) ───
   const { data: allOrders } = useQuery({
     queryKey: ['pos-all-orders', branchId, orderStatusFilter],
@@ -636,59 +668,113 @@ export default function POSPage() {
       {/* ─── FLOOR PLAN VIEW ─── */}
       {posView === 'floor' && (
         <div>
-          {/* Floor tabs */}
-          {(floors?.length ?? 0) > 0 && (
-            <div className="flex gap-2 mb-4">
-              {(floors || []).map((f: any, idx: number) => (
-                <button key={f.id} onClick={() => setActiveFloorIdx(idx)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium ${activeFloorIdx === idx ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800'}`}>
-                  {f.name}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* Floor tabs + edit toggle */}
+          <div className="flex items-center gap-2 mb-4">
+            {(floors || []).map((f: any, idx: number) => (
+              <button key={f.id} onClick={() => setActiveFloorIdx(idx)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium ${activeFloorIdx === idx ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800'}`}>
+                {f.name}
+              </button>
+            ))}
+            {floorEditMode && (
+              <>
+                <button onClick={() => {
+                  const name = window.prompt('New area name:', '');
+                  if (name?.trim()) {
+                    api.post('/floors', { branchId, name: name.trim(), background: '#e9d5ff' }).then(() => {
+                      toast.success('Area created');
+                      qc.invalidateQueries({ queryKey: ['pos-floors'] });
+                    });
+                  }
+                }} className="px-3 py-2 rounded-lg border-2 border-dashed border-gray-300 text-xs text-gray-500">+ Area</button>
+                <button onClick={() => {
+                  const name = window.prompt('New table name:', `T${(activeFloor?.tables?.length || 0) + 1}`);
+                  if (name?.trim() && activeFloor) {
+                    const seats = parseInt(window.prompt('Seats:', '4') || '4', 10);
+                    api.post('/tables', {
+                      branchId, floorId: activeFloor.id, name: name.trim(), seats,
+                      shape: 'SQUARE', posX: 50 + Math.random() * 300, posY: 50 + Math.random() * 200, width: 90, height: 90,
+                    }).then(() => { toast.success('Table added'); qc.invalidateQueries({ queryKey: ['pos-floors'] }); });
+                  }
+                }} className="px-3 py-2 rounded-lg bg-primary text-white text-xs font-medium">+ Table</button>
+              </>
+            )}
+            <button onClick={() => setFloorEditMode(!floorEditMode)}
+              className={`ms-auto w-9 h-9 rounded-lg flex items-center justify-center text-lg transition ${floorEditMode ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200'}`}
+              title={floorEditMode ? 'Exit edit mode' : 'Edit floor plan'}>
+              ✏️
+            </button>
+          </div>
+
           {/* Floor canvas with positioned tables */}
           {activeFloor ? (
             <div className="relative rounded-2xl overflow-hidden border-2 border-gray-200 dark:border-gray-700"
-              style={{ width: '100%', maxWidth: 900, height: 500, background: activeFloor.background || '#e9d5ff' }}>
+              style={{ width: '100%', maxWidth: 900, height: 500, background: activeFloor.background || '#e9d5ff' }}
+              onMouseMove={floorEditMode ? handleFloorDrag : undefined}
+              onMouseUp={floorEditMode ? handleFloorDragEnd : undefined}
+              onMouseLeave={floorEditMode ? handleFloorDragEnd : undefined}>
               {(activeFloor.tables || []).filter((t: any) => t.isActive).map((table: any) => {
                 const hasOrder = pendingBills?.some((o: any) => o.tableName === table.name);
                 const isOccupied = table.status === 'OCCUPIED' || hasOrder;
                 const isRound = table.shape === 'ROUND';
                 const bgColor = isOccupied ? 'bg-red-400/80' : 'bg-emerald-400/80';
+                const pos = floorLocalPos[table.id] || { posX: table.posX, posY: table.posY, width: table.width, height: table.height };
                 return (
-                  <button
+                  <div
                     key={table.id}
-                    onClick={() => openTableOrder(table)}
-                    className={`absolute flex flex-col items-center justify-center text-white font-bold shadow-lg hover:scale-105 transition-transform ${bgColor} ${isRound ? 'rounded-full' : 'rounded-xl'}`}
-                    style={{ left: table.posX, top: table.posY, width: table.width, height: table.height }}
+                    onMouseDown={floorEditMode ? (e) => { e.preventDefault(); setFloorDragging({ id: table.id, startX: e.clientX, startY: e.clientY, origX: pos.posX, origY: pos.posY }); } : undefined}
+                    onClick={!floorEditMode ? () => openTableOrder(table) : undefined}
+                    onDoubleClick={floorEditMode ? () => {
+                      const name = window.prompt('Table name:', table.name);
+                      if (name === null) return;
+                      const seats = parseInt(window.prompt('Seats:', String(table.seats)) || String(table.seats), 10);
+                      const shapes = ['SQUARE', 'ROUND', 'RECTANGLE'];
+                      const shape = window.prompt(`Shape (${shapes.join('/')})`, table.shape) || table.shape;
+                      api.patch(`/tables/${table.id}`, { name: name || table.name, seats, shape }).then(() => qc.invalidateQueries({ queryKey: ['pos-floors'] }));
+                    } : undefined}
+                    className={`absolute flex flex-col items-center justify-center text-white font-bold shadow-lg transition-transform ${!floorEditMode ? 'cursor-pointer hover:scale-105' : 'cursor-grab active:cursor-grabbing'} ${bgColor} ${isRound ? 'rounded-full' : 'rounded-xl'}`}
+                    style={{ left: pos.posX, top: pos.posY, width: pos.width, height: pos.height }}
                   >
                     <span className="text-sm">{table.name}</span>
                     <span className="text-[10px] opacity-80">{table.seats} 👤</span>
                     {hasOrder && <span className="absolute top-1 right-1 w-3 h-3 bg-white rounded-full flex items-center justify-center text-[8px] text-gray-900">✓</span>}
-                  </button>
+                    {/* Resize handle in edit mode */}
+                    {floorEditMode && (
+                      <div
+                        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setFloorResizing({ id: table.id, startX: e.clientX, startY: e.clientY, origW: pos.width, origH: pos.height }); }}
+                        className="absolute bottom-0 right-0 w-4 h-4 bg-white/50 hover:bg-white/80 cursor-se-resize rounded-tl"
+                      />
+                    )}
+                  </div>
                 );
               })}
               {!(activeFloor.tables || []).filter((t: any) => t.isActive).length && (
                 <div className="absolute inset-0 flex items-center justify-center text-white/70 text-sm">
-                  No tables. Go to Tables page to set up your floor plan.
+                  {floorEditMode ? 'Click "+ Table" to add tables' : 'No tables. Click ✏️ to enter edit mode.'}
                 </div>
               )}
             </div>
           ) : (
             <div className="text-center py-16 text-gray-400">
-              <p>No floor plan configured. Go to <strong>Tables</strong> page to create areas and tables.</p>
-              <button onClick={() => setPosView('order')} className="mt-4 px-4 py-2 rounded-lg bg-primary text-white text-sm">
-                Go to Order Screen →
+              <p>No floor plan. Click ✏️ then "+ Area" to create one.</p>
+            </div>
+          )}
+          {floorEditMode && floorDirty && (
+            <button onClick={() => {
+              api.patch('/tables/bulk-positions', { tables: Object.entries(floorLocalPos).map(([id, p]) => ({ id: parseInt(id), ...p })) })
+                .then(() => { toast.success('Layout saved'); setFloorDirty(false); qc.invalidateQueries({ queryKey: ['pos-floors'] }); });
+            }} className="mt-3 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium animate-pulse">
+              Save Layout
+            </button>
+          )}
+          {/* New Order button (for non-table orders like takeaway) */}
+          {!floorEditMode && (
+            <div className="mt-4">
+              <button onClick={() => { setTableName(''); setPosView('order'); }} className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium">
+                + New Order (no table)
               </button>
             </div>
           )}
-          {/* New Order button (for non-table orders like takeaway) */}
-          <div className="mt-4">
-            <button onClick={() => { setTableName(''); setPosView('order'); }} className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium">
-              + New Order (no table)
-            </button>
-          </div>
         </div>
       )}
 

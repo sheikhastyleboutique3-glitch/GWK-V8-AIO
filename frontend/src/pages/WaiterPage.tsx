@@ -288,28 +288,34 @@ export default function WaiterPage() {
         {tablesLoading ? (
           <LoadingSpinner />
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          <div className="relative rounded-2xl overflow-hidden border-2 border-gray-200 dark:border-gray-700"
+            style={{ width: '100%', maxWidth: 900, height: 500, background: '#f0fdf4' }}>
             {(tables || []).filter((tb: TableRow) => tb.isActive).map((table: TableRow) => {
               const ord = orderForTable(table.name);
+              const isOccupied = table.status === 'OCCUPIED' || !!ord;
+              const isBillReq = table.status === 'BILL_REQUESTED';
+              const isReserved = table.status === 'RESERVED';
+              const bgColor = isBillReq ? 'bg-red-400/80' : isOccupied ? 'bg-amber-400/80' : isReserved ? 'bg-sky-400/80' : 'bg-emerald-400/80';
+              const isRound = (table as any).shape === 'ROUND';
               return (
                 <button
                   key={table.id}
                   onClick={() => openTable.mutate(table)}
                   disabled={openTable.isPending}
-                  className={`aspect-square rounded-2xl border-2 p-3 flex flex-col items-center justify-center text-center transition hover:shadow-md disabled:opacity-60 ${statusTone[table.status] || 'border-gray-300 bg-white dark:bg-gray-900'}`}
+                  className={`absolute flex flex-col items-center justify-center text-white font-bold shadow-lg hover:scale-105 transition-transform disabled:opacity-60 ${bgColor} ${isRound ? 'rounded-full' : 'rounded-xl'}`}
+                  style={{ left: (table as any).posX || 0, top: (table as any).posY || 0, width: (table as any).width || 90, height: (table as any).height || 90 }}
                 >
-                  <span className={`w-3 h-3 rounded-full mb-1 ${statusDot[table.status] || 'bg-gray-400'}`} />
-                  <span className="font-semibold text-sm text-gray-900 dark:text-gray-100">{table.name}</span>
-                  <span className="text-[11px] text-gray-500">{table.seats} {t('waiter.seats')}</span>
+                  <span className="text-sm">{table.name}</span>
+                  <span className="text-[10px] opacity-80">{table.seats} 👤</span>
                   {ord && (
-                    <span className="mt-1 text-[11px] font-medium text-gray-700 dark:text-gray-300">
-                      {ord.status === 'HELD' ? `⏸ ${t('waiter.held')}` : `#${ord.orderNo.slice(-4)}`}
+                    <span className="mt-0.5 text-[9px] bg-white/30 rounded px-1">
+                      {ord.status === 'HELD' ? '⏸' : `#${ord.orderNo.slice(-4)}`}
                     </span>
                   )}
                 </button>
               );
             })}
-            {!tables?.length && <p className="text-sm text-gray-400 col-span-full">{t('waiter.noTables')}</p>}
+            {!tables?.length && <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">{t('waiter.noTables')}</div>}
           </div>
         )}
       </div>
