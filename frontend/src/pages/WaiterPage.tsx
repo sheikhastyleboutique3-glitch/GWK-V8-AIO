@@ -300,7 +300,7 @@ export default function WaiterPage() {
       );
 
       if (newlyFired.length > 0) {
-        printKot(firedOrder, { items: newlyFired, waiter: waiterName, splitByStation: false });
+        printKot(firedOrder, { items: newlyFired, waiter: waiterName, splitByStation: true });
         // Mark all fired items as sent
         setSentItemIds((prev) => {
           const next = new Set(prev);
@@ -604,7 +604,7 @@ export default function WaiterPage() {
               )}
             </button>
             <button
-              onClick={() => order && printKot(order, { waiter: waiterName, splitByStation: false })}
+              onClick={() => order && printKot(order, { waiter: waiterName, splitByStation: true })}
               disabled={!order?.items?.length}
               className="w-full mb-2 py-2 rounded-xl bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
             >
