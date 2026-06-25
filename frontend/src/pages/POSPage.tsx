@@ -516,6 +516,8 @@ export default function POSPage() {
           combos: comboCart.map((c) => ({ comboId: c.comboId, choiceIds: c.choiceIds })),
         });
         orderId = created.data.id;
+        // Auto-fire to kitchen (send KOT) for new orders
+        await api.post(`/sales/orders/${orderId}/courses/1/fire`).catch(() => {});
       }
       for (const ten of tenders) {
         // Loyalty / eWallet card: draw the amount down from the card balance,
@@ -1237,6 +1239,21 @@ export default function POSPage() {
           {/* ─── ACTION BAR (Odoo-style quick actions) ─── */}
           <div className="border-t border-gray-200 dark:border-gray-800 mt-3 pt-3">
             <div className="grid grid-cols-3 gap-1.5 text-xs">
+              <button
+                onClick={() => {
+                  if (mode === 'existing' && loadedOrderId) {
+                    // Fire course 1 (or all unfired items) to kitchen
+                    api.post(`/sales/orders/${loadedOrderId}/courses/1/fire`).then(() => {
+                      toast.success('🔥 Sent to kitchen!');
+                      qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
+                      qc.invalidateQueries({ queryKey: ['kds-board'] });
+                    }).catch((e: any) => toast.error(e.response?.data?.message || 'Failed'));
+                  } else {
+                    toast('Create or load an order first, then fire to kitchen');
+                  }
+                }}
+                className="px-2 py-2 rounded-lg bg-orange-100 dark:bg-orange-500/10 text-orange-700 hover:bg-orange-200 dark:hover:bg-orange-500/20 text-center font-medium"
+              >🔥 Kitchen</button>
               <button
                 onClick={() => {
                   const note = window.prompt('Customer note (printed on receipt/KOT):');
