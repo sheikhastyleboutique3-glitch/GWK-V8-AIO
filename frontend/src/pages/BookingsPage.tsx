@@ -39,7 +39,7 @@ export default function BookingsPage() {
     queryKey: ['tables-for-booking', branchId],
     queryFn: () => api.get('/tables', { params: { branchId } }).then((r) => r.data.data),
     enabled: !!branchId,
-    staleTime: 300_000,
+    
   });
 
   const filtered = useMemo(() => {

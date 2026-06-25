@@ -70,7 +70,7 @@ export default function StaffTasksPage() {
     queryKey: ['users-for-tasks'],
     queryFn: () => api.get('/users').then((r) => r.data.data),
     enabled: canManage,
-    staleTime: 60_000,
+    
     retry: false,
   });
 

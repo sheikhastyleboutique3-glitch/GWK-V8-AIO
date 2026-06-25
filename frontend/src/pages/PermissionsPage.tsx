@@ -70,7 +70,7 @@ export default function PermissionsPage() {
   const { data: users, isLoading } = useQuery({
     queryKey: ['users-permissions'],
     queryFn: () => api.get('/users').then((r) => r.data.data),
-    staleTime: 60_000,
+    
   });
 
   const saveUserPerms = useMutation({

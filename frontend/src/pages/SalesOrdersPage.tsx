@@ -28,12 +28,12 @@ export default function SalesOrdersPage() {
   const { data: products } = useQuery({
     queryKey: ['products-for-quotes'],
     queryFn: () => api.get('/products', { params: { sellable: true, productType: 'MENU' } }).then((r) => r.data.data),
-    staleTime: 60_000,
+    
   });
   const { data: customers } = useQuery({
     queryKey: ['customers-for-quotes'],
     queryFn: () => api.get('/customers').then((r) => r.data.data),
-    staleTime: 60_000,
+    
   });
   const productList: any[] = Array.isArray(products) ? products : products?.items ?? [];
   const productName = (id: number) => productList.find((p) => p.id === id)?.name ?? `#${id}`;

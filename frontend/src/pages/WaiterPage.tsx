@@ -82,14 +82,14 @@ export default function WaiterPage() {
   const { data: categories } = useQuery({
     queryKey: ['categories'],
     queryFn: () => api.get('/categories', { params: { posVisible: true } }).then((r) => r.data.data),
-    staleTime: 300_000,
+    
     enabled: !!selectedTable,
   });
   // ---- Modifier groups (for product options: size, sugar, etc.) ----
   const { data: modifierGroups } = useQuery({
     queryKey: ['modifier-groups'],
     queryFn: () => api.get('/modifiers/groups').then((r) => r.data.data),
-    staleTime: 300_000,
+    
     enabled: !!selectedTable,
   });
   const { data: products, isLoading: productsLoading } = useQuery({
@@ -98,7 +98,7 @@ export default function WaiterPage() {
       api
         .get('/products', { params: { sellable: true, available: true, productType: 'MENU', ...(categoryId && { categoryId }), ...(search && { search }) } })
         .then((r) => r.data.data),
-    staleTime: 60_000,
+    
     enabled: !!selectedTable,
   });
   // Map product → its modifier groups using productLinks (same pattern as POSPage).
@@ -118,7 +118,7 @@ export default function WaiterPage() {
     queryKey: ['waiter-stock', branchId],
     queryFn: () => api.get('/inventory/grouped', { params: { branchId } }).then((r) => r.data.data),
     enabled: !!selectedTable && !!branchId,
-    staleTime: 30_000,
+    
   });
   const stockMap = useMemo(() => {
     const m = new Map<number, number>();

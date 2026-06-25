@@ -13,7 +13,14 @@ import './index.css';
 bootstrapTheme();
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, staleTime: 30000 } },
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: 0,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+    },
+  },
 });
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

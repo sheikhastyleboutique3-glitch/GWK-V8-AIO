@@ -15,7 +15,7 @@ export default function InvoicePreview({ settings }: { settings: Record<string, 
   const { data: general } = useQuery({
     queryKey: ['settings', 'general+branding'],
     queryFn: () => api.get('/settings').then(r => r.data.data),
-    staleTime: 60_000,
+    
   });
   const map: Record<string, string> = {};
   general?.forEach((s: any) => { map[s.key] = s.value; });

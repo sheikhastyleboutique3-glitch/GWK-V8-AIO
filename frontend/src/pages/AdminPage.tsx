@@ -298,7 +298,7 @@ export default function AdminPage() {
     queryKey: ['admin-stats'],
     queryFn: () => api.get('/admin/stats').then(r => r.data.data),
     enabled: user?.role === 'SUPER_ADMIN',
-    staleTime: 0,
+    
     refetchInterval: 30000,
   });
 

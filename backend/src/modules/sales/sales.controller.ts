@@ -38,7 +38,9 @@ export class OrderItemDto {
   @IsOptional() @IsNumber() discount?: number;
   @IsOptional() @IsNumber() taxAmount?: number;
   @IsOptional() @IsString() notes?: string;
-  @IsOptional() @Transform(({ obj }) => obj.modifiers, { toClassOnly: true }) modifiers?: any;
+  // Modifiers are stored as raw JSON — we bypass class-transformer entirely
+  // because enableImplicitConversion strips nested objects to empty arrays.
+  @IsOptional() modifiers?: any;
 }
 
 export class CreateOrderDto {

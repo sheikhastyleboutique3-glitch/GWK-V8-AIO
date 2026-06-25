@@ -32,7 +32,7 @@ export default function DashboardPage() {
   const branchParam = effectiveBranchId ? `?branchId=${effectiveBranchId}` : '';
   const branchQs    = effectiveBranchId ? `branchId=${effectiveBranchId}` : '';
 
-  const QUERY_OPTS = { staleTime: 0, refetchInterval: 30000, retry: 1 };
+  const QUERY_OPTS = {  refetchInterval: 30000, retry: 1 };
 
   const { data: stats } = useQuery({
     queryKey: ['req-stats', user?.role, effectiveBranchId],

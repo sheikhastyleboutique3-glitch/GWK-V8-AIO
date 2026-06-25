@@ -159,10 +159,10 @@ export default function PurchaseOrdersPage() {
   const { data: pos, isLoading } = useQuery({
     queryKey: ['purchase-orders', statusFilter, searchPO, supplierFilterPO, branchFilterPO, activeBranch?.id, fromDatePO, toDatePO],
     queryFn: () => api.get('/purchase-orders', { params: buildPOParams() }).then(r => r.data.data),
-    staleTime: 0,
+    
     refetchInterval: 30000,
   });
-  const { data: poStats } = useQuery({ queryKey: ['po-stats'], queryFn: () => api.get('/reports/purchase-order-stats').then(r => r.data.data), staleTime: 0 });
+  const { data: poStats } = useQuery({ queryKey: ['po-stats'], queryFn: () => api.get('/reports/purchase-order-stats').then(r => r.data.data) });
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => api.get('/settings').then(r => r.data.data) });
   const { data: suppliers } = useQuery({ queryKey: ['suppliers'], queryFn: () => api.get('/suppliers').then(r => r.data.data) });
   const { data: branches } = useQuery({ queryKey: ['branches'], queryFn: () => api.get('/branches').then(r => r.data.data) });

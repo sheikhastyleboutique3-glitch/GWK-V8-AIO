@@ -31,7 +31,7 @@ export default function ProductionPage() {
       const menu = await api.get('/products', { params: { productType: 'MENU' } }).then((r2) => r2.data.data);
       return [...(r.data.data || []), ...(menu || [])];
     }),
-    staleTime: 300_000,
+    
   });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['production'] });

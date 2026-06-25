@@ -32,7 +32,7 @@ export default function ModifiersPage() {
   const { data: products } = useQuery({
     queryKey: ['products-for-modifiers'],
     queryFn: () => api.get('/products', { params: { limit: 500 } }).then((r) => r.data.data),
-    staleTime: 60_000,
+    
   });
   const productList: any[] = Array.isArray(products) ? products : products?.items ?? [];
 

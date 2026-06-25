@@ -167,7 +167,7 @@ export default function Layout() {
     queryKey: ['branches-switcher'],
     queryFn: () => api.get('/branches').then(r => r.data.data),
     enabled: isSuperAdmin,
-    staleTime: 60000,
+    
   });
   const switcherBranches = isSuperAdmin ? (allBranchesList || []) : (user?.assignedBranches || []);
 

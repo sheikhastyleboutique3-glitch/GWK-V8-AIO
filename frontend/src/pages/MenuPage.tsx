@@ -37,7 +37,7 @@ export default function MenuPage() {
   const { data: categories } = useQuery({
     queryKey: ['pos-categories'],
     queryFn: () => api.get('/categories', { params: { posVisible: true } }).then((r) => r.data.data),
-    staleTime: 300_000,
+    
   });
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['menu-items'] });

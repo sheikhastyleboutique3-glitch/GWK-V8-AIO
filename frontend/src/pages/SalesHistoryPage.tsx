@@ -42,7 +42,7 @@ export default function SalesHistoryPage() {
   const { data: settings } = useQuery({
     queryKey: ['settings-receipt'],
     queryFn: () => api.get('/settings').then((r) => r.data.data),
-    staleTime: 300_000,
+    
   });
   const businessInfo = useMemo(() => {
     const m: Record<string, string> = {};

@@ -97,7 +97,7 @@ function useSyncTheme() {
     queryKey: ['settings', 'branding'],
     queryFn: () => api.get('/settings', { params: { group: 'branding' } }).then(r => r.data.data),
     enabled: !!user,
-    staleTime: 60_000,
+    
   });
   useEffect(() => {
     if (!data) return;

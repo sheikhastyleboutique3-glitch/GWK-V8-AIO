@@ -114,32 +114,32 @@ export default function POSPage() {
   const { data: categories } = useQuery({
     queryKey: ['pos-categories'],
     queryFn: () => api.get('/categories', { params: { posVisible: true } }).then((r) => r.data.data),
-    staleTime: 300_000,
+    
   });
   const { data: deliveryPlatforms } = useQuery({
     queryKey: ['delivery-platforms'],
     queryFn: () => api.get('/delivery-platforms').then((r) => r.data.data),
-    staleTime: 300_000,
+    
   });
   const { data: discountRules } = useQuery({
     queryKey: ['discount-rules-active'],
     queryFn: () => api.get('/discount-rules', { params: { activeOnly: true } }).then((r) => r.data.data),
-    staleTime: 300_000,
+    
   });
   const { data: presets } = useQuery({
     queryKey: ['order-presets-active'],
     queryFn: () => api.get('/order-presets', { params: { activeOnly: true } }).then((r) => r.data.data),
-    staleTime: 300_000,
+    
   });
   const { data: combos } = useQuery({
     queryKey: ['combos'],
     queryFn: () => api.get('/combos').then((r) => r.data.data),
-    staleTime: 300_000,
+    
   });
   const { data: terminals } = useQuery({
     queryKey: ['payment-terminals'],
     queryFn: () => api.get('/payment-terminals').then((r) => r.data.data),
-    staleTime: 300_000,
+    
   });
   const { data: products, isLoading } = useQuery({
     queryKey: ['pos-products', categoryId, search],
@@ -147,14 +147,14 @@ export default function POSPage() {
       api
         .get('/products', { params: { sellable: true, available: true, productType: 'MENU', ...(categoryId && { categoryId }), ...(search && { search }) } })
         .then((r) => r.data.data),
-    staleTime: 60_000,
+    
   });
 
   // Branding / business info for receipts (company name, logo, address…).
   const { data: settings } = useQuery({
     queryKey: ['settings-receipt'],
     queryFn: () => api.get('/settings').then((r) => r.data.data),
-    staleTime: 300_000,
+    
   });
   const businessInfo = useMemo(() => {
     const map: Record<string, string> = {};
@@ -244,7 +244,7 @@ export default function POSPage() {
   const { data: modifierGroups } = useQuery({
     queryKey: ['modifier-groups'],
     queryFn: () => api.get('/modifiers/groups').then((r) => r.data.data),
-    staleTime: 300_000,
+    
   });
   const productGroups = useMemo(() => {
     const map = new Map<number, ModGroup[]>();
@@ -601,7 +601,7 @@ export default function POSPage() {
     queryKey: ['pos-floors', branchId],
     queryFn: () => api.get('/floors', { params: { branchId } }).then((r) => r.data.data),
     enabled: !!branchId,
-    staleTime: 10_000,
+    
     refetchInterval: 15_000,
   });
   const [activeFloorIdx, setActiveFloorIdx] = useState(0);

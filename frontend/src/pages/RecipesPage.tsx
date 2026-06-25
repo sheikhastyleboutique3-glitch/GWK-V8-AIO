@@ -34,17 +34,17 @@ export default function RecipesPage() {
   const { data: menuProducts } = useQuery({
     queryKey: ['menu-products-for-recipes'],
     queryFn: () => api.get('/products', { params: { sellable: true, productType: 'MENU' } }).then((r) => r.data.data),
-    staleTime: 60_000,
+    
   });
   const { data: rawProducts } = useQuery({
     queryKey: ['raw-products-for-recipes'],
     queryFn: () => api.get('/products', { params: { productType: 'RAW' } }).then((r) => r.data.data),
-    staleTime: 60_000,
+    
   });
   const { data: units } = useQuery({
     queryKey: ['units-for-recipes'],
     queryFn: () => api.get('/units').then((r) => r.data.data),
-    staleTime: 60_000,
+    
   });
 
   const menuList: any[] = Array.isArray(menuProducts) ? menuProducts : [];

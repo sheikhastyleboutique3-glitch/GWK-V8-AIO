@@ -85,7 +85,7 @@ export function useNotificationSounds(branchId?: number): void {
   const { data: settingsRows } = useQuery({
     queryKey: ['settings', 'sound'],
     queryFn: () => api.get('/settings', { params: { group: 'sound' } }).then(r => r.data.data),
-    staleTime: 30_000,
+    
     refetchInterval: 60_000,
   });
   const cfg = parseSoundSettings(settingsRows);

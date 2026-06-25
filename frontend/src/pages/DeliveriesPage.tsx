@@ -34,7 +34,7 @@ export default function DeliveriesPage() {
     queryKey: ['users-drivers'],
     queryFn: () => api.get('/users').then((r) => r.data.data),
     enabled: !isDriver,
-    staleTime: 60_000,
+    
     retry: false,
   });
   const drivers = (users || []).filter((u: any) => u.role === 'DRIVER');
