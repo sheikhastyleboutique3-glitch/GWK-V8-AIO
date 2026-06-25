@@ -3,9 +3,9 @@ services:
     image: postgres:15-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-erp_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-erp_password}
-      POSTGRES_DB: ${POSTGRES_DB:-gwk_v7}
+      POSTGRES_USER: ${POSTGRES_USER:-gwk_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gwk_password}
+      POSTGRES_DB: ${POSTGRES_DB:-gwk_v8_aio}
     # No host port published -- the backend reaches Postgres over the internal
     # Docker network. This avoids clashing with any Postgres already on the host.
     # To connect from the host for tools/backups, uncomment ONE of these (use a
@@ -15,7 +15,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-erp_user} -d ${POSTGRES_DB:-gwk_v7}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gwk_user} -d ${POSTGRES_DB:-gwk_v8_aio}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -32,7 +32,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-erp_user}:${POSTGRES_PASSWORD:-erp_password}@postgres:5432/${POSTGRES_DB:-gwk_v7}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-gwk_user}:${POSTGRES_PASSWORD:-gwk_password}@postgres:5432/${POSTGRES_DB:-gwk_v8_aio}
       JWT_SECRET: ${JWT_SECRET:-change_this_in_production_min_32_chars}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change_this_refresh_secret_min_32}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}

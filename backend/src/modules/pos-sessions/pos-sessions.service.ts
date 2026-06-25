@@ -1,10 +1,14 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { PosSessionStatus, OrderStatus } from '@prisma/client';
+import { FinanceService } from '../finance/finance.service';
+import { FinanceEntryType, PosSessionStatus, OrderStatus } from '@prisma/client';
 
 @Injectable()
 export class PosSessionsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private finance: FinanceService,
+  ) {}
 
   /** The single OPEN session for a branch, or null. */
   current(branchId: number) {
@@ -106,15 +110,48 @@ export class PosSessionsService {
     const session = await this.prisma.posSession.findUnique({ where: { id: sessionId } });
     if (!session) throw new NotFoundException(`Session ${sessionId} not found`);
     if (session.status !== PosSessionStatus.OPEN) throw new BadRequestException('Session is already closed.');
+
+    // Compute expected cash from sales within this session.
+    const orders = await this.prisma.order.findMany({
+      where: { sessionId, status: OrderStatus.COMPLETED },
+      include: { payments: true },
+    });
+    const cashSales = orders.reduce(
+      (sum, o) => sum + o.payments.filter((p) => p.method === 'CASH' && !p.isReversed).reduce((s, p) => s + p.amount, 0),
+      0,
+    );
+    const movements = await this.prisma.posCashMovement.findMany({ where: { sessionId } });
+    const cashIn = movements.filter((m) => m.type === 'CASH_IN').reduce((s, m) => s + m.amount, 0);
+    const cashOut = movements.filter((m) => m.type === 'CASH_OUT').reduce((s, m) => s + m.amount, 0);
+    const expectedCash = +(session.openingFloat + cashSales + cashIn - cashOut).toFixed(2);
+    const cashDifference = +((closingCounted ?? 0) - expectedCash).toFixed(2);
+
     await this.prisma.posSession.update({
       where: { id: sessionId },
       data: {
         status: PosSessionStatus.CLOSED,
+        expectedCash,
         closingCounted: closingCounted ?? 0,
+        cashDifference,
         closedById: userId ?? null,
         closedAt: new Date(),
       },
     });
+
+    // Post cash variance to the finance journal (even when 0, for audit completeness).
+    if (cashDifference !== 0) {
+      await this.finance.create({
+        type: FinanceEntryType.CASH_DIFFERENCE,
+        amount: cashDifference,
+        branchId: session.branchId,
+        sourceType: 'pos_session',
+        sourceId: session.id,
+        reference: session.sessionNo,
+        notes: `Session ${session.sessionNo} cash variance: counted ${closingCounted}, expected ${expectedCash}`,
+        createdById: userId,
+      });
+    }
+
     return this.report(sessionId);
   }
 

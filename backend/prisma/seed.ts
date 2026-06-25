@@ -388,6 +388,7 @@ async function main() {
     { userId: u.bar.id,   branchId: branchDoha.id,  isPrimary: true  },
     { userId: u.pas.id,   branchId: branchDoha.id,  isPrimary: true  },
     { userId: u.cash.id,  branchId: branchDoha.id,  isPrimary: true  },
+    { userId: u.wait.id,  branchId: branchDoha.id,  isPrimary: true  },
     { userId: u.clean.id, branchId: branchDoha.id,  isPrimary: true  },
     { userId: u.kitW.id,  branchId: branchWakra.id, isPrimary: true  },
   ];
