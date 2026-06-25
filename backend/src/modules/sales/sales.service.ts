@@ -534,10 +534,15 @@ export class SalesService {
       update: { firedAt: now },
       create: { orderId, courseNo, status: KdsStatus.QUEUED, firedAt: now },
     });
-    // Items that haven't been sent yet get firedAt timestamp (so they appear on KDS)
-    // but stay QUEUED — kitchen staff manually advances them to PREPARING
+    // Fire items matching this course OR items with no course assigned (default
+    // behavior: course 1 picks up all "unassigned" items so a single fire
+    // sends everything to the kitchen — matching Odoo's behaviour where items
+    // without explicit course go with the first fire).
+    const courseFilter = courseNo === 1
+      ? { orderId, firedAt: null, OR: [{ courseNo: 1 }, { courseNo: null }] }
+      : { orderId, courseNo, firedAt: null };
     await this.prisma.orderItem.updateMany({
-      where: { orderId, courseNo, firedAt: null },
+      where: courseFilter as any,
       data: { firedAt: now },
     });
     this.events.emit(KDS_CHANGED, { branchId: order.branchId });

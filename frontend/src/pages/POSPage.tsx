@@ -1342,7 +1342,7 @@ export default function POSPage() {
                 )}
                 {l.modifiers && l.modifiers.length > 0 && (
                   <div className="text-[11px] text-gray-500 mt-0.5">
-                    {l.modifiers.map((m: any) => m.name).join(', ')}
+                    {l.modifiers.filter((m: any) => m?.name).map((m: any) => m.name).join(', ') || null}
                   </div>
                 )}
                 <div className="flex justify-between items-center mt-1">
@@ -1472,21 +1472,28 @@ export default function POSPage() {
                 onClick={async () => {
                   if (mode === 'existing' && loadedOrderId) {
                     try {
-                      // Get items BEFORE firing to know which are new
-                      const beforeItems = (loadedOrder?.items || []).filter((it: any) => it.firedAt);
-                      const beforeIds = new Set(beforeItems.map((it: any) => it.id));
+                      // Track which items were already fired before this action
+                      const beforeFiredIds = new Set(
+                        (loadedOrder?.items || []).filter((it: any) => it.firedAt).map((it: any) => it.id)
+                      );
 
                       const res = await api.post(`/sales/orders/${loadedOrderId}/courses/1/fire`);
                       const firedOrder = res.data?.data;
 
-                      // Print KOT only for NEWLY fired items (not already-fired ones)
                       if (firedOrder) {
-                        const newItems = (firedOrder.items || []).filter((it: any) => it.firedAt && !beforeIds.has(it.id));
-                        if (newItems.length > 0) {
-                          printKot(firedOrder, { items: newItems, splitByStation: true });
+                        // Items that are NOW fired but weren't before = newly fired
+                        const newlyFired = (firedOrder.items || []).filter(
+                          (it: any) => it.firedAt && !beforeFiredIds.has(it.id)
+                        );
+                        if (newlyFired.length > 0) {
+                          // Print only newly fired items
+                          printKot(firedOrder, { items: newlyFired, splitByStation: true });
                         } else {
-                          // All items were already fired — print everything as fallback
-                          printKot(firedOrder, { splitByStation: true });
+                          // Nothing new to fire — print all unfired items as fallback
+                          const unfired = (firedOrder.items || []).filter((it: any) => !it.isVoided);
+                          if (unfired.length > 0) {
+                            printKot(firedOrder, { items: unfired, splitByStation: true });
+                          }
                         }
                       }
                       toast.success('🔥 Sent to kitchen + KOT printed!', { duration: 3000 });

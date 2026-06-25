@@ -65,7 +65,7 @@ export default function ModifierModal({
       for (const id of ids) {
         const opt = g.options.find((o) => o.id === id);
         if (opt) {
-          all.push({ optionId: opt.id, name: opt.name, priceDelta: opt.priceDelta, componentProductId: opt.componentProductId, qtyToDeduct: opt.qtyToDeduct });
+          all.push({ optionId: opt.id, name: opt.name || opt.nameAr || `Option #${opt.id}`, priceDelta: opt.priceDelta, componentProductId: opt.componentProductId, qtyToDeduct: opt.qtyToDeduct });
           delta += opt.priceDelta;
         }
       }
@@ -107,7 +107,7 @@ export default function ModifierModal({
                         onClick={() => toggle(g, o.id)}
                         className={`text-left px-3 py-2 rounded-lg border text-sm transition ${on ? 'bg-primary text-white border-primary' : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700'}`}
                       >
-                        <span>{o.name}</span>
+                        <span>{o.name || o.nameAr || `Option #${o.id}`}</span>
                         {o.priceDelta ? <span className="block text-xs opacity-80">+{o.priceDelta.toFixed(2)}</span> : null}
                       </button>
                     );

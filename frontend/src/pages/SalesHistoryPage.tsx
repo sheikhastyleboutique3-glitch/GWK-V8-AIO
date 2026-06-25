@@ -158,7 +158,7 @@ export default function SalesHistoryPage() {
                   <div className="space-y-1 mb-2">
                     {(o.items || []).map((it: any) => (
                       <div key={it.id} className="flex justify-between text-xs">
-                        <span>{it.quantity} × {it.product?.name ?? `#${it.productId}`}{Array.isArray(it.modifiers) && it.modifiers.length ? ` (${it.modifiers.map((m: any) => m.name).join(', ')})` : ''}</span>
+                        <span>{it.quantity} × {it.product?.name ?? `#${it.productId}`}{Array.isArray(it.modifiers) && it.modifiers.filter((m: any) => m?.name).length ? ` (${it.modifiers.filter((m: any) => m?.name).map((m: any) => m.name).join(', ')})` : ''}</span>
                         <span>{(it.unitPrice * it.quantity).toFixed(2)}</span>
                       </div>
                     ))}
