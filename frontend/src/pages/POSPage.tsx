@@ -655,7 +655,7 @@ export default function POSPage() {
   };
 
   // ---- Multi-order table state ----
-  const [tableOrderPicker, setTableOrderPicker] = useState<{ table: any; orders: any[] } | null>(null);
+  const [tableOrderPicker, setTableOrderPicker] = useState<{ tableName: string; orders: any[] } | null>(null);
   // ---- Split bill modal state ----
   const [splitModal, setSplitModal] = useState(false);
   const [splitSelected, setSplitSelected] = useState<Record<number, number>>({});
@@ -664,41 +664,36 @@ export default function POSPage() {
   // Open a table from the floor plan → switch to order view
   const openTableOrder = async (table: any) => {
     try {
-      // Check ALL existing OPEN/HELD orders for this table (multi-order support)
-      const tableOrders = (pendingBills || []).filter((o: any) => o.tableName === table.name);
-      if (tableOrders.length > 1) {
-        // If we were just working on one of these orders, auto-resume it
-        const previous = tableOrders.find((o: any) => o.id === loadedOrderId);
-        if (previous) {
-          loadBill(previous);
-          setPosView('order');
-          return;
-        }
-        // Otherwise show picker
-        setTableOrderPicker({ table, orders: tableOrders });
-        return;
-      }
-      if (tableOrders.length === 1) {
-        loadBill(tableOrders[0]);
-      } else {
-        // Create a new order for this table
-        const { data } = await api.post('/sales/orders', { branchId, channel: 'DINE_IN', tableName: table.name });
+      const tName = table.name;
+      // Find ALL pending (OPEN/HELD) orders for this specific table
+      const tableOrders = (pendingBills || []).filter((o: any) => o.tableName === tName);
+
+      if (tableOrders.length === 0) {
+        // No orders → create a new one
+        const { data } = await api.post('/sales/orders', { branchId, channel: 'DINE_IN', tableName: tName });
         setLoadedOrderId(data.data.id);
-        setTableName(table.name);
+        setTableName(tName);
         qc.invalidateQueries({ queryKey: ['pos-pending'] });
+        setPosView('order');
+      } else if (tableOrders.length === 1) {
+        // Exactly 1 order → open it directly
+        loadBill(tableOrders[0]);
+        setPosView('order');
+      } else {
+        // Multiple orders → show picker (always, no auto-resume)
+        setTableOrderPicker({ tableName: tName, orders: tableOrders });
       }
-      setPosView('order');
     } catch (e: any) {
       toast.error(e.response?.data?.message || 'Failed to open table');
     }
   };
 
   // Create a NEW additional order for a table that already has orders
-  const addOrderToTable = async (tableName: string) => {
+  const addOrderToTable = async (tName: string) => {
     try {
-      const { data } = await api.post('/sales/orders', { branchId, channel: 'DINE_IN', tableName });
+      const { data } = await api.post('/sales/orders', { branchId, channel: 'DINE_IN', tableName: tName });
       setLoadedOrderId(data.data.id);
-      setTableName(tableName);
+      setTableName(tName);
       setTableOrderPicker(null);
       qc.invalidateQueries({ queryKey: ['pos-pending'] });
       setPosView('order');
@@ -990,12 +985,16 @@ export default function POSPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setTableOrderPicker(null)}>
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-base font-bold mb-1">{t('pos.tableOrders')}</h3>
-            <p className="text-xs text-gray-500 mb-3">{tableOrderPicker.table.name} — {tableOrderPicker.orders.length} {t('pos.activeOrders')}</p>
+            <p className="text-xs text-gray-500 mb-3">{tableOrderPicker.tableName} — {tableOrderPicker.orders.length} {t('pos.activeOrders')}</p>
             <div className="space-y-2 mb-4 max-h-[50vh] overflow-y-auto">
               {tableOrderPicker.orders.map((o: any) => (
                 <button
                   key={o.id}
-                  onClick={() => { loadBill(o); setTableOrderPicker(null); setPosView('order'); }}
+                  onClick={() => {
+                    loadBill(o);
+                    setTableOrderPicker(null);
+                    setPosView('order');
+                  }}
                   className="w-full text-left px-3 py-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-primary hover:bg-primary/5 transition"
                 >
                   <div className="flex justify-between items-center">
@@ -1009,7 +1008,7 @@ export default function POSPage() {
               ))}
             </div>
             <button
-              onClick={() => addOrderToTable(tableOrderPicker.table.name)}
+              onClick={() => addOrderToTable(tableOrderPicker.tableName)}
               className="w-full py-2.5 rounded-xl bg-primary text-white text-sm font-semibold"
             >
               + {t('pos.newOrderForTable')}
@@ -1213,9 +1212,6 @@ export default function POSPage() {
                 <button onClick={closeBill} className="text-xs text-gray-500 hover:text-gray-700" aria-label="Close bill">✕</button>
               </div>
               <div className="flex flex-wrap gap-1.5 mt-2">
-                <button onClick={() => splitBySeat.mutate()} disabled={splitBySeat.isPending} className="px-2 py-1 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800">
-                  🪑 {t('pos.splitBySeat')}
-                </button>
                 <button onClick={() => setSplitModal(true)} disabled={!loadedOrder?.items?.length} className="px-2 py-1 rounded text-xs font-medium bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300">
                   ✂ {t('pos.splitBill')}
                 </button>
