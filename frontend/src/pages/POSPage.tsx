@@ -17,6 +17,8 @@ interface CartLine {
   name: string;
   unitPrice: number;
   quantity: number;
+  discount?: number;
+  firedAt?: string | null;
   modifiers?: ChosenModifier[];
 }
 type Channel = 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY' | 'QR' | 'TALABAT' | 'SNOONU' | 'AGGREGATOR';
@@ -422,6 +424,8 @@ export default function POSPage() {
           name: it.product?.name ?? `#${it.productId}`,
           unitPrice: it.unitPrice,
           quantity: it.quantity,
+          discount: it.discount ?? 0,
+          firedAt: it.firedAt,
           modifiers: Array.isArray(it.modifiers) ? it.modifiers : undefined,
           notes: it.notes,
         }));
@@ -1329,7 +1333,15 @@ export default function POSPage() {
                   ) : (
                     <span className="text-xs text-gray-500">{l.unitPrice.toFixed(2)}</span>
                   )}
-                  <span className="text-sm font-semibold">{(l.unitPrice * l.quantity).toFixed(2)}</span>
+                  <div className="text-right">
+                    {(l.discount ?? 0) > 0 && (
+                      <div className="text-[10px] text-green-600 line-through">{(l.unitPrice * l.quantity).toFixed(2)}</div>
+                    )}
+                    <span className="text-sm font-semibold">{((l.unitPrice * l.quantity) - (l.discount ?? 0)).toFixed(2)}</span>
+                    {(l.discount ?? 0) > 0 && (
+                      <span className="text-[10px] text-green-600 ms-1">(-{(l.discount ?? 0).toFixed(2)})</span>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -1637,6 +1649,7 @@ export default function POSPage() {
                             setQtyAt(targetIdx, newQty);
                           } else if (line.itemId) {
                             try {
+                              // Reset firedAt when qty changes so Kitchen button will re-fire this item
                               await api.patch(`/sales/orders/${loadedOrderId}/items/${line.itemId}`, { quantity: newQty });
                               qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
                               toast.success(`Qty → ${newQty}`);

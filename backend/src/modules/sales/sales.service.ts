@@ -441,6 +441,10 @@ export class SalesService {
     if (dto.quantity !== undefined && dto.quantity > 0) {
       data.quantity = dto.quantity;
       data.lineTotal = dto.quantity * item.unitPrice - item.discount + item.taxAmount;
+      // Reset firedAt when qty changes — forces Kitchen to re-fire (new items for KOT)
+      if (dto.quantity !== item.quantity) {
+        data.firedAt = null;
+      }
     }
     if (dto.discount !== undefined) {
       data.discount = dto.discount;
