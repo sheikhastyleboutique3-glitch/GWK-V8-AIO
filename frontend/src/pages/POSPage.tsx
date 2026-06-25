@@ -664,10 +664,17 @@ export default function POSPage() {
   // Open a table from the floor plan → switch to order view
   const openTableOrder = async (table: any) => {
     try {
-      // Check ALL existing orders for this table (multi-order support)
+      // Check ALL existing OPEN/HELD orders for this table (multi-order support)
       const tableOrders = (pendingBills || []).filter((o: any) => o.tableName === table.name);
       if (tableOrders.length > 1) {
-        // Multiple orders on this table → show picker
+        // If we were just working on one of these orders, auto-resume it
+        const previous = tableOrders.find((o: any) => o.id === loadedOrderId);
+        if (previous) {
+          loadBill(previous);
+          setPosView('order');
+          return;
+        }
+        // Otherwise show picker
         setTableOrderPicker({ table, orders: tableOrders });
         return;
       }
@@ -1082,8 +1089,11 @@ export default function POSPage() {
                         // If user chose to pay now, complete the split order immediately
                         if (splitPayMethod !== 'later' && newOrder) {
                           await api.post(`/sales/orders/${newOrder.id}/payments`, { method: splitPayMethod, amount: newOrder.total });
-                          await api.post(`/sales/orders/${newOrder.id}/complete`, {});
+                          const { data: completed } = await api.post(`/sales/orders/${newOrder.id}/complete`, {});
+                          const doneOrder = completed?.data ?? newOrder;
                           toast.success(t('pos.splitPaid', { method: splitPayMethod }));
+                          // Auto-print receipt for the paid split portion
+                          printReceipt(doneOrder, businessInfo);
                         } else {
                           toast.success(t('pos.splitDone'));
                         }
@@ -1577,25 +1587,11 @@ export default function POSPage() {
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
               >🔒 Staff Note</button>
               <button
-                onClick={async () => {
-                  if (mode === 'existing' && loadedOrderId) {
-                    const items = loadedOrder?.items || [];
-                    if (items.length < 2) { toast.error('Need at least 2 items to split'); return; }
-                    const names = items.map((it: any, idx: number) => `${idx + 1}. ${it.product?.name || it.productId}`).join('\n');
-                    const input = window.prompt(`Split bill — enter item numbers to move to new ticket (comma-separated):\n\n${names}\n\ne.g. "1,3" moves items 1 and 3:`);
-                    if (!input) return;
-                    const indices = input.split(',').map(s => parseInt(s.trim(), 10) - 1).filter(i => i >= 0 && i < items.length);
-                    if (!indices.length) { toast.error('No valid items selected'); return; }
-                    const itemIds = indices.map(i => items[i].id);
-                    try {
-                      await api.post(`/sales/orders/${loadedOrderId}/split`, { itemIds });
-                      toast.success(`Split done — ${itemIds.length} items moved to new ticket`);
-                      qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
-                      qc.invalidateQueries({ queryKey: ['pos-pending'] });
-                      qc.invalidateQueries({ queryKey: ['pos-all-orders'] });
-                    } catch (e: any) { toast.error(e.response?.data?.message || 'Split failed'); }
+                onClick={() => {
+                  if (mode === 'existing' && loadedOrderId && loadedOrder?.items?.length >= 2) {
+                    setSplitModal(true);
                   } else {
-                    toast('Load an existing order to split');
+                    toast('Load an order with at least 2 items to split');
                   }
                 }}
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
