@@ -17,6 +17,8 @@ export default function KioskPage() {
   const [cart, setCart] = useState<{ productId: number; name: string; price: number; qty: number }[]>([]);
   const [tableName, setTableName] = useState('');
   const [placed, setPlaced] = useState<string | null>(null);
+  const [paymentStep, setPaymentStep] = useState(false);
+  const [paymentApproved, setPaymentApproved] = useState(false);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['kiosk-menu', configId],
@@ -40,6 +42,21 @@ export default function KioskPage() {
   };
   const setQty = (i: number, q: number) => setCart((prev) => prev.flatMap((l, idx) => (idx === i ? (q <= 0 ? [] : [{ ...l, qty: q }]) : [l])));
 
+  const pay = useMutation({
+    mutationFn: async () => {
+      const res = await api.post('/payment-methods/intents', { amount: total, currency: 'QAR', description: 'Kiosk self-order' });
+      const intent = res.data?.data || res.data;
+      if (intent.status === 'approved') {
+        setPaymentApproved(true);
+        return intent;
+      }
+      // Poll for approval (in production, redirect to checkoutUrl or show QR)
+      throw new Error('Payment pending — please complete payment');
+    },
+    onSuccess: () => { setPaymentApproved(true); toast.success('Payment approved!'); },
+    onError: (e: any) => toast.error(e.message || 'Payment failed'),
+  });
+
   const place = useMutation({
     mutationFn: () =>
       api.post(`/self-order/${configId}/order`, {
@@ -50,6 +67,8 @@ export default function KioskPage() {
       setPlaced(r.data?.data?.orderNo || r.data?.orderNo || 'OK');
       setCart([]);
       setTableName('');
+      setPaymentStep(false);
+      setPaymentApproved(false);
     },
     onError: (e: any) => toast.error(e.response?.data?.message || 'Failed to place order'),
   });
@@ -121,12 +140,23 @@ export default function KioskPage() {
             <span>{t('common.total')}</span><span>{total.toFixed(2)}</span>
           </div>
           <button
-            disabled={!cart.length || place.isPending || (data.config?.requireTable && !tableName)}
-            onClick={() => place.mutate()}
+            disabled={!cart.length || place.isPending || pay.isPending || (data.config?.requireTable && !tableName)}
+            onClick={() => {
+              if (data.config?.payOnline && !paymentApproved) {
+                pay.mutate();
+              } else {
+                place.mutate();
+              }
+            }}
             className="w-full py-3 rounded-xl bg-primary text-white font-semibold disabled:opacity-50"
           >
-            {t('kiosk.placeOrder')}
+            {pay.isPending ? 'Processing payment...' : place.isPending ? 'Placing...' : data.config?.payOnline && !paymentApproved ? `Pay ${total.toFixed(2)} QAR` : t('kiosk.placeOrder')}
           </button>
+          {paymentApproved && !place.isPending && (
+            <button onClick={() => place.mutate()} className="w-full py-2 rounded-xl bg-emerald-600 text-white font-medium mt-2">
+              ✓ Payment approved — Confirm Order
+            </button>
+          )}
         </div>
       </div>
     </div>
