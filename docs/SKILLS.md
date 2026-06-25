@@ -2,93 +2,149 @@
 
 Repeatable how-tos for operating and extending the system.
 
-> **Snapshot:** All POS/admin/kiosk features built & documented (Stage 1). The next stages have playbooks at the bottom — start with **Stage 2: prove the runtime (smoke test)**.
+---
+
+## POS Operations
+
+### Open a trading day
+1. Login as Cashier or Manager → **Sessions / Cash** → Click "Open Session"
+2. Enter the **opening cash float** (e.g., 1500.00) and optionally count denominations
+3. Session is now OPEN — orders can be created by POS and Waiter
+
+### Take an order (POS)
+1. Go to **POS** → Floor Plan → tap a table (or "+ New Order (no table)")
+2. Tap products to add them. Products with modifiers show a selection modal.
+3. Use the **numpad** (Qty / %Disc / Price) — tap an item first to select it (blue highlight)
+4. Click **Kitchen** to fire to KOT (prints only new unfired items)
+5. Click **Payment** → select tender (Cash/Card/etc.) → complete sale
+
+### Take an order (Waiter)
+1. Go to **Waiter** → tap a table on the floor plan
+2. Tap products (modifier modal appears for items with options)
+3. Use **+/−** buttons on each item to adjust quantity
+4. Click **Send to Kitchen** → prints KOT for newly added items only
+5. Click **Hold** or **Request Bill** → cashier picks it up in POS
+
+### Split a bill
+1. In POS, open an existing order → click **Split** in the action grid
+2. Select items and quantities to move to a new ticket
+3. Choose: **Cash** / **Card** (pays + completes the split immediately) or **Pay later** (creates a separate open order)
+
+### Fire to kitchen (KOT behavior)
+- **New items only:** Kitchen button only prints items not yet fired (`firedAt: null`)
+- **Qty change:** Changing quantity via numpad resets `firedAt` → re-fires with new qty
+- **Station split:** KOT splits into separate pages per station (BAR/DRINKS, HOT KITCHEN, PASTRY)
+- **Modifier display:** Options/variants show as `→ Extra shot, Large` below item name
+
+### Close & reconcile
+1. **Sessions / Cash** → expand session → "Close Session"
+2. Enter counted denominations → system shows expected vs counted + variance
+3. Print or download Z-Report PDF
+4. Variance posted to finance journal automatically
+
+### Correct a payment method (post-sale)
+1. Go to **Sales History** → expand a COMPLETED order
+2. Click **"Correct payment"** → select the correct method + enter reason
+3. Original payment soft-reversed, new one created, audit trail logged
+
+---
+
+## Waiter-specific
+
+### Multi-order tables
+- If a table has 2+ open orders, a picker modal shows all orders
+- Click one to open it, or "+ New order for this table"
+
+### Send to kitchen
+- Only **newly added items** print on KOT (tracked via `sentItemIds`)
+- The "Print KOT" button (printer icon) reprints the FULL order
+
+---
+
+## Reports
+
+### PDF Exports
+- **Sessions page:** "Download PDF" button → Z/X-Report PDF
+- **Sales History:** "Daily Sales PDF" button → full day summary with top products
+- **Per-order:** "PDF" button → professional receipt/invoice PDF
+
+### POS Reports page (`/pos-reports`)
+- **Product Sales:** quantities + revenue per product, category breakdown
+- **Staff Performance:** orders, revenue, avg ticket per user
+- **Tip Report:** total tips, by-staff, by-session
+- **Cash Reconciliation:** all closed sessions with variances
+- **End-of-Day Email:** manual trigger or automatic at 23:55
+
+---
 
 ## Dev skills
 
-### Add a new backend module (config CRUD)
-1. Create `backend/src/modules/<name>/<name>.{service,controller,module}.ts` (mirror `order-presets`).
-2. Service: Prisma `findAll/create/update/remove` (soft-delete via `isActive=false`).
-3. Controller: `@UseGuards(JwtAuthGuard, RolesGuard)`, `@Roles(...)`, REST verbs.
-4. Register the module in `backend/src/app.module.ts`.
-5. Build: `cd backend && npm run build`.
+### Add a new backend module
+1. Create `backend/src/modules/<name>/<name>.{service,controller,module}.ts`
+2. Service: Prisma CRUD. Controller: `@UseGuards(JwtAuthGuard, RolesGuard)`, `@Roles(...)`
+3. Register in `backend/src/app.module.ts`
+4. Build: `cd backend && npm run build`
 
-### Add an admin screen for it
-1. Create a thin page using `frontend/src/components/ConfigCrud.tsx` (see `OrderPresetsPage`).
-2. Add a route in `App.tsx` and a nav entry in `components/Layout.tsx` (Configuration group).
-3. Add EN + AR keys under `nav.*` and `cfg.*` (or a page-specific block).
-4. Build: `cd frontend && npx tsc --noEmit && npm run build`.
+### Add a frontend page
+1. Create `frontend/src/pages/<Name>Page.tsx`
+2. Add route in `App.tsx` with `<ProtectedRoute roles={[...]}>` wrapper
+3. Add nav entry in `components/Layout.tsx` (NAV_SECTIONS)
+4. Add i18n keys in `locales/en.json` + `locales/ar.json`
+5. Build: `cd frontend && npm run build`
 
-### Change the schema safely
-1. Edit `backend/prisma/schema.prisma`.
-2. Regenerate the baseline (fresh DB): `npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > prisma/migrations/00000000000000_init/migration.sql`. For an existing DB, add a new additive, idempotent migration instead.
-3. `npx prisma generate` → `npx prisma validate` → `npm run build`.
+### Change the schema
+1. Edit `backend/prisma/schema.prisma`
+2. `npx prisma db push` (dev) or add a migration
+3. `npx prisma generate` → `npm run build`
 
-### Ship a change
-`build (backend) → tsc+build (frontend) → JSON i18n parse → commit → push (twice) → verify on main`.
+### Add a modifier/option to a product
+1. **Modifiers** page → create a group (e.g., "Size") with options (S/M/L)
+2. Link the group to products via the product modifier assignment
+3. POS + Waiter will automatically show the selection modal
 
-## Operations skills
+### Important: modifiers DTO
+The `OrderItemDto.modifiers` field MUST be `@IsOptional() modifiers?: any` (NOT `@IsArray()`).
+`class-transformer` with `enableImplicitConversion: true` strips nested objects if typed as array.
 
-### Open a trading day
-Admin/cashier → **Sessions** → open session with the **opening cash count** (denominations). Orders can only be rung up inside an open session — **and** the branch must have an open session before *any* waiter/cashier can create a ticket (enforced in `sales.create`). Waiters don't open sessions; they ride the branch's open session.
+---
 
-### Toggle the session gate (require-open-session)
-The gate is controlled by Setting **`pos.requireOpenSession`** (default ON). To relax it (e.g. quick-service that runs "blind"), upsert that setting to value `"false"`:
-```sql
-INSERT INTO settings(key,value,"group","updatedAt") VALUES('pos.requireOpenSession','false','pos',now())
-ON CONFLICT(key) DO UPDATE SET value='false';
+## Deployment
+
+### Fresh install
+```bash
+git clone <repo>
+cd backend && npm install && npx prisma db push && npx prisma db seed && npm run build
+cd ../frontend && npm install && npm run build
+cd ../backend && npm run start:prod
 ```
-Set back to `"true"` (or delete the row) to re-enforce. Enforcement lives in `backend/src/modules/sales/sales.service.ts` → `create()`; the session id is stamped on the order at creation.
 
-### Close & reconcile
-Close session → enter the **counted drawer** (denominations). The system computes expected-vs-counted and posts the variance as a `CASH_DIFFERENCE` finance entry. Print the Z report.
+### Update (running system)
+```bash
+git pull
+cd backend && npm run build
+cd ../frontend && npm run build
+# Restart backend (pm2 restart / systemctl restart / re-run start:prod)
+```
 
-### Configure KOT printing
-**Configuration → Printers** (set IP/port per station) → assign a printer to each menu **Category** → run `agent/print-agent.mjs` on a store device on the same LAN.
-
-### Set up a combo / pricelist / preset
-- **Combos:** Configuration → Combos → add lines + choices.
-- **Pricelists:** Configuration → Pricelists (fixed or % off, by product/category). Pass `pricelistId` at checkout to auto-price.
-- **Presets:** Configuration → Order Presets (Dine-In/Takeout/Delivery); Takeout can carry a **Fiscal Position** for takeout tax.
-
-### Loyalty / eWallet
-Configuration → Loyalty → create a program, issue cards. At the till, the **Loyalty / eWallet** tender redeems card balance/points.
-
-### Self-order kiosk / QR
-Configuration → Self-Order → create a config; guests order at **`/kiosk/:configId`** (public, no login). Orders land as `isSelfOrder` for staff to confirm.
-
-### Card terminal
-Configuration → Payment Terminals (provider + identifier). At the till, the **Terminal** tender runs `/payment-terminals/:id/capture`. Replace the capture seam in `payment-terminals.service.ts` with the real vendor SDK on-site.
-
-## Troubleshooting quick refs
-- DB unreachable → check `DATABASE_URL` + PostgreSQL service.
-- CORS → `ALLOWED_ORIGINS` must equal the UI origin exactly.
-- KDS not live → ensure the `/socket.io/` proxy + WebSocket upgrade headers.
-- Migration `P3009` (fresh DB) → ensure the DB is empty before first `migrate deploy`.
-
-## Upcoming-stage playbooks
-See the roadmap in `docs/MEMORY.md` → *Status & Roadmap*.
-
-### Stage 2 — prove the runtime (smoke test)
-On a machine with PostgreSQL:
+### Reset database
 ```bash
 cd backend
-cp ../.env.example .env            # real DATABASE_URL + JWT secrets
-npm ci && npx prisma generate
-npx prisma migrate deploy && npx prisma db seed
-npm run start:dev                  # then walk the demo path:
-# open session (cashier) → waiter order → fire course → KDS bump →
-# cashier split-tender → close session → check Z-report + finance journal
+npx prisma db push --force-reset
+npx prisma db seed
 ```
-Log any runtime errors as issues; fix and re-run until the full cycle is clean.
 
-### Stage 3 — CI
-Add `.github/workflows/ci.yml` that on push/PR: installs deps, runs `prisma validate`,
-backend `npm run build`, frontend `npx tsc --noEmit && npm run build`, and (optionally)
-spins a Postgres service to run `migrate deploy` + seed as a smoke test.
+### Environment variables (backend `.env`)
+```env
+DATABASE_URL=postgresql://user:pass@localhost:5432/gwk_v8_aio
+JWT_SECRET=your-secret-key
+PORT=3000
 
-### Stage 4 — manager-approval enforcement
-The schema already has `DiscountRule.requiresManagerApproval`. To enforce: in
-`sales.service` (discount/void/refund paths) require a manager PIN via
-`auth.pinLogin` before applying; surface a PIN modal in the POS.
-
+# Optional: End-of-day email
+EOD_EMAIL_ENABLED=true
+EOD_EMAIL_RECIPIENTS=manager@company.qa
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=email@gmail.com
+SMTP_PASS=app-password
+SMTP_FROM=noreply@company.qa
+```

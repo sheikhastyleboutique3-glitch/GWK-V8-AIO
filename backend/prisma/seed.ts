@@ -1109,6 +1109,108 @@ async function main() {
   console.log(`✅ Notification Config (${notifConfigs.length})`);
 
   // ==========================================================================
+  // DEMO POS SESSION + ORDERS (realistic dine-in scenarios)
+  // ==========================================================================
+  // Open a POS session for Doha branch so orders can be created
+  const demoSession = await prisma.posSession.create({
+    data: {
+      sessionNo: `POS-DEMO-B2-0001`,
+      branchId: branches.doha.id,
+      status: 'OPEN',
+      openingFloat: 1500,
+      openedById: u.cashier.id,
+    },
+  });
+
+  // Demo Order 1: Table T1, dine-in with modifiers
+  const demoOrder1 = await prisma.order.create({
+    data: {
+      orderNo: 'ORD-DEMO-001',
+      branchId: branches.doha.id,
+      channel: 'DINE_IN',
+      tableName: 'T1',
+      sessionId: demoSession.id,
+      createdById: u.waiter.id,
+      status: 'COMPLETED',
+      completedAt: daysAgo(0),
+      subtotal: 44,
+      total: 44,
+      paidTotal: 44,
+      foodCost: 12,
+      grossProfit: 32,
+      items: {
+        create: [
+          { productId: p.espresso.id, quantity: 2, unitPrice: 10, lineTotal: 20, modifiers: [{ optionId: 1, name: 'Extra shot', priceDelta: 2 }, { optionId: 3, name: 'Small', priceDelta: 0 }], firedAt: daysAgo(0) },
+          { productId: p.butterCroissant.id, quantity: 1, unitPrice: 9, lineTotal: 9, firedAt: daysAgo(0) },
+          { productId: p.caffeLatte.id, quantity: 1, unitPrice: 15, lineTotal: 15, modifiers: [{ optionId: 5, name: 'MENU-002-L', priceDelta: 5 }], firedAt: daysAgo(0) },
+        ],
+      },
+      payments: {
+        create: [
+          { method: 'CASH', amount: 44, receivedById: u.cashier.id },
+        ],
+      },
+    },
+  });
+
+  // Demo Order 2: Table T3, completed, paid by card
+  const demoOrder2 = await prisma.order.create({
+    data: {
+      orderNo: 'ORD-DEMO-002',
+      branchId: branches.doha.id,
+      channel: 'DINE_IN',
+      tableName: 'T3',
+      sessionId: demoSession.id,
+      createdById: u.waiter.id,
+      status: 'COMPLETED',
+      completedAt: daysAgo(0),
+      subtotal: 60,
+      total: 60,
+      paidTotal: 60,
+      foodCost: 18,
+      grossProfit: 42,
+      tip: 5,
+      items: {
+        create: [
+          { productId: p.clubSandwich.id, quantity: 2, unitPrice: 22, lineTotal: 44, firedAt: daysAgo(0) },
+          { productId: p.freshLemon.id, quantity: 1, unitPrice: 14, lineTotal: 14, firedAt: daysAgo(0) },
+        ],
+      },
+      payments: {
+        create: [
+          { method: 'CARD', amount: 60, receivedById: u.cashier.id },
+        ],
+      },
+    },
+  });
+
+  // Demo Order 3: Table T5, still OPEN (waiter hasn't finished)
+  const demoOrder3 = await prisma.order.create({
+    data: {
+      orderNo: 'ORD-DEMO-003',
+      branchId: branches.doha.id,
+      channel: 'DINE_IN',
+      tableName: 'T5',
+      sessionId: demoSession.id,
+      createdById: u.waiter.id,
+      status: 'OPEN',
+      subtotal: 37,
+      total: 37,
+      items: {
+        create: [
+          { productId: p.cappuccino.id, quantity: 1, unitPrice: 17, lineTotal: 17, modifiers: [{ optionId: 1, name: 'Extra shot', priceDelta: 2 }, { optionId: 2, name: 'Whole milk', priceDelta: 0 }, { optionId: 3, name: 'Small', priceDelta: 0 }], firedAt: daysAgo(0) },
+          { productId: p.cheesecake.id, quantity: 1, unitPrice: 20, lineTotal: 20, firedAt: daysAgo(0) },
+        ],
+      },
+    },
+  });
+
+  // Mark table T5 as occupied
+  await prisma.restaurantTable.updateMany({ where: { branchId: branches.doha.id, name: 'T5' }, data: { status: 'OCCUPIED' } });
+
+  console.log('✅ Demo POS Session + 3 Orders (1 completed cash, 1 completed card+tip, 1 open on T5)');
+
+  // ==========================================================================
   // SEQUENCE RESYNC — critical: rows above were inserted with explicit ids,
   // which does NOT advance Postgres id sequences. Realign them so the first
   // runtime create() (e.g. the alerts scheduler) doesn't collide on id.
