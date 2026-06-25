@@ -141,6 +141,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [branchDropdown, setBranchDropdown] = useState(false);
   const isRTL = i18n.language === 'ar';
 
@@ -213,7 +214,8 @@ export default function Layout() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed lg:static inset-y-0 z-30 w-64 bg-primary text-primary-fg flex flex-col transform transition-transform duration-300 lg:translate-x-0
+        className={`fixed lg:static inset-y-0 z-30 bg-primary text-primary-fg flex flex-col transform transition-all duration-300 lg:translate-x-0
+          ${sidebarCollapsed ? 'w-16' : 'w-64'}
           ${isRTL ? 'right-0' : 'left-0'}
           ${sidebarOpen ? 'translate-x-0' : (isRTL ? 'translate-x-full' : '-translate-x-full')}`}
       >
@@ -222,7 +224,7 @@ export default function Layout() {
             <div className="w-9 h-9 rounded-lg bg-accent flex items-center justify-center flex-shrink-0">
               <BuildingStorefrontIcon className="w-5 h-5 text-accent-fg" />
             </div>
-            <div className="min-w-0">
+            <div className={`min-w-0 ${sidebarCollapsed ? 'hidden' : ''}`}>
               <h1 className="text-sm font-bold leading-tight truncate">{t('app.name')}</h1>
               <p className="text-xs text-white/50 truncate">{t('app.tagline')}</p>
             </div>
@@ -235,7 +237,7 @@ export default function Layout() {
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-3 scrollbar-hide">
           {visibleSections.map((section) => (
             <div key={section.label}>
-              <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-wider text-white/35">
+              <p className={`px-3 mb-1 text-[10px] font-semibold uppercase tracking-wider text-white/35 ${sidebarCollapsed ? 'hidden' : ''}`}>
                 {t(`navGroups.${section.label}`)}
               </p>
               <div className="space-y-0.5">
@@ -253,9 +255,9 @@ export default function Layout() {
                       }
                     >
                       <Icon className="w-5 h-5 flex-shrink-0" />
-                      <span className="truncate">{t(`nav.${item.key}`)}</span>
-                      {item.key === 'alerts' && unreadAlerts > 0 && badge(unreadAlerts)}
-                      {item.key === 'notifications' && unreadNotifs > 0 && badge(unreadNotifs)}
+                      {!sidebarCollapsed && <span className="truncate">{t(`nav.${item.key}`)}</span>}
+                      {!sidebarCollapsed && item.key === 'alerts' && unreadAlerts > 0 && badge(unreadAlerts)}
+                      {!sidebarCollapsed && item.key === 'notifications' && unreadNotifs > 0 && badge(unreadNotifs)}
                     </NavLink>
                   );
                 })}
@@ -270,20 +272,24 @@ export default function Layout() {
             <div className="w-9 h-9 rounded-full bg-accent flex items-center justify-center text-sm font-bold flex-shrink-0 text-accent-fg">
               {user?.firstName?.[0]}{user?.lastName?.[0]}
             </div>
-            <div className="flex-1 min-w-0">
+            <div className={`flex-1 min-w-0 ${sidebarCollapsed ? 'hidden' : ''}`}>
               <p className="text-sm font-semibold truncate">{displayName}</p>
               <p className="text-xs text-white/50">{t(`roles.${user?.role}`)}</p>
               {(isAllBranches || branchName) && <p className="text-xs text-white/40 truncate">{isAllBranches ? t('dashboard.allBranches') : branchName}</p>}
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={toggleLang} className="flex-1 flex items-center justify-center gap-1.5 text-xs bg-white/10 hover:bg-white/20 text-white/80 hover:text-white rounded-lg px-2 py-1.5 transition-theme">
+            <button onClick={toggleLang} className={`flex-1 flex items-center justify-center gap-1.5 text-xs bg-white/10 hover:bg-white/20 text-white/80 hover:text-white rounded-lg px-2 py-1.5 transition-theme ${sidebarCollapsed ? 'hidden' : ''}`}>
               <GlobeAltIcon className="w-4 h-4" />{i18n.language === 'ar' ? 'English' : 'عربي'}
             </button>
-            <button onClick={handleLogout} className="flex-1 flex items-center justify-center gap-1.5 text-xs bg-destructive/20 hover:bg-destructive/40 text-red-200 hover:text-white rounded-lg px-2 py-1.5 transition-theme">
+            <button onClick={handleLogout} className={`flex-1 flex items-center justify-center gap-1.5 text-xs bg-destructive/20 hover:bg-destructive/40 text-red-200 hover:text-white rounded-lg px-2 py-1.5 transition-theme ${sidebarCollapsed ? 'hidden' : ''}`}>
               <ArrowRightOnRectangleIcon className="w-4 h-4" />{t('auth.logout')}
             </button>
           </div>
+          {/* Collapse toggle (desktop) */}
+          <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className="hidden lg:flex items-center justify-center w-full py-2 mt-2 text-white/50 hover:text-white hover:bg-white/10 rounded-lg transition text-xs gap-1">
+            {sidebarCollapsed ? '»' : '« Minimize'}
+          </button>
         </div>
       </aside>
 
