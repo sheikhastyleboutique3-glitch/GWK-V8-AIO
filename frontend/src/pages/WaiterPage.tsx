@@ -286,19 +286,37 @@ export default function WaiterPage() {
     [order, sentItemIds],
   );
 
-  const sendToKitchen = () => {
-    if (!order) return;
-    if (!newItems.length) {
-      toast(t('waiter.nothingNew'));
-      return;
+  const sendToKitchen = async () => {
+    if (!order || !activeOrderId) return;
+
+    try {
+      // Fire course 1 — sets firedAt on all unfired items in the DB
+      const { data: fireResult } = await api.post(`/sales/orders/${activeOrderId}/courses/1/fire`);
+      const firedOrder = fireResult.data;
+
+      // Items that are now fired but weren't before = newly sent
+      const newlyFired = (firedOrder.items || []).filter(
+        (it: any) => it.firedAt && !sentItemIds.has(it.id) && !it.isVoided
+      );
+
+      if (newlyFired.length > 0) {
+        printKot(firedOrder, { items: newlyFired, waiter: waiterName, splitByStation: true });
+        // Mark all fired items as sent
+        setSentItemIds((prev) => {
+          const next = new Set(prev);
+          (firedOrder.items || []).filter((it: any) => it.firedAt).forEach((it: any) => next.add(it.id));
+          return next;
+        });
+        toast.success(`🔥 ${newlyFired.length} item(s) sent to kitchen!`);
+      } else {
+        toast(t('waiter.nothingNew'));
+      }
+
+      qc.invalidateQueries({ queryKey: ['waiter-order', activeOrderId] });
+      qc.invalidateQueries({ queryKey: ['kds-board'] });
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || 'Kitchen fire failed');
     }
-    printKot(order, { items: newItems, waiter: waiterName, splitByStation: true });
-    setSentItemIds((prev) => {
-      const next = new Set(prev);
-      newItems.forEach((it: any) => next.add(it.id));
-      return next;
-    });
-    toast.success(t('waiter.sentToKitchen'));
   };
 
   if (!branchId) {

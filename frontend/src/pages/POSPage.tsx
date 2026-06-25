@@ -1442,26 +1442,25 @@ export default function POSPage() {
                 onClick={async () => {
                   if (mode === 'existing' && loadedOrderId) {
                     try {
-                      // Get fresh order data to check which items are already fired
-                      const { data: freshData } = await api.get(`/sales/orders/${loadedOrderId}`);
-                      const freshOrder = freshData.data;
-                      const alreadyFiredIds = new Set(
-                        (freshOrder.items || []).filter((it: any) => it.firedAt).map((it: any) => it.id)
+                      // Fire to kitchen — this sets firedAt on all unfired items
+                      const { data: fireResult } = await api.post(`/sales/orders/${loadedOrderId}/courses/1/fire`);
+                      const firedOrder = fireResult.data;
+
+                      // Compare: items that NOW have firedAt but loadedOrder had them without firedAt = newly fired
+                      const prevFiredIds = new Set(
+                        (loadedOrder?.items || []).filter((it: any) => it.firedAt).map((it: any) => it.id)
+                      );
+                      const newlyFired = (firedOrder.items || []).filter(
+                        (it: any) => it.firedAt && !prevFiredIds.has(it.id) && !it.isVoided
                       );
 
-                      // Fire to kitchen (sets firedAt on unfired items)
-                      await api.post(`/sales/orders/${loadedOrderId}/courses/1/fire`);
-
-                      // Print KOT only for items that were NOT already fired
-                      const newItems = (freshOrder.items || []).filter((it: any) => !it.isVoided && !alreadyFiredIds.has(it.id));
-                      if (newItems.length > 0) {
-                        printKot(freshOrder, { items: newItems, splitByStation: true });
+                      if (newlyFired.length > 0) {
+                        printKot(firedOrder, { items: newlyFired, splitByStation: true });
+                        toast.success(`🔥 ${newlyFired.length} item(s) sent to kitchen!`, { duration: 3000 });
                       } else {
-                        // All items were already fired — nothing new to print
                         toast('All items already sent to kitchen', { icon: '✓' });
                       }
 
-                      toast.success('🔥 Sent to kitchen!', { duration: 3000 });
                       qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
                       qc.invalidateQueries({ queryKey: ['kds-board'] });
                     } catch (e: any) {
