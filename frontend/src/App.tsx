@@ -18,6 +18,7 @@ import PurchaseOrdersPage from './pages/PurchaseOrdersPage';
 import TransfersPage from './pages/TransfersPage';
 import BranchesPage from './pages/BranchesPage';
 import UsersPage from './pages/UsersPage';
+import PermissionsPage from './pages/PermissionsPage';
 import CategoriesPage from './pages/CategoriesPage';
 import SettingsPage from './pages/SettingsPage';
 import AlertsPage from './pages/AlertsPage';
@@ -418,6 +419,14 @@ export default function App() {
           element={
             <ProtectedRoute roles={MANAGER_ROLES}>
               <UsersPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="permissions"
+          element={
+            <ProtectedRoute roles={['SUPER_ADMIN']}>
+              <PermissionsPage />
             </ProtectedRoute>
           }
         />

@@ -91,6 +91,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { key: 'staffTasks', path: '/staff-tasks', icon: ClipboardDocumentCheckIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CLEANER', 'WAREHOUSE'] },
       { key: 'users',      path: '/users',       icon: UsersIcon,                  roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'permissions', path: '/permissions', icon: ShieldCheckIcon,            roles: ['SUPER_ADMIN'] },
     ],
   },
   {
