@@ -9,6 +9,8 @@ Keep this current so anyone (human or AI) can ramp up fast.
 All-in-one Restaurant ERP + POS targeting **Odoo 19.0 POS (Bar/Restaurant) parity**.
 Multi-branch, bilingual EN/AR. One TypeScript stack end-to-end.
 
+> 📋 **Full Odoo-19 feature audit** (section-by-section coverage, mapped to models/modules) is in **[`docs/ODOO19-PARITY.md`](./ODOO19-PARITY.md)** — read it to avoid re-deriving the analysis.
+
 ## Architecture
 - **Backend:** NestJS 10, modular (one module per domain) under `backend/src/modules/`.
 - **ORM/DB:** Prisma 5 + PostgreSQL. Schema at `backend/prisma/schema.prisma` (~90 models).

@@ -215,7 +215,7 @@ Transactions are never hard-deleted: orders use a state machine, order lines sof
 | **4. Business features** | ⏳ Self-order online payment, bookings UI, manager-approval enforcement, closing discipline |
 | **5. Hardware + pilot** | ⏳ On-site terminal/scale/cash-machine SDKs, single-branch pilot, security/load hardening |
 
-> Detailed roadmap & rationale live in [docs/MEMORY.md](./docs/MEMORY.md#status--roadmap-remaining-stages).
+> Detailed roadmap & rationale live in [docs/MEMORY.md](./docs/MEMORY.md#status--roadmap-remaining-stages). Full Odoo-19 coverage audit: [docs/ODOO19-PARITY.md](./docs/ODOO19-PARITY.md).
 
 ## License
 Proprietary — © GWK. All rights reserved.
