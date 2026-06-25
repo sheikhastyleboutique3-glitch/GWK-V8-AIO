@@ -1606,7 +1606,7 @@ export default function POSPage() {
           </div>
 
           {/* ─── NUMPAD (Odoo-style Qty / %Disc / Price entry) ─── */}
-          {mode === 'new' && lines.length > 0 && (
+          {lines.length > 0 && (
             <div className="border-t border-gray-200 dark:border-gray-800 mt-2 pt-2">
               <div className="grid grid-cols-4 gap-1 text-xs">
                 {[7,8,9,'Qty',4,5,6,'%Disc',1,2,3,'Price','+/-',0,'.',''
@@ -1616,20 +1616,44 @@ export default function POSPage() {
                   return (
                     <button key={idx}
                       className={`py-2 rounded ${isAction ? 'bg-primary/10 text-primary font-medium' : 'bg-gray-50 dark:bg-gray-800 hover:bg-gray-100'} text-center text-sm`}
-                      onClick={() => {
-                        // Numpad actions apply to the LAST cart item
+                      onClick={async () => {
                         if (!lines.length) return;
                         const lastIdx = lines.length - 1;
-                        if (key === 'Qty') toast('Use +/- buttons on item to change qty');
-                        else if (key === '%Disc') {
+                        const lastLine = lines[lastIdx];
+                        if (key === 'Qty') {
+                          const q = window.prompt('Quantity:', String(lastLine.quantity));
+                          if (q && parseInt(q, 10) > 0) {
+                            if (mode === 'new') {
+                              setQtyAt(lastIdx, parseInt(q, 10));
+                            } else if (lastLine.itemId) {
+                              // For existing orders, we can't directly set qty — remove and re-add
+                              // Instead show a toast with instruction
+                              toast('Use ×1 buttons on the item to adjust quantity');
+                            }
+                          }
+                        } else if (key === '%Disc') {
                           const pct = window.prompt('Discount % for last item:', '10');
                           if (pct) {
-                            const disc = (lines[lastIdx].unitPrice * lines[lastIdx].quantity * parseFloat(pct)) / 100;
-                            toast.success(`-${disc.toFixed(2)} discount applied`);
+                            const disc = (lastLine.unitPrice * lastLine.quantity * parseFloat(pct)) / 100;
+                            if (mode === 'existing' && lastLine.itemId) {
+                              try {
+                                await api.patch(`/sales/orders/${loadedOrderId}/items/${lastLine.itemId}`, { discount: disc });
+                                toast.success(`-${disc.toFixed(2)} discount applied`);
+                                qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
+                              } catch { toast.error('Failed to apply discount'); }
+                            } else {
+                              toast.success(`-${disc.toFixed(2)} discount applied`);
+                            }
                           }
                         } else if (key === 'Price') {
-                          const p = window.prompt('New price:', String(lines[lastIdx].unitPrice));
-                          if (p) setPriceAt(lastIdx, parseFloat(p) || 0);
+                          const p = window.prompt('New price:', String(lastLine.unitPrice));
+                          if (p) {
+                            if (mode === 'new') {
+                              setPriceAt(lastIdx, parseFloat(p) || 0);
+                            } else {
+                              toast('Price change not available on existing orders');
+                            }
+                          }
                         }
                       }}
                     >{key}</button>

@@ -362,19 +362,46 @@ export class SalesService {
 
   async addItem(orderId: number, dto: OrderItemInput) {
     await this.assertOpen(orderId);
-    await this.prisma.orderItem.create({
-      data: {
-        orderId,
-        productId: dto.productId,
-        quantity: dto.quantity,
-        unitPrice: dto.unitPrice,
-        discount: dto.discount ?? 0,
-        taxAmount: dto.taxAmount ?? 0,
-        lineTotal: dto.quantity * dto.unitPrice - (dto.discount ?? 0) + (dto.taxAmount ?? 0),
-        notes: dto.notes,
-        modifiers: dto.modifiers && dto.modifiers.length ? (dto.modifiers as Prisma.InputJsonValue) : undefined,
-      },
+
+    // Check for existing identical item (same product + same modifiers + same price)
+    // that has NOT been fired to kitchen yet — merge quantities instead of duplicates.
+    // Items already fired (firedAt != null) are NEVER merged — they're already on KOT.
+    const existingItems = await this.prisma.orderItem.findMany({
+      where: { orderId, productId: dto.productId, unitPrice: dto.unitPrice, isVoided: false, firedAt: null },
     });
+    const modJson = dto.modifiers && dto.modifiers.length ? JSON.stringify(dto.modifiers) : null;
+    const match = existingItems.find((it) => {
+      const itModJson = it.modifiers ? JSON.stringify(it.modifiers) : null;
+      return itModJson === modJson;
+    });
+
+    if (match) {
+      // Merge: increment quantity on existing unfired line
+      const newQty = match.quantity + (dto.quantity || 1);
+      await this.prisma.orderItem.update({
+        where: { id: match.id },
+        data: {
+          quantity: newQty,
+          lineTotal: newQty * match.unitPrice - match.discount + match.taxAmount,
+        },
+      });
+    } else {
+      // New line (different product/modifiers/price, or previous one already fired)
+      await this.prisma.orderItem.create({
+        data: {
+          orderId,
+          productId: dto.productId,
+          quantity: dto.quantity,
+          unitPrice: dto.unitPrice,
+          discount: dto.discount ?? 0,
+          taxAmount: dto.taxAmount ?? 0,
+          lineTotal: dto.quantity * dto.unitPrice - (dto.discount ?? 0) + (dto.taxAmount ?? 0),
+          notes: dto.notes,
+          modifiers: dto.modifiers && dto.modifiers.length ? (dto.modifiers as Prisma.InputJsonValue) : undefined,
+        },
+      });
+    }
+
     const res = await this.recompute(orderId);
     this.events.emit(KDS_CHANGED, { branchId: res.branchId });
     return res;
