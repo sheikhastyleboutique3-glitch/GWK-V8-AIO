@@ -3,7 +3,7 @@
  * Uses @react-pdf/renderer to generate professional PDFs client-side.
  */
 import { pdf } from '@react-pdf/renderer';
-import { createElement } from 'react';
+import { createElement, type ReactElement } from 'react';
 import SessionReportPdf, { SessionReportProps } from './SessionReportPdf';
 import DailySalesPdf, { DailySalesProps } from './DailySalesPdf';
 import ReceiptPdf, { ReceiptPdfProps } from './ReceiptPdf';
@@ -33,7 +33,7 @@ async function downloadBlob(blob: Blob, filename: string) {
  * Download a Z-Report / X-Report PDF.
  */
 export async function downloadSessionReportPdf(props: SessionReportProps) {
-  const doc = createElement(SessionReportPdf, props);
+  const doc = createElement(SessionReportPdf, props) as unknown as ReactElement;
   const blob = await pdf(doc).toBlob();
   const sess = props.data.session;
   const type = sess?.status === 'CLOSED' ? 'Z-Report' : 'X-Report';
@@ -45,7 +45,7 @@ export async function downloadSessionReportPdf(props: SessionReportProps) {
  * Download a Daily Sales Report PDF.
  */
 export async function downloadDailySalesPdf(props: DailySalesProps) {
-  const doc = createElement(DailySalesPdf, props);
+  const doc = createElement(DailySalesPdf, props) as unknown as ReactElement;
   const blob = await pdf(doc).toBlob();
   const filename = `Daily-Sales_${props.date.replace(/\s/g, '_')}.pdf`;
   await downloadBlob(blob, filename);
@@ -55,7 +55,7 @@ export async function downloadDailySalesPdf(props: DailySalesProps) {
  * Download an Order Receipt PDF.
  */
 export async function downloadReceiptPdf(props: ReceiptPdfProps) {
-  const doc = createElement(ReceiptPdf, props);
+  const doc = createElement(ReceiptPdf, props) as unknown as ReactElement;
   const blob = await pdf(doc).toBlob();
   const filename = `Receipt_${props.order.orderNo}.pdf`;
   await downloadBlob(blob, filename);
