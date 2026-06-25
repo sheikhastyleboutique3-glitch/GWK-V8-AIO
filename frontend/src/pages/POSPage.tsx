@@ -64,8 +64,8 @@ export default function POSPage() {
   const mode: 'new' | 'existing' = loadedOrderId ? 'existing' : 'new';
 
   const { data: categories } = useQuery({
-    queryKey: ['categories'],
-    queryFn: () => api.get('/categories').then((r) => r.data.data),
+    queryKey: ['pos-categories'],
+    queryFn: () => api.get('/categories', { params: { posVisible: true } }).then((r) => r.data.data),
     staleTime: 300_000,
   });
   const { data: deliveryPlatforms } = useQuery({
@@ -616,7 +616,7 @@ export default function POSPage() {
             >
               All
             </button>
-            {(categories || []).slice(0, 8).map((c: any) => (
+            {(categories || []).map((c: any) => (
               <button
                 key={c.id}
                 onClick={() => setCategoryId(c.id)}
@@ -645,7 +645,7 @@ export default function POSPage() {
                     {p.imageUrl ? (
                       <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
                     ) : (
-                      <span className="text-2xl">🍽️</span>
+                      <span className="text-3xl">{p.category?.icon || '🍽️'}</span>
                     )}
                   </div>
                   <div className="p-2">

@@ -72,7 +72,7 @@ export default function WaiterPage() {
   // ---- Menu data (only needed once a table is open) ----
   const { data: categories } = useQuery({
     queryKey: ['categories'],
-    queryFn: () => api.get('/categories').then((r) => r.data.data),
+    queryFn: () => api.get('/categories', { params: { posVisible: true } }).then((r) => r.data.data),
     staleTime: 300_000,
     enabled: !!selectedTable,
   });

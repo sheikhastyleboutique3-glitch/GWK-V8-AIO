@@ -174,6 +174,11 @@ async function main() {
   // ==========================================================================
   // Raw materials above are ingredients, not menu items — hide them from POS.
   await prisma.product.updateMany({ data: { isSellable: false, productType: 'RAW' } });
+  // Hide raw-material categories from the POS touchscreen (they're internal/warehouse).
+  await prisma.category.updateMany({
+    where: { id: { in: [catCoffee.id, catPastry.id, catDairy.id, catPackaging.id, catCleaning.id, catDryGoods.id, catProduce.id, catMeat.id] } },
+    data: { isPosVisible: false },
+  });
 
   // Idempotent: clear menu-derived data so re-seeding is clean.
   await prisma.productModifierGroup.deleteMany({});
@@ -194,6 +199,7 @@ async function main() {
   const menuItem = async (
     sku: string, name: string, nameAr: string, categoryId: number, price: number,
     components: Array<{ id: number; qty: number; unit: number }>,
+    emoji = '🍽️',
   ) => {
     const estimatedCost = Math.round(price * 0.3 * 100) / 100;
     const prod = await prisma.product.upsert({

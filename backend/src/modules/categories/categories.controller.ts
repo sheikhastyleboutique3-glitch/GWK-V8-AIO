@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, ParseIntPipe, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { IsString, IsOptional, IsNotEmpty, IsInt, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
@@ -40,7 +40,9 @@ export class UpdateCategoryDto {
 export class CategoriesController {
   constructor(private svc: CategoriesService) {}
 
-  @Get() findAll() { return this.svc.findAll(); }
+  @Get() findAll(@Query('posVisible') posVisible?: string) {
+    return this.svc.findAll(posVisible === 'true');
+  }
 
   @Get(':id') findOne(@Param('id', ParseIntPipe) id: number) { return this.svc.findOne(id); }
 
