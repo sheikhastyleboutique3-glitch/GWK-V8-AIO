@@ -7,11 +7,15 @@ import App from './App';
 import { AuthProvider } from './contexts/AuthContext';
 import { bootstrapTheme } from './lib/theme';
 import { initSyncManager } from './lib/syncManager';
+import { loadThemeState, applyThemeToDOM } from './lib/themes';
 import './i18n';
 import './index.css';
 
 // Apply the saved theme synchronously before first paint (prevents color flash).
 bootstrapTheme();
+
+// Apply theme engine (colors + density) on boot.
+applyThemeToDOM(loadThemeState());
 
 // Register service worker for offline support.
 if ('serviceWorker' in navigator) {

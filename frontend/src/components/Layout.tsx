@@ -7,6 +7,7 @@ import api from '../lib/api';
 import { useNotificationSounds } from '../lib/useNotificationSounds';
 import { unlockAudio } from '../lib/sound';
 import { toggleDarkMode, loadThemeLocal } from '../lib/theme';
+import ThemePanel from './ThemePanel';
 import {
   Squares2X2Icon, ClipboardDocumentListIcon, ShoppingBagIcon, TrashIcon,
   BellAlertIcon, ChatBubbleLeftRightIcon, ArchiveBoxIcon, TruckIcon,
@@ -161,6 +162,7 @@ export default function Layout() {
   // Dark mode toggle (persisted locally; synced to backend via Settings page).
   const [dark, setDark] = useState(() => loadThemeLocal().dark);
   const toggleDark = () => setDark(toggleDarkMode());
+  const [showThemePanel, setShowThemePanel] = useState(false);
 
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
   const { data: allBranchesList } = useQuery({
@@ -283,6 +285,9 @@ export default function Layout() {
             <button onClick={toggleLang} className={`flex-1 flex items-center justify-center gap-1.5 text-xs bg-white/10 hover:bg-white/20 text-white/80 hover:text-white rounded-lg px-2 py-1.5 transition-theme ${sidebarCollapsed ? 'hidden' : ''}`}>
               <GlobeAltIcon className="w-4 h-4" />{i18n.language === 'ar' ? 'English' : 'عربي'}
             </button>
+            <button onClick={() => setShowThemePanel(true)} className={`flex items-center justify-center gap-1.5 text-xs bg-white/10 hover:bg-white/20 text-white/80 hover:text-white rounded-lg px-2 py-1.5 transition-theme ${sidebarCollapsed ? '' : ''}`} title="Theme & Display">
+              🎨
+            </button>
             <button onClick={handleLogout} className={`flex-1 flex items-center justify-center gap-1.5 text-xs bg-destructive/20 hover:bg-destructive/40 text-red-200 hover:text-white rounded-lg px-2 py-1.5 transition-theme ${sidebarCollapsed ? 'hidden' : ''}`}>
               <ArrowRightOnRectangleIcon className="w-4 h-4" />{t('auth.logout')}
             </button>
@@ -368,6 +373,9 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Theme Panel */}
+      {showThemePanel && <ThemePanel onClose={() => setShowThemePanel(false)} />}
     </div>
   );
 }
