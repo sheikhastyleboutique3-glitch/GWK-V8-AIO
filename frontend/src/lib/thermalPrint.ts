@@ -64,9 +64,13 @@ export function stationForItem(it: OrderItemLike): string {
   // Prefer the explicit per-category station set in Settings/Categories.
   const explicit = it.product?.category?.station;
   if (explicit && explicit.trim()) return explicit.trim().toUpperCase();
+  // Match by category name.
   const cat = (it.product?.category?.name || '').toLowerCase();
   if (/pastry|bakery|dessert|cake|sweet|pie|croissant|معجن|حلو|مخبوز|كيك/.test(cat)) return 'PASTRY / BAKERY';
-  if (/coffee|drink|beverage|juice|\bbar\b|tea|smoothie|soda|قهوة|مشروب|عصير|شاي/.test(cat)) return 'BAR / DRINKS';
+  if (/coffee|drink|beverage|juice|\bbar\b|tea|smoothie|soda|espresso|latte|cappuccino|mocha|macchiato|قهوة|مشروب|عصير|شاي/.test(cat)) return 'BAR / DRINKS';
+  // Secondary: check product name itself as fallback (e.g. "Espresso" in uncategorized menu).
+  const pName = (it.product?.name || '').toLowerCase();
+  if (/espresso|latte|cappuccino|americano|mocha|macchiato|coffee|tea|juice|smoothie|قهوة|شاي|عصير/.test(pName)) return 'BAR / DRINKS';
   return 'HOT KITCHEN';
 }
 

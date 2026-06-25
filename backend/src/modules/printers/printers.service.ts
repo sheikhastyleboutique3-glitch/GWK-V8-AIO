@@ -42,7 +42,7 @@ export class PrintersService {
   private stationFromCategory(name?: string | null): string {
     const c = (name || '').toLowerCase();
     if (/pastry|bakery|dessert|cake|sweet|croissant|معجن|حلو|مخبوز|كيك/.test(c)) return 'PASTRY';
-    if (/coffee|drink|beverage|juice|bar|tea|قهوة|مشروب|عصير|شاي/.test(c)) return 'BARISTA';
+    if (/coffee|drink|beverage|juice|bar|tea|espresso|latte|cappuccino|mocha|macchiato|قهوة|مشروب|عصير|شاي/.test(c)) return 'BARISTA';
     return 'HOT KITCHEN';
   }
 
@@ -95,7 +95,7 @@ export class PrintersService {
         quantity: it.quantity,
         name: it.product?.name ?? `#${it.productId}`,
         notes: it.notes,
-        modifiers: mods.map((m) => m?.name).filter(Boolean),
+        modifiers: mods.map((m) => m?.name || m?.nameAr).filter(Boolean),
       });
     }
 

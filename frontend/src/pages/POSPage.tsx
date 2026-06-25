@@ -664,10 +664,17 @@ export default function POSPage() {
   // Open a table from the floor plan → switch to order view
   const openTableOrder = async (table: any) => {
     try {
-      // Check ALL existing orders for this table (multi-order support)
+      // Check ALL existing OPEN/HELD orders for this table (multi-order support)
       const tableOrders = (pendingBills || []).filter((o: any) => o.tableName === table.name);
       if (tableOrders.length > 1) {
-        // Multiple orders on this table → show picker
+        // If we were just working on one of these orders, auto-resume it
+        const previous = tableOrders.find((o: any) => o.id === loadedOrderId);
+        if (previous) {
+          loadBill(previous);
+          setPosView('order');
+          return;
+        }
+        // Otherwise show picker
         setTableOrderPicker({ table, orders: tableOrders });
         return;
       }
@@ -1082,8 +1089,11 @@ export default function POSPage() {
                         // If user chose to pay now, complete the split order immediately
                         if (splitPayMethod !== 'later' && newOrder) {
                           await api.post(`/sales/orders/${newOrder.id}/payments`, { method: splitPayMethod, amount: newOrder.total });
-                          await api.post(`/sales/orders/${newOrder.id}/complete`, {});
+                          const { data: completed } = await api.post(`/sales/orders/${newOrder.id}/complete`, {});
+                          const doneOrder = completed?.data ?? newOrder;
                           toast.success(t('pos.splitPaid', { method: splitPayMethod }));
+                          // Auto-print receipt for the paid split portion
+                          printReceipt(doneOrder, businessInfo);
                         } else {
                           toast.success(t('pos.splitDone'));
                         }
@@ -1342,7 +1352,7 @@ export default function POSPage() {
                 )}
                 {l.modifiers && l.modifiers.length > 0 && (
                   <div className="text-[11px] text-gray-500 mt-0.5">
-                    {l.modifiers.map((m: any) => m.name).join(', ')}
+                    {l.modifiers.filter((m: any) => m?.name).map((m: any) => m.name).join(', ') || null}
                   </div>
                 )}
                 <div className="flex justify-between items-center mt-1">
@@ -1472,21 +1482,28 @@ export default function POSPage() {
                 onClick={async () => {
                   if (mode === 'existing' && loadedOrderId) {
                     try {
-                      // Get items BEFORE firing to know which are new
-                      const beforeItems = (loadedOrder?.items || []).filter((it: any) => it.firedAt);
-                      const beforeIds = new Set(beforeItems.map((it: any) => it.id));
+                      // Track which items were already fired before this action
+                      const beforeFiredIds = new Set(
+                        (loadedOrder?.items || []).filter((it: any) => it.firedAt).map((it: any) => it.id)
+                      );
 
                       const res = await api.post(`/sales/orders/${loadedOrderId}/courses/1/fire`);
                       const firedOrder = res.data?.data;
 
-                      // Print KOT only for NEWLY fired items (not already-fired ones)
                       if (firedOrder) {
-                        const newItems = (firedOrder.items || []).filter((it: any) => it.firedAt && !beforeIds.has(it.id));
-                        if (newItems.length > 0) {
-                          printKot(firedOrder, { items: newItems, splitByStation: true });
+                        // Items that are NOW fired but weren't before = newly fired
+                        const newlyFired = (firedOrder.items || []).filter(
+                          (it: any) => it.firedAt && !beforeFiredIds.has(it.id)
+                        );
+                        if (newlyFired.length > 0) {
+                          // Print only newly fired items
+                          printKot(firedOrder, { items: newlyFired, splitByStation: true });
                         } else {
-                          // All items were already fired — print everything as fallback
-                          printKot(firedOrder, { splitByStation: true });
+                          // Nothing new to fire — print all unfired items as fallback
+                          const unfired = (firedOrder.items || []).filter((it: any) => !it.isVoided);
+                          if (unfired.length > 0) {
+                            printKot(firedOrder, { items: unfired, splitByStation: true });
+                          }
                         }
                       }
                       toast.success('🔥 Sent to kitchen + KOT printed!', { duration: 3000 });
@@ -1570,25 +1587,11 @@ export default function POSPage() {
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
               >🔒 Staff Note</button>
               <button
-                onClick={async () => {
-                  if (mode === 'existing' && loadedOrderId) {
-                    const items = loadedOrder?.items || [];
-                    if (items.length < 2) { toast.error('Need at least 2 items to split'); return; }
-                    const names = items.map((it: any, idx: number) => `${idx + 1}. ${it.product?.name || it.productId}`).join('\n');
-                    const input = window.prompt(`Split bill — enter item numbers to move to new ticket (comma-separated):\n\n${names}\n\ne.g. "1,3" moves items 1 and 3:`);
-                    if (!input) return;
-                    const indices = input.split(',').map(s => parseInt(s.trim(), 10) - 1).filter(i => i >= 0 && i < items.length);
-                    if (!indices.length) { toast.error('No valid items selected'); return; }
-                    const itemIds = indices.map(i => items[i].id);
-                    try {
-                      await api.post(`/sales/orders/${loadedOrderId}/split`, { itemIds });
-                      toast.success(`Split done — ${itemIds.length} items moved to new ticket`);
-                      qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
-                      qc.invalidateQueries({ queryKey: ['pos-pending'] });
-                      qc.invalidateQueries({ queryKey: ['pos-all-orders'] });
-                    } catch (e: any) { toast.error(e.response?.data?.message || 'Split failed'); }
+                onClick={() => {
+                  if (mode === 'existing' && loadedOrderId && loadedOrder?.items?.length >= 2) {
+                    setSplitModal(true);
                   } else {
-                    toast('Load an existing order to split');
+                    toast('Load an order with at least 2 items to split');
                   }
                 }}
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"

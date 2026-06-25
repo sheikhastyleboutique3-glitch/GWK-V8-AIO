@@ -86,21 +86,6 @@ export default function WaiterPage() {
     staleTime: 300_000,
     enabled: !!selectedTable,
   });
-  // Map product → its modifier groups (only groups linked to product's category or directly).
-  const productGroups = useMemo(() => {
-    const map = new Map<number, ModGroup[]>();
-    if (!modifierGroups || !products) return map;
-    for (const p of products) {
-      const groups = (modifierGroups as any[]).filter((g: any) => {
-        if (g.productIds?.includes(p.id)) return true;
-        if (g.categoryIds?.includes(p.categoryId)) return true;
-        if (g.applyToAll) return true;
-        return false;
-      });
-      if (groups.length) map.set(p.id, groups);
-    }
-    return map;
-  }, [modifierGroups, products]);
   const { data: products, isLoading: productsLoading } = useQuery({
     queryKey: ['waiter-products', categoryId, search],
     queryFn: () =>
@@ -110,6 +95,19 @@ export default function WaiterPage() {
     staleTime: 60_000,
     enabled: !!selectedTable,
   });
+  // Map product → its modifier groups using productLinks (same pattern as POSPage).
+  const productGroups = useMemo(() => {
+    const map = new Map<number, ModGroup[]>();
+    if (!modifierGroups) return map;
+    (modifierGroups as any[]).forEach((g: any) => {
+      (g.productLinks || []).forEach((l: any) => {
+        const arr = map.get(l.productId) ?? [];
+        arr.push(g);
+        map.set(l.productId, arr);
+      });
+    });
+    return map;
+  }, [modifierGroups]);
   const { data: stock } = useQuery({
     queryKey: ['waiter-stock', branchId],
     queryFn: () => api.get('/inventory/grouped', { params: { branchId } }).then((r) => r.data.data),
@@ -451,7 +449,7 @@ export default function WaiterPage() {
                       <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                         {it.product?.name ?? `#${it.productId}`}
                       </div>
-                      {Array.isArray(it.modifiers) && it.modifiers.length > 0 && (
+                      {Array.isArray(it.modifiers) && it.modifiers.filter((m: any) => m?.name).length > 0 && (
                         <div className="text-[11px] text-amber-600 dark:text-amber-400 truncate">
                           + {it.modifiers.filter((m: any) => m?.name).map((m: any) => m.name).join(', ')}
                         </div>
