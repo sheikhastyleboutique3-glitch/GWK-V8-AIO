@@ -189,8 +189,19 @@ function kotSection(order: OrderLike, items: OrderItemLike[], opts: { station?: 
   const rows = items
     .map(
       (it) => {
-        const mods = Array.isArray(it.modifiers) ? it.modifiers : (typeof it.modifiers === 'string' ? JSON.parse(it.modifiers) : []);
-        const modText = mods.map((m: any) => m?.name || m?.nameAr).filter(Boolean).join(', ');
+        // Parse modifiers — handle array, JSON string, or null
+        let mods: any[] = [];
+        if (Array.isArray(it.modifiers)) {
+          mods = it.modifiers;
+        } else if (typeof it.modifiers === 'string') {
+          try { mods = JSON.parse(it.modifiers); } catch { mods = []; }
+        } else if (it.modifiers && typeof it.modifiers === 'object') {
+          mods = [it.modifiers]; // single object wrapped
+        }
+        const modText = mods
+          .map((m: any) => m?.name || m?.nameAr || m?.sku || (m?.priceDelta ? `+${m.priceDelta}` : ''))
+          .filter(Boolean)
+          .join(', ');
         return `
       <div class="krow"><span class="qty">${it.quantity}x</span><span>${esc(it.product?.name ?? `#${it.productId}`)}${it.product?.nameAr ? ` / ${esc(it.product.nameAr)}` : ''}</span></div>
       ${modText ? `<div class="sm muted" style="padding-left:2em;">→ ${esc(modText)}</div>` : ''}

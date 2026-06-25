@@ -1442,40 +1442,35 @@ export default function POSPage() {
                 onClick={async () => {
                   if (mode === 'existing' && loadedOrderId) {
                     try {
-                      // Track which items were already fired before this action
-                      const beforeFiredIds = new Set(
-                        (loadedOrder?.items || []).filter((it: any) => it.firedAt).map((it: any) => it.id)
-                      );
+                      // Fire to kitchen (sets firedAt on items for KDS)
+                      await api.post(`/sales/orders/${loadedOrderId}/courses/1/fire`);
 
-                      const res = await api.post(`/sales/orders/${loadedOrderId}/courses/1/fire`);
-                      const firedOrder = res.data?.data;
-
-                      if (firedOrder) {
-                        // Items that are NOW fired but weren't before = newly fired
-                        const newlyFired = (firedOrder.items || []).filter(
-                          (it: any) => it.firedAt && !beforeFiredIds.has(it.id)
-                        );
-                        if (newlyFired.length > 0) {
-                          // Print only newly fired items
-                          printKot(firedOrder, { items: newlyFired, splitByStation: true });
-                        } else {
-                          // Nothing new to fire — print all unfired items as fallback
-                          const unfired = (firedOrder.items || []).filter((it: any) => !it.isVoided);
-                          if (unfired.length > 0) {
-                            printKot(firedOrder, { items: unfired, splitByStation: true });
-                          }
-                        }
+                      // Print KOT from loadedOrder data (already has modifiers from fetch)
+                      const orderData = loadedOrder;
+                      if (orderData?.items?.length) {
+                        printKot(orderData, { splitByStation: true });
                       }
+
                       toast.success('🔥 Sent to kitchen + KOT printed!', { duration: 3000 });
                       qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
                       qc.invalidateQueries({ queryKey: ['kds-board'] });
                     } catch (e: any) {
                       const msg = e.response?.data?.message || 'Failed to fire to kitchen';
-                      toast.error(`❌ Kitchen fire failed: ${msg}\n\nCheck: Is the order open? Does it have items?`, { duration: 5000 });
+                      toast.error(`❌ Kitchen fire failed: ${msg}`, { duration: 5000 });
                     }
                   } else if (mode === 'new' && lines.length > 0) {
                     // New order: create it first, then fire to kitchen
                     try {
+                      // Build KOT items from local cart BEFORE creating (preserves modifier names)
+                      const kotItems = cart.map((l) => ({
+                        productId: l.productId,
+                        quantity: l.quantity,
+                        unitPrice: l.unitPrice,
+                        product: { name: l.name, nameAr: undefined, category: undefined },
+                        modifiers: l.modifiers,
+                        notes: undefined,
+                      }));
+
                       const { data: created } = await api.post('/sales/orders', {
                         branchId,
                         channel,
@@ -1485,13 +1480,20 @@ export default function POSPage() {
                         items: cart.map((l) => ({ productId: l.productId, quantity: l.quantity, unitPrice: l.unitPrice, modifiers: l.modifiers })),
                       });
                       const newOrderId = created.data.id;
-                      // Fire to kitchen
-                      const fireRes = await api.post(`/sales/orders/${newOrderId}/courses/1/fire`);
-                      if (fireRes.data?.data) printKot(fireRes.data.data, { splitByStation: true });
+                      const newOrder = created.data;
+
+                      // Fire to kitchen (sets firedAt on items for KDS)
+                      await api.post(`/sales/orders/${newOrderId}/courses/1/fire`).catch(() => {});
+
+                      // Print KOT from LOCAL cart data (guaranteed to have modifiers)
+                      // because the DB roundtrip might lose modifier names
+                      const kotOrder = { orderNo: newOrder.orderNo, tableName: newOrder.tableName || tableName, channel, items: kotItems };
+                      printKot(kotOrder as any, { splitByStation: true });
+
                       // Switch to existing mode with this order loaded
                       setLoadedOrderId(newOrderId);
                       setCart([]);
-                      setTableName(created.data.tableName || '');
+                      setTableName(newOrder.tableName || '');
                       toast.success('🔥 Order created & sent to kitchen!', { duration: 3000 });
                       qc.invalidateQueries({ queryKey: ['pos-pending'] });
                       qc.invalidateQueries({ queryKey: ['kds-board'] });
