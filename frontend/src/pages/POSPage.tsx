@@ -412,14 +412,17 @@ export default function POSPage() {
   // ---- Derived display values (mode-aware) ----
   const lines: CartLine[] = useMemo(() => {
     if (mode === 'existing') {
-      return (loadedOrder?.items || []).map((it: any) => ({
-        itemId: it.id,
-        productId: it.productId,
-        name: it.product?.name ?? `#${it.productId}`,
-        unitPrice: it.unitPrice,
-        quantity: it.quantity,
-        modifiers: Array.isArray(it.modifiers) ? it.modifiers : undefined,
-      }));
+      return (loadedOrder?.items || [])
+        .filter((it: any) => !it.isVoided)
+        .map((it: any) => ({
+          itemId: it.id,
+          productId: it.productId,
+          name: it.product?.name ?? `#${it.productId}`,
+          unitPrice: it.unitPrice,
+          quantity: it.quantity,
+          modifiers: Array.isArray(it.modifiers) ? it.modifiers : undefined,
+          notes: it.notes,
+        }));
     }
     return cart;
   }, [mode, loadedOrder, cart]);
@@ -1136,9 +1139,22 @@ export default function POSPage() {
 
           <div className="flex-1 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800 -mx-1 min-h-[6rem]">
             {lines.map((l, i) => (
-              <div key={l.itemId ?? `${l.productId}-${i}`} className="px-1 py-2">
+              <div key={l.itemId ?? `${l.productId}-${i}`} className="px-1 py-2"
+                onDoubleClick={async () => {
+                  // Double-click: add a note to this specific item (shows on KOT)
+                  if (mode === 'existing' && l.itemId) {
+                    const note = window.prompt(`Note for "${l.name}" (printed on KOT):`, (l as any).notes || '');
+                    if (note !== null) {
+                      try {
+                        await api.patch(`/sales/orders/${loadedOrderId}/items/${l.itemId}`, { notes: note });
+                        toast.success('Item note saved');
+                        qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
+                      } catch (e: any) { toast.error(e.response?.data?.message || 'Failed'); }
+                    }
+                  }
+                }}>
                 <div className="flex justify-between items-center gap-2">
-                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100 flex-1 line-clamp-1">{l.name}</span>
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100 flex-1 line-clamp-1 cursor-pointer" title="Double-click to add note">{l.name}</span>
                   {mode === 'new' ? (
                     <>
                       <button onClick={() => setQtyAt(i, l.quantity - 1)} className="w-7 h-7 rounded bg-gray-100 dark:bg-gray-800">−</button>
@@ -1148,10 +1164,23 @@ export default function POSPage() {
                   ) : (
                     <>
                       <span className="text-sm">×{l.quantity}</span>
-                      <button onClick={() => l.itemId && removeItemMut.mutate(l.itemId)} className="text-red-600 text-sm" aria-label="Remove">✕</button>
+                      <button onClick={async () => {
+                        if (!l.itemId) return;
+                        const reason = window.prompt(`Cancel "${l.name}"?\nReason (sent to kitchen):`);
+                        if (reason === null) return;
+                        try {
+                          await api.patch(`/sales/orders/${loadedOrderId}/items/${l.itemId}`, { isVoided: true, voidReason: reason || 'Cancelled' });
+                          toast.success(`${l.name} cancelled`);
+                          qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
+                          qc.invalidateQueries({ queryKey: ['kds-board'] });
+                        } catch (e: any) { toast.error(e.response?.data?.message || 'Failed'); }
+                      }} className="text-red-600 text-sm" aria-label="Cancel item" title="Cancel this item">✕</button>
                     </>
                   )}
                 </div>
+                {(l as any).notes && (
+                  <div className="text-[11px] text-amber-600 mt-0.5 italic">📝 {(l as any).notes}</div>
+                )}
                 {l.modifiers && l.modifiers.length > 0 && (
                   <div className="text-[11px] text-gray-500 mt-0.5">
                     {l.modifiers.map((m: any) => m.name).join(', ')}
@@ -1356,9 +1385,23 @@ export default function POSPage() {
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
               >🔒 Staff Note</button>
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (mode === 'existing' && loadedOrderId) {
-                    splitBySeat.mutate();
+                    const items = loadedOrder?.items || [];
+                    if (items.length < 2) { toast.error('Need at least 2 items to split'); return; }
+                    const names = items.map((it: any, idx: number) => `${idx + 1}. ${it.product?.name || it.productId}`).join('\n');
+                    const input = window.prompt(`Split bill — enter item numbers to move to new ticket (comma-separated):\n\n${names}\n\ne.g. "1,3" moves items 1 and 3:`);
+                    if (!input) return;
+                    const indices = input.split(',').map(s => parseInt(s.trim(), 10) - 1).filter(i => i >= 0 && i < items.length);
+                    if (!indices.length) { toast.error('No valid items selected'); return; }
+                    const itemIds = indices.map(i => items[i].id);
+                    try {
+                      await api.post(`/sales/orders/${loadedOrderId}/split`, { itemIds });
+                      toast.success(`Split done — ${itemIds.length} items moved to new ticket`);
+                      qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
+                      qc.invalidateQueries({ queryKey: ['pos-pending'] });
+                      qc.invalidateQueries({ queryKey: ['pos-all-orders'] });
+                    } catch (e: any) { toast.error(e.response?.data?.message || 'Split failed'); }
                   } else {
                     toast('Load an existing order to split');
                   }
@@ -1366,15 +1409,17 @@ export default function POSPage() {
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
               >✂️ Split</button>
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (mode === 'existing' && loadedOrderId && loadedOrder) {
+                    const reason = window.prompt(`Cancel "${loadedOrder.orderNo}"?\nReason:`);
+                    if (reason === null) return;
                     cancelOrderWithNote(loadedOrderId, loadedOrder.orderNo);
                   } else {
                     toast('Load an existing order to cancel');
                   }
                 }}
                 className="px-2 py-2 rounded-lg bg-red-50 dark:bg-red-500/10 text-red-600 hover:bg-red-100 dark:hover:bg-red-500/20 text-center font-medium"
-              >❌ Cancel</button>
+              >❌ Void All</button>
             </div>
           </div>
 

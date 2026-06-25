@@ -138,6 +138,16 @@ export class SalesController {
     return this.svc.removeItem(id, itemId);
   }
 
+  @Patch(':id/items/:itemId') @Roles(...POS_ROLES)
+  updateItem(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('itemId', ParseIntPipe) itemId: number,
+    @Body() dto: { notes?: string; isVoided?: boolean; voidReason?: string; seat?: number },
+    @CurrentUser('id') userId: number,
+  ) {
+    return this.svc.updateItem(id, itemId, dto, userId);
+  }
+
   @Patch(':id/hold') @Roles(...POS_ROLES)
   hold(@Param('id', ParseIntPipe) id: number) {
     return this.svc.setStatus(id, OrderStatus.HELD);

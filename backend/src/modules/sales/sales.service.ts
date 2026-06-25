@@ -388,6 +388,24 @@ export class SalesService {
     return this.recompute(orderId);
   }
 
+  /** Update an individual order item (notes, void, seat). */
+  async updateItem(orderId: number, itemId: number, dto: { notes?: string; isVoided?: boolean; voidReason?: string; seat?: number }, userId?: number) {
+    const item = await this.prisma.orderItem.findFirst({ where: { id: itemId, orderId } });
+    if (!item) throw new NotFoundException(`Item ${itemId} not found on order ${orderId}`);
+    const data: any = {};
+    if (dto.notes !== undefined) data.notes = dto.notes;
+    if (dto.seat !== undefined) data.seat = dto.seat;
+    if (dto.isVoided === true) {
+      data.isVoided = true;
+      data.voidReason = dto.voidReason || 'Cancelled';
+      data.voidedById = userId ?? null;
+      data.voidedAt = new Date();
+    }
+    await this.prisma.orderItem.update({ where: { id: itemId }, data });
+    this.events.emit(KDS_CHANGED, { branchId: (await this.prisma.order.findUnique({ where: { id: orderId }, select: { branchId: true } }))?.branchId });
+    return this.recompute(orderId);
+  }
+
   async setStatus(orderId: number, status: OrderStatus) {
     await this.assertOpen(orderId);
     await this.prisma.order.update({ where: { id: orderId }, data: { status } });
