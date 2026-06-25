@@ -626,6 +626,27 @@ export default function POSPage() {
     );
   }, [allOrders, orderSearchQ]);
 
+  // Cancel an order with confirmation + reason note + KOT print
+  const cancelOrderWithNote = async (orderId: number, orderNo: string) => {
+    const reason = window.prompt(`Cancel order ${orderNo}?\n\nEnter cancellation reason (printed on KOT):`);
+    if (reason === null) return; // user pressed Cancel on prompt
+    try {
+      await api.patch(`/sales/orders/${orderId}/void`);
+      // Fire a cancellation KOT to the kitchen
+      if (reason.trim()) {
+        await api.patch(`/sales/orders/${orderId}`, { notes: `❌ CANCELLED: ${reason.trim()}` }).catch(() => {});
+      }
+      toast.success(`Order ${orderNo} cancelled`);
+      qc.invalidateQueries({ queryKey: ['pos-all-orders'] });
+      qc.invalidateQueries({ queryKey: ['pos-pending'] });
+      qc.invalidateQueries({ queryKey: ['kds-board'] });
+      qc.invalidateQueries({ queryKey: ['waiter-active-orders'] });
+      if (loadedOrderId === orderId) { setLoadedOrderId(null); setPosView('floor'); }
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || 'Failed to cancel');
+    }
+  };
+
   // Open a table from the floor plan → switch to order view
   const openTableOrder = async (table: any) => {
     try {
@@ -815,6 +836,7 @@ export default function POSPage() {
                   <th className="text-left px-3 py-2">Table</th>
                   <th className="text-right px-3 py-2">Total</th>
                   <th className="text-left px-3 py-2">Status</th>
+                  <th className="text-center px-3 py-2"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -834,9 +856,16 @@ export default function POSPage() {
                         'bg-gray-100 text-gray-600'
                       }`}>{o.status === 'COMPLETED' ? 'Paid' : o.status}</span>
                     </td>
+                    <td className="px-3 py-2 text-center">
+                      {(o.status === 'OPEN' || o.status === 'HELD') && (
+                        <button onClick={(e) => { e.stopPropagation(); cancelOrderWithNote(o.id, o.orderNo); }}
+                          className="w-6 h-6 rounded-full bg-red-100 hover:bg-red-200 text-red-600 text-xs font-bold flex items-center justify-center"
+                          title="Cancel order">✕</button>
+                      )}
+                    </td>
                   </tr>
                 ))}
-                {!filteredOrders?.length && <tr><td colSpan={6} className="px-3 py-8 text-center text-gray-400">No orders found.</td></tr>}
+                {!filteredOrders?.length && <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-400">No orders found.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -1322,6 +1351,16 @@ export default function POSPage() {
                 }}
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
               >✂️ Split</button>
+              <button
+                onClick={() => {
+                  if (mode === 'existing' && loadedOrderId && loadedOrder) {
+                    cancelOrderWithNote(loadedOrderId, loadedOrder.orderNo);
+                  } else {
+                    toast('Load an existing order to cancel');
+                  }
+                }}
+                className="px-2 py-2 rounded-lg bg-red-50 dark:bg-red-500/10 text-red-600 hover:bg-red-100 dark:hover:bg-red-500/20 text-center font-medium"
+              >❌ Cancel</button>
             </div>
           </div>
 
