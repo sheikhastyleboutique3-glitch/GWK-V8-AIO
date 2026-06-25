@@ -13,8 +13,9 @@ export class KdsService {
     const items = await this.prisma.orderItem.findMany({
       where: {
         kdsStatus: { in: [KdsStatus.QUEUED, KdsStatus.PREPARING, KdsStatus.READY] },
+        isVoided: false,
         order: {
-          status: { in: [OrderStatus.OPEN, OrderStatus.HELD, OrderStatus.COMPLETED] },
+          status: { in: [OrderStatus.OPEN, OrderStatus.HELD, OrderStatus.IN_PROGRESS, OrderStatus.DRAFT] },
           ...(branchId ? { branchId } : {}),
         },
       },

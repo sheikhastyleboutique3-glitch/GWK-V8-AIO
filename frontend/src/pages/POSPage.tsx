@@ -520,7 +520,12 @@ export default function POSPage() {
         });
         orderId = created.data.id;
         // Auto-fire to kitchen (send KOT) for new orders
-        await api.post(`/sales/orders/${orderId}/courses/1/fire`).catch(() => {});
+        try {
+          await api.post(`/sales/orders/${orderId}/courses/1/fire`);
+        } catch {
+          // Non-blocking: if fire fails, order still proceeds to payment
+          toast('Note: Kitchen fire pending — items may not show on KDS yet', { icon: '⚠️' });
+        }
       }
       for (const ten of tenders) {
         // Loyalty / eWallet card: draw the amount down from the card balance,
@@ -626,13 +631,12 @@ export default function POSPage() {
     );
   }, [allOrders, orderSearchQ]);
 
-  // Cancel an order with confirmation + reason note + KOT print
+  // Cancel an order with confirmation + reason note (no KOT print)
   const cancelOrderWithNote = async (orderId: number, orderNo: string) => {
-    const reason = window.prompt(`Cancel order ${orderNo}?\n\nEnter cancellation reason (printed on KOT):`);
+    const reason = window.prompt(`Cancel order ${orderNo}?\n\nEnter cancellation reason:`);
     if (reason === null) return; // user pressed Cancel on prompt
     try {
       await api.patch(`/sales/orders/${orderId}/void`);
-      // Fire a cancellation KOT to the kitchen
       if (reason.trim()) {
         await api.patch(`/sales/orders/${orderId}`, { notes: `❌ CANCELLED: ${reason.trim()}` }).catch(() => {});
       }
@@ -1277,14 +1281,17 @@ export default function POSPage() {
           <div className="border-t border-gray-200 dark:border-gray-800 mt-3 pt-3">
             <div className="grid grid-cols-3 gap-1.5 text-xs">
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (mode === 'existing' && loadedOrderId) {
-                    // Fire course 1 (or all unfired items) to kitchen
-                    api.post(`/sales/orders/${loadedOrderId}/courses/1/fire`).then(() => {
-                      toast.success('🔥 Sent to kitchen!');
+                    try {
+                      await api.post(`/sales/orders/${loadedOrderId}/courses/1/fire`);
+                      toast.success('🔥 Sent to kitchen! Items now on KDS.', { duration: 3000 });
                       qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
                       qc.invalidateQueries({ queryKey: ['kds-board'] });
-                    }).catch((e: any) => toast.error(e.response?.data?.message || 'Failed'));
+                    } catch (e: any) {
+                      const msg = e.response?.data?.message || 'Failed to fire to kitchen';
+                      toast.error(`❌ Kitchen fire failed: ${msg}\n\nCheck: Is the order open? Does it have items?`, { duration: 5000 });
+                    }
                   } else {
                     toast('Create or load an order first, then fire to kitchen');
                   }
