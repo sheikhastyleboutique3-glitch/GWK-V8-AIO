@@ -63,6 +63,7 @@ import PricelistsPage from './pages/PricelistsPage';
 import KioskPage from './pages/KioskPage';
 import SalesHistoryPage from './pages/SalesHistoryPage';
 import SessionsPage from './pages/SessionsPage';
+import PosReportsPage from './pages/PosReportsPage';
 import LoadingSpinner from './components/LoadingSpinner';
 
 type Role = string;
@@ -241,6 +242,14 @@ export default function App() {
           element={
             <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER']}>
               <SessionsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="pos-reports"
+          element={
+            <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER']}>
+              <PosReportsPage />
             </ProtectedRoute>
           }
         />

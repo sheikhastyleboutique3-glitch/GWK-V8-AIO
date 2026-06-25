@@ -188,6 +188,7 @@ enum FinanceEntryType {
   PAYMENT
   CASH_DIFFERENCE // session over/short posted at closing control
   COMMISSION // aggregator commission expense
+  PAYMENT_CORRECTION // manager corrects payment method on closed order
 }
 
 enum ReservationStatus {

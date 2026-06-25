@@ -654,13 +654,25 @@ export default function POSPage() {
     }
   };
 
+  // ---- Multi-order table state ----
+  const [tableOrderPicker, setTableOrderPicker] = useState<{ table: any; orders: any[] } | null>(null);
+  // ---- Split bill modal state ----
+  const [splitModal, setSplitModal] = useState(false);
+  const [splitSelected, setSplitSelected] = useState<Record<number, number>>({});
+  const [splitPayMethod, setSplitPayMethod] = useState<'CASH' | 'CARD' | 'later'>('later');
+
   // Open a table from the floor plan → switch to order view
   const openTableOrder = async (table: any) => {
     try {
-      // Check if there's an existing order for this table
-      const existing = pendingBills?.find((o: any) => o.tableName === table.name);
-      if (existing) {
-        loadBill(existing);
+      // Check ALL existing orders for this table (multi-order support)
+      const tableOrders = (pendingBills || []).filter((o: any) => o.tableName === table.name);
+      if (tableOrders.length > 1) {
+        // Multiple orders on this table → show picker
+        setTableOrderPicker({ table, orders: tableOrders });
+        return;
+      }
+      if (tableOrders.length === 1) {
+        loadBill(tableOrders[0]);
       } else {
         // Create a new order for this table
         const { data } = await api.post('/sales/orders', { branchId, channel: 'DINE_IN', tableName: table.name });
@@ -671,6 +683,20 @@ export default function POSPage() {
       setPosView('order');
     } catch (e: any) {
       toast.error(e.response?.data?.message || 'Failed to open table');
+    }
+  };
+
+  // Create a NEW additional order for a table that already has orders
+  const addOrderToTable = async (tableName: string) => {
+    try {
+      const { data } = await api.post('/sales/orders', { branchId, channel: 'DINE_IN', tableName });
+      setLoadedOrderId(data.data.id);
+      setTableName(tableName);
+      setTableOrderPicker(null);
+      qc.invalidateQueries({ queryKey: ['pos-pending'] });
+      setPosView('order');
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || 'Failed to create order');
     }
   };
 
@@ -751,7 +777,8 @@ export default function POSPage() {
               onTouchMove={floorEditMode ? (e) => { const t = e.touches[0]; handleFloorDrag({ clientX: t.clientX, clientY: t.clientY } as any); } : undefined}
               onTouchEnd={floorEditMode ? handleFloorDragEnd : undefined}>
               {(activeFloor.tables || []).filter((t: any) => t.isActive).map((table: any) => {
-                const hasOrder = pendingBills?.some((o: any) => o.tableName === table.name);
+                const tableOrders = (pendingBills || []).filter((o: any) => o.tableName === table.name);
+                const hasOrder = tableOrders.length > 0;
                 const isOccupied = table.status === 'OCCUPIED' || hasOrder;
                 const isRound = table.shape === 'ROUND';
                 const bgColor = isOccupied ? 'bg-red-400/80' : 'bg-emerald-400/80';
@@ -775,7 +802,8 @@ export default function POSPage() {
                   >
                     <span className="text-sm">{table.name}</span>
                     <span className="text-[10px] opacity-80">{table.seats} 👤</span>
-                    {hasOrder && <span className="absolute top-1 right-1 w-3 h-3 bg-white rounded-full flex items-center justify-center text-[8px] text-gray-900">✓</span>}
+                    {tableOrders.length > 1 && <span className="absolute top-1 right-1 min-w-[18px] h-[18px] bg-white rounded-full flex items-center justify-center text-[9px] font-bold text-gray-900">{tableOrders.length}</span>}
+                    {tableOrders.length === 1 && <span className="absolute top-1 right-1 w-3 h-3 bg-white rounded-full flex items-center justify-center text-[8px] text-gray-900">✓</span>}
                     {/* Resize handle in edit mode */}
                     {floorEditMode && (
                       <div
@@ -950,6 +978,134 @@ export default function POSPage() {
         />
       )}
 
+      {/* Table Order Picker Modal — shows when a table has multiple orders */}
+      {tableOrderPicker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setTableOrderPicker(null)}>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-bold mb-1">{t('pos.tableOrders')}</h3>
+            <p className="text-xs text-gray-500 mb-3">{tableOrderPicker.table.name} — {tableOrderPicker.orders.length} {t('pos.activeOrders')}</p>
+            <div className="space-y-2 mb-4 max-h-[50vh] overflow-y-auto">
+              {tableOrderPicker.orders.map((o: any) => (
+                <button
+                  key={o.id}
+                  onClick={() => { loadBill(o); setTableOrderPicker(null); setPosView('order'); }}
+                  className="w-full text-left px-3 py-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-primary hover:bg-primary/5 transition"
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">{o.orderNo.slice(-6)}</span>
+                    <span className="text-sm font-bold">{Number(o.total).toFixed(2)}</span>
+                  </div>
+                  <div className="text-[11px] text-gray-500 mt-0.5">
+                    {new Date(o.createdAt).toLocaleTimeString()} · {o.items?.length ?? 0} items · {o.status}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => addOrderToTable(tableOrderPicker.table.name)}
+              className="w-full py-2.5 rounded-xl bg-primary text-white text-sm font-semibold"
+            >
+              + {t('pos.newOrderForTable')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Split Bill Modal — select items + quantities to split, with pay now or later */}
+      {splitModal && loadedOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { setSplitModal(false); setSplitSelected({}); }}>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-md p-5 max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-bold mb-1">{t('pos.splitBillTitle')}</h3>
+            <p className="text-xs text-gray-500 mb-3">{t('pos.splitBillDesc')}</p>
+
+            {/* Item selection list */}
+            <div className="flex-1 overflow-y-auto space-y-1 mb-4">
+              {(loadedOrder.items || []).filter((it: any) => !it.isVoided).map((it: any) => {
+                const qty = splitSelected[it.id] ?? 0;
+                const maxQty = it.quantity;
+                return (
+                  <div key={it.id} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{it.product?.name ?? `#${it.productId}`}</div>
+                      {Array.isArray(it.modifiers) && it.modifiers.length > 0 && (
+                        <div className="text-[10px] text-amber-600">{it.modifiers.filter((m: any) => m?.name).map((m: any) => m.name).join(', ')}</div>
+                      )}
+                      <div className="text-[10px] text-gray-500">{Number(it.unitPrice).toFixed(2)} × {maxQty}</div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => setSplitSelected(p => ({ ...p, [it.id]: Math.max(0, (p[it.id] ?? 0) - 1) }))} disabled={qty === 0} className="w-7 h-7 rounded bg-gray-100 dark:bg-gray-800 text-sm font-bold disabled:opacity-30">-</button>
+                      <span className="w-6 text-center text-sm font-semibold">{qty}</span>
+                      <button onClick={() => setSplitSelected(p => ({ ...p, [it.id]: Math.min(maxQty, (p[it.id] ?? 0) + 1) }))} disabled={qty >= maxQty} className="w-7 h-7 rounded bg-gray-100 dark:bg-gray-800 text-sm font-bold disabled:opacity-30">+</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Split total */}
+            {(() => {
+              const splitTotal = Object.entries(splitSelected).reduce((sum, [id, qty]) => {
+                const it = (loadedOrder.items || []).find((i: any) => i.id === Number(id));
+                return sum + (it ? it.unitPrice * qty : 0);
+              }, 0);
+              const hasSelection = Object.values(splitSelected).some(q => q > 0);
+              return (
+                <>
+                  <div className="flex justify-between text-sm font-bold mb-3 border-t border-gray-200 dark:border-gray-800 pt-3">
+                    <span>{t('pos.splitTotal')}</span>
+                    <span>{splitTotal.toFixed(2)}</span>
+                  </div>
+
+                  {/* Payment method for the split portion */}
+                  <div className="flex gap-2 mb-3">
+                    {(['CASH', 'CARD', 'later'] as const).map(m => (
+                      <button
+                        key={m}
+                        onClick={() => setSplitPayMethod(m)}
+                        className={`flex-1 py-2 rounded-lg text-xs font-medium border ${splitPayMethod === m ? 'bg-primary text-white border-primary' : 'border-gray-200 dark:border-gray-700'}`}
+                      >
+                        {m === 'later' ? t('pos.splitLater') : m}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    disabled={!hasSelection}
+                    onClick={async () => {
+                      const itemIds = Object.entries(splitSelected)
+                        .filter(([, qty]) => qty > 0)
+                        .map(([id]) => Number(id));
+                      if (!itemIds.length) return;
+                      try {
+                        const res = await api.post(`/sales/orders/${loadedOrderId}/split`, { itemIds });
+                        const newOrder = res.data?.data?.newOrder;
+                        // If user chose to pay now, complete the split order immediately
+                        if (splitPayMethod !== 'later' && newOrder) {
+                          await api.post(`/sales/orders/${newOrder.id}/payments`, { method: splitPayMethod, amount: newOrder.total });
+                          await api.post(`/sales/orders/${newOrder.id}/complete`, {});
+                          toast.success(t('pos.splitPaid', { method: splitPayMethod }));
+                        } else {
+                          toast.success(t('pos.splitDone'));
+                        }
+                        setSplitModal(false);
+                        setSplitSelected({});
+                        qc.invalidateQueries({ queryKey: ['pos-pending'] });
+                        refetchLoaded();
+                      } catch (e: any) {
+                        toast.error(e.response?.data?.message || 'Split failed');
+                      }
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold disabled:opacity-50"
+                  >
+                    {splitPayMethod === 'later' ? t('pos.splitCreateOrder') : t('pos.splitAndPay')}
+                  </button>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
       {/* Pending bills (waiter handoff) */}
       {(pendingBills?.length ?? 0) > 0 && (
         <div className="mb-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3">
@@ -1049,6 +1205,9 @@ export default function POSPage() {
               <div className="flex flex-wrap gap-1.5 mt-2">
                 <button onClick={() => splitBySeat.mutate()} disabled={splitBySeat.isPending} className="px-2 py-1 rounded text-xs font-medium bg-gray-100 dark:bg-gray-800">
                   🪑 {t('pos.splitBySeat')}
+                </button>
+                <button onClick={() => setSplitModal(true)} disabled={!loadedOrder?.items?.length} className="px-2 py-1 rounded text-xs font-medium bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300">
+                  ✂ {t('pos.splitBill')}
                 </button>
               </div>
               {(courses?.length ?? 0) > 0 && (

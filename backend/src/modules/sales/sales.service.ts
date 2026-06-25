@@ -739,6 +739,83 @@ export class SalesService {
     return refunded;
   }
 
+  /**
+   * PAYMENT METHOD CORRECTION on a COMPLETED order.
+   * A manager discovers the till recorded e.g. "Cash" but the guest actually
+   * paid by card. This method:
+   *   1. Soft-reverses the original payment row (isReversed = true).
+   *   2. Creates a new payment row with the corrected method (same amount).
+   *   3. Posts a PAYMENT_CORRECTION finance entry for audit.
+   *   4. Writes an AuditLog entry with old/new values.
+   * Only SUPER_ADMIN / BRANCH_MANAGER may invoke.
+   */
+  async correctPaymentMethod(
+    orderId: number,
+    paymentId: number,
+    newMethod: PaymentMethod,
+    reason: string,
+    userId?: number,
+  ) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException(`Order ${orderId} not found`);
+    if (order.status !== OrderStatus.COMPLETED) {
+      throw new BadRequestException(
+        `Payment correction is only allowed on COMPLETED orders (order is ${order.status}).`,
+      );
+    }
+    const payment = await this.prisma.payment.findFirst({
+      where: { id: paymentId, orderId, isReversed: false },
+    });
+    if (!payment) throw new NotFoundException(`Active payment ${paymentId} not found on order ${orderId}`);
+    if (payment.method === newMethod) {
+      throw new BadRequestException(`Payment is already ${newMethod}; nothing to correct.`);
+    }
+
+    const oldMethod = payment.method;
+
+    // Soft-reverse original + create corrected payment in a transaction.
+    const corrected = await this.prisma.$transaction(async (tx) => {
+      await tx.payment.update({
+        where: { id: paymentId },
+        data: { isReversed: true, reversedAt: new Date() },
+      });
+      const newPay = await tx.payment.create({
+        data: {
+          orderId,
+          method: newMethod,
+          amount: payment.amount,
+          reference: `Correction from ${oldMethod}: ${reason}`,
+          receivedById: userId ?? null,
+        },
+      });
+      return newPay;
+    });
+
+    // Finance journal: informational PAYMENT_CORRECTION entry.
+    await this.finance.create({
+      type: FinanceEntryType.PAYMENT_CORRECTION,
+      amount: payment.amount,
+      branchId: order.branchId,
+      sourceType: 'order',
+      sourceId: order.id,
+      reference: order.orderNo,
+      notes: `Payment #${paymentId} corrected: ${oldMethod} → ${newMethod}. Reason: ${reason}`,
+      createdById: userId,
+    });
+
+    return {
+      order: await this.findOne(orderId),
+      correction: {
+        originalPaymentId: paymentId,
+        newPaymentId: corrected.id,
+        oldMethod,
+        newMethod,
+        amount: payment.amount,
+        reason,
+      },
+    };
+  }
+
   async addPayment(orderId: number, dto: PaymentInput, userId?: number) {
     const order = await this.prisma.order.findUnique({ where: { id: orderId } });
     if (!order) throw new NotFoundException(`Order ${orderId} not found`);

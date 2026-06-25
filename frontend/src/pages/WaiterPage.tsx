@@ -6,6 +6,7 @@ import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
+import ModifierModal, { ModGroup, ChosenModifier } from '../components/ModifierModal';
 import { printKot } from '../lib/thermalPrint';
 
 interface TableRow { id: number; name: string; seats: number; status: string; branchId: number; isActive: boolean }
@@ -41,6 +42,8 @@ export default function WaiterPage() {
   const [splitMode, setSplitMode] = useState(false);
   const [splitSel, setSplitSel] = useState<number[]>([]);
   const seededOrderRef = useRef<number | null>(null);
+  // Modifier modal state
+  const [modProduct, setModProduct] = useState<{ product: any; groups: ModGroup[] } | null>(null);
 
   const waiterName = user ? `${user.firstName} ${user.lastName}` : undefined;
 
@@ -76,6 +79,28 @@ export default function WaiterPage() {
     staleTime: 300_000,
     enabled: !!selectedTable,
   });
+  // ---- Modifier groups (for product options: size, sugar, etc.) ----
+  const { data: modifierGroups } = useQuery({
+    queryKey: ['modifier-groups'],
+    queryFn: () => api.get('/modifiers/groups').then((r) => r.data.data),
+    staleTime: 300_000,
+    enabled: !!selectedTable,
+  });
+  // Map product → its modifier groups (only groups linked to product's category or directly).
+  const productGroups = useMemo(() => {
+    const map = new Map<number, ModGroup[]>();
+    if (!modifierGroups || !products) return map;
+    for (const p of products) {
+      const groups = (modifierGroups as any[]).filter((g: any) => {
+        if (g.productIds?.includes(p.id)) return true;
+        if (g.categoryIds?.includes(p.categoryId)) return true;
+        if (g.applyToAll) return true;
+        return false;
+      });
+      if (groups.length) map.set(p.id, groups);
+    }
+    return map;
+  }, [modifierGroups, products]);
   const { data: products, isLoading: productsLoading } = useQuery({
     queryKey: ['waiter-products', categoryId, search],
     queryFn: () =>
@@ -142,11 +167,12 @@ export default function WaiterPage() {
   });
 
   const addItem = useMutation({
-    mutationFn: (p: any) =>
+    mutationFn: (p: { product: any; modifiers?: ChosenModifier[]; priceDelta?: number }) =>
       api.post(`/sales/orders/${activeOrderId}/items`, {
-        productId: p.id,
+        productId: p.product.id,
         quantity: 1,
-        unitPrice: p.salePrice ?? p.costPrice ?? 0,
+        unitPrice: (p.product.salePrice ?? p.product.costPrice ?? 0) + (p.priceDelta ?? 0),
+        modifiers: p.modifiers,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['waiter-order', activeOrderId] });
@@ -364,7 +390,14 @@ export default function WaiterPage() {
                 return (
                   <button
                     key={p.id}
-                    onClick={() => addItem.mutate(p)}
+                    onClick={() => {
+                      const groups = productGroups.get(p.id);
+                      if (groups && groups.length) {
+                        setModProduct({ product: p, groups });
+                      } else {
+                        addItem.mutate({ product: p });
+                      }
+                    }}
                     disabled={addItem.isPending}
                     className="text-left rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden hover:border-primary hover:shadow-sm transition disabled:opacity-60"
                   >
@@ -418,6 +451,11 @@ export default function WaiterPage() {
                       <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                         {it.product?.name ?? `#${it.productId}`}
                       </div>
+                      {Array.isArray(it.modifiers) && it.modifiers.length > 0 && (
+                        <div className="text-[11px] text-amber-600 dark:text-amber-400 truncate">
+                          + {it.modifiers.filter((m: any) => m?.name).map((m: any) => m.name).join(', ')}
+                        </div>
+                      )}
                       <div className="text-xs text-gray-500">
                         {it.quantity} × {Number(it.unitPrice).toFixed(2)}
                         <span className="ms-2 text-[10px] uppercase tracking-wide text-gray-400">{it.kdsStatus}</span>
@@ -515,6 +553,19 @@ export default function WaiterPage() {
           </div>
         </div>
       </div>
+
+      {/* Modifier selection modal */}
+      {modProduct && (
+        <ModifierModal
+          product={modProduct.product}
+          groups={modProduct.groups}
+          onClose={() => setModProduct(null)}
+          onConfirm={(mods, delta) => {
+            addItem.mutate({ product: modProduct.product, modifiers: mods, priceDelta: delta });
+            setModProduct(null);
+          }}
+        />
+      )}
     </div>
   );
 }
