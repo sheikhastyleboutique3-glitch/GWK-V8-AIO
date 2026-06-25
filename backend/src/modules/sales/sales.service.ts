@@ -412,6 +412,16 @@ export class SalesService {
     return this.findOne(orderId);
   }
 
+  /** Update order-level fields (notes, guestCount, tableName). */
+  async updateOrder(orderId: number, dto: { notes?: string; guestCount?: number; tableName?: string }) {
+    const data: any = {};
+    if (dto.notes !== undefined) data.notes = dto.notes;
+    if (dto.guestCount !== undefined) data.guestCount = dto.guestCount;
+    if (dto.tableName !== undefined) data.tableName = dto.tableName;
+    await this.prisma.order.update({ where: { id: orderId }, data });
+    return this.findOne(orderId);
+  }
+
   /**
    * Apply (or clear) a coupon on an existing OPEN/HELD order — used when a
    * cashier picks up a waiter's bill and applies a discount before payment.

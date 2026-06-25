@@ -153,6 +153,11 @@ export class SalesController {
     return this.svc.setStatus(id, OrderStatus.HELD);
   }
 
+  @Patch(':id') @Roles(...POS_ROLES)
+  updateOrder(@Param('id', ParseIntPipe) id: number, @Body() dto: { notes?: string; guestCount?: number; tableName?: string }) {
+    return this.svc.updateOrder(id, dto);
+  }
+
   @Patch(':id/resume') @Roles(...POS_ROLES)
   resume(@Param('id', ParseIntPipe) id: number) {
     return this.svc.setStatus(id, OrderStatus.OPEN);
