@@ -27,7 +27,7 @@ export default function SalesOrdersPage() {
   });
   const { data: products } = useQuery({
     queryKey: ['products-for-quotes'],
-    queryFn: () => api.get('/products', { params: { limit: 500 } }).then((r) => r.data.data),
+    queryFn: () => api.get('/products', { params: { sellable: true, productType: 'MENU' } }).then((r) => r.data.data),
     staleTime: 60_000,
   });
   const { data: customers } = useQuery({
@@ -85,9 +85,9 @@ export default function SalesOrdersPage() {
         <div className="space-y-2">
           {lines.map((l, i) => (
             <div key={i} className="flex flex-wrap gap-2 items-center">
-              <select value={l.productId} onChange={(e) => { const p = productList.find((x) => x.id === parseInt(e.target.value, 10)); updateLine(i, { productId: e.target.value, unitPrice: l.unitPrice === '0' && p ? String(p.costPrice ?? 0) : l.unitPrice }); }} className="flex-1 min-w-[10rem] rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm">
+              <select value={l.productId} onChange={(e) => { const p = productList.find((x) => x.id === parseInt(e.target.value, 10)); updateLine(i, { productId: e.target.value, unitPrice: l.unitPrice === '0' && p ? String(p.salePrice ?? p.costPrice ?? 0) : l.unitPrice }); }} className="flex-1 min-w-[10rem] rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm">
                 <option value="">{t('salesOrders.product')}</option>
-                {productList.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {productList.map((p) => <option key={p.id} value={p.id}>{p.name} — {Number(p.salePrice || p.costPrice || 0).toFixed(2)}</option>)}
               </select>
               <input type="number" value={l.quantity} onChange={(e) => updateLine(i, { quantity: e.target.value })} placeholder={t('salesOrders.qty')} className="w-20 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-2 text-sm" />
               <input type="number" value={l.unitPrice} onChange={(e) => updateLine(i, { unitPrice: e.target.value })} placeholder={t('salesOrders.price')} className="w-24 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-2 text-sm" />
