@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useBarcodeScanner } from '../lib/useBarcodeScanner';
 import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 import PosSessionBar from '../components/PosSessionBar';
@@ -62,6 +63,23 @@ export default function POSPage() {
   const [loadedOrderId, setLoadedOrderId] = useState<number | null>(null);
 
   const mode: 'new' | 'existing' = loadedOrderId ? 'existing' : 'new';
+
+  // Barcode scanner: auto-lookup product by barcode and add to cart
+  useBarcodeScanner(async (barcode) => {
+    try {
+      const res = await api.get('/products', { params: { search: barcode, sellable: true, productType: 'MENU' } });
+      const matches = res.data?.data || [];
+      const product = matches.find((p: any) => p.barcode === barcode || p.sku === barcode) || matches[0];
+      if (product) {
+        onProduct(product);
+        toast.success(`Scanned: ${product.name}`);
+      } else {
+        toast.error(`No product found for barcode: ${barcode}`);
+      }
+    } catch {
+      toast.error(`Barcode lookup failed: ${barcode}`);
+    }
+  }, { enabled: !!branchId });
 
   const { data: categories } = useQuery({
     queryKey: ['pos-categories'],
@@ -269,8 +287,21 @@ export default function POSPage() {
       setModProduct({ product: p, groups });
       return;
     }
-    // Serial/lot-tracked item → capture the serial/lot number at the till.
+    // Serial/lot-tracked item → show available batches from inventory and let
+    // the cashier pick which batch to sell (proper FEFO traceability).
     if (p.tracksSerial) {
+      try {
+        const batchRes = await api.get(`/inventory/products/${p.id}/branches/${branchId}/available-batches`);
+        const batches = batchRes.data?.data || [];
+        if (batches.length > 0) {
+          const options = batches.map((b: any) => `${b.batchNumber || 'N/A'} (qty: ${b.availableQuantity}, exp: ${b.expiryDate ? new Date(b.expiryDate).toLocaleDateString() : 'N/A'})`).join('\n');
+          const pick = window.prompt(`Select batch for ${p.name}:\n\n${options}\n\nEnter batch number (or leave blank for auto-FEFO):`, batches[0]?.batchNumber || '');
+          if (pick === null) return;
+          const label = pick.trim() || batches[0]?.batchNumber || '';
+          addLine(p, p.salePrice ?? p.costPrice ?? 0, label ? [{ optionId: -1, name: `Lot: ${label}`, priceDelta: 0 }] as any : undefined);
+          return;
+        }
+      } catch { /* fallback to text prompt */ }
       const serial = window.prompt(t('pos.enterSerial', { name: p.name }) as string, '');
       if (serial === null) return;
       if (serial.trim()) {
@@ -278,7 +309,26 @@ export default function POSPage() {
         return;
       }
     }
+    // Weighed product: prompt for weight
+    if (p.weighed) { handleWeighed(p); return; }
     addLine(p, p.salePrice ?? p.costPrice ?? 0, undefined);
+  };
+
+  // Weighed product: prompt for weight and compute price = weight × unit price
+  const handleWeighed = (p: any) => {
+    const raw = window.prompt(`${p.name} — Enter weight (kg):`, '1');
+    if (raw === null) return;
+    const weight = parseFloat(raw);
+    if (!(weight > 0)) { toast.error('Invalid weight'); return; }
+    const unitPrice = p.salePrice ?? p.costPrice ?? 0;
+    if (mode === 'existing') {
+      api.post(`/sales/orders/${loadedOrderId}/items`, {
+        productId: p.id, quantity: weight, unitPrice,
+        modifiers: [{ optionId: -3, name: `${weight.toFixed(3)} kg`, priceDelta: 0 }],
+      }).then(() => { qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] }); });
+    } else {
+      setCart((prev) => [...prev, { productId: p.id, name: `${p.name} (${weight.toFixed(3)} kg)`, unitPrice, quantity: weight }]);
+    }
   };
 
   const pickVariant = (v: any) => {

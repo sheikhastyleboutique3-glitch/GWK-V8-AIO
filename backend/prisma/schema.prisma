@@ -146,6 +146,7 @@ enum PaymentMethod {
   LOYALTY
   GIFT_CARD
   AGGREGATOR
+  ON_ACCOUNT
 }
 
 // Classifies a configurable payment method (Odoo `pos.payment.method`).
@@ -1395,6 +1396,9 @@ model Order {
   fiscalPositionId   Int?
   isSelfOrder        Boolean      @default(false)
   selfOrderMode      SelfOrderMode?
+  // Ship Later (Odoo): customer pays now, delivery later.
+  shipLater          Boolean      @default(false)
+  fulfillmentDate    DateTime?
   tabName            String?
   roundingAmount     Float        @default(0)
   // Session-bound: an order must live inside an open PosSession + terminal.

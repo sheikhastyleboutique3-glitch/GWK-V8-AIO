@@ -11,6 +11,7 @@ import { Role } from '@prisma/client';
 export class OpenSessionDto {
   @IsNumber() branchId: number;
   @IsOptional() @IsNumber() @Min(0) openingFloat?: number;
+  @IsOptional() denominations?: { denomination: number; count: number }[];
 }
 export class CashMovementDto {
   @IsIn(['CASH_IN', 'CASH_OUT']) type: 'CASH_IN' | 'CASH_OUT';
@@ -19,6 +20,8 @@ export class CashMovementDto {
 }
 export class CloseSessionDto {
   @IsNumber() @Min(0) closingCounted: number;
+  @IsOptional() denominations?: { denomination: number; count: number }[];
+}
 }
 
 const POS_ROLES: Role[] = [Role.SUPER_ADMIN, Role.BRANCH_MANAGER, Role.CASHIER];
@@ -47,7 +50,7 @@ export class PosSessionsController {
 
   @Post('open') @Roles(...POS_ROLES)
   open(@Body() dto: OpenSessionDto, @CurrentUser('id') userId: number) {
-    return this.svc.open(dto.branchId, dto.openingFloat ?? 0, userId);
+    return this.svc.open(dto.branchId, dto.openingFloat ?? 0, userId, dto.denominations);
   }
 
   @Post(':id/cash') @Roles(...POS_ROLES)
@@ -57,6 +60,6 @@ export class PosSessionsController {
 
   @Post(':id/close') @Roles(...POS_ROLES)
   close(@Param('id', ParseIntPipe) id: number, @Body() dto: CloseSessionDto, @CurrentUser('id') userId: number) {
-    return this.svc.close(id, dto.closingCounted, userId);
+    return this.svc.close(id, dto.closingCounted, userId, dto.denominations);
   }
 }

@@ -32,6 +32,7 @@ import KDSPage from './pages/KDSPage';
 import SalesDashboardPage from './pages/SalesDashboardPage';
 import ProductionPage from './pages/ProductionPage';
 import TablesPage from './pages/TablesPage';
+import BookingsPage from './pages/BookingsPage';
 import PromotionsPage from './pages/PromotionsPage';
 import RecipesPage from './pages/RecipesPage';
 import ModifiersPage from './pages/ModifiersPage';
@@ -167,6 +168,14 @@ export default function App() {
           element={
             <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'WAITER']}>
               <TablesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="bookings"
+          element={
+            <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'WAITER']}>
+              <BookingsPage />
             </ProtectedRoute>
           }
         />

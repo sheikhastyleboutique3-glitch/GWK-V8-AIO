@@ -32,12 +32,24 @@ export class PosSessionsService {
     return `POS-${stamp}-B${branchId}-${String(count + 1).padStart(4, '0')}`;
   }
 
-  async open(branchId: number, openingFloat: number, userId?: number) {
+  async open(branchId: number, openingFloat: number, userId?: number, denominations?: { denomination: number; count: number }[]) {
     const existing = await this.current(branchId);
     if (existing) {
       throw new BadRequestException(`Branch already has an open session (${existing.sessionNo}). Close it first.`);
     }
-    return this.prisma.posSession.create({
+    // Closing discipline: ensure the previous session was properly closed (not
+    // left in OPENING_CONTROL / CLOSING_CONTROL limbo). Blocks new sessions
+    // until the prior one reaches CLOSED status.
+    const lastSession = await this.prisma.posSession.findFirst({
+      where: { branchId, status: { not: PosSessionStatus.CLOSED } },
+      orderBy: { openedAt: 'desc' },
+    });
+    if (lastSession && lastSession.status !== PosSessionStatus.OPEN) {
+      throw new BadRequestException(
+        `Previous session ${lastSession.sessionNo} is still in ${lastSession.status} state. Complete its closing count before opening a new session.`,
+      );
+    }
+    const session = await this.prisma.posSession.create({
       data: {
         sessionNo: await this.genNo(branchId),
         branchId,
@@ -46,6 +58,26 @@ export class PosSessionsService {
         openedById: userId ?? null,
       },
     });
+    // Save denomination breakdown if provided (cash count detail).
+    if (denominations?.length) {
+      const total = denominations.reduce((s, d) => s + d.denomination * d.count, 0);
+      await this.prisma.posCashCount.create({
+        data: {
+          sessionId: session.id,
+          phase: 'OPENING',
+          totalCounted: total,
+          createdById: userId ?? null,
+          lines: {
+            create: denominations.filter(d => d.count > 0).map(d => ({
+              denomination: d.denomination,
+              count: d.count,
+              subtotal: d.denomination * d.count,
+            })),
+          },
+        },
+      });
+    }
+    return session;
   }
 
   async addCashMovement(sessionId: number, type: 'CASH_IN' | 'CASH_OUT', amount: number, reason?: string, userId?: number) {
@@ -107,7 +139,7 @@ export class PosSessionsService {
     };
   }
 
-  async close(sessionId: number, closingCounted: number, userId?: number) {
+  async close(sessionId: number, closingCounted: number, userId?: number, denominations?: { denomination: number; count: number }[]) {
     const session = await this.prisma.posSession.findUnique({ where: { id: sessionId } });
     if (!session) throw new NotFoundException(`Session ${sessionId} not found`);
     if (session.status !== PosSessionStatus.OPEN) throw new BadRequestException('Session is already closed.');
@@ -150,6 +182,25 @@ export class PosSessionsService {
         reference: session.sessionNo,
         notes: `Session ${session.sessionNo} cash variance: counted ${closingCounted}, expected ${expectedCash}`,
         createdById: userId,
+      });
+    }
+
+    // Save closing denomination breakdown if provided.
+    if (denominations?.length) {
+      await this.prisma.posCashCount.create({
+        data: {
+          sessionId,
+          phase: 'CLOSING',
+          totalCounted: closingCounted,
+          createdById: userId ?? null,
+          lines: {
+            create: denominations.filter(d => d.count > 0).map(d => ({
+              denomination: d.denomination,
+              count: d.count,
+              subtotal: d.denomination * d.count,
+            })),
+          },
+        },
       });
     }
 
