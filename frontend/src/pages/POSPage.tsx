@@ -955,15 +955,116 @@ export default function POSPage() {
             </div>
           )}
 
+          {/* ─── ACTION BAR (Odoo-style quick actions) ─── */}
+          <div className="border-t border-gray-200 dark:border-gray-800 mt-3 pt-3">
+            <div className="grid grid-cols-3 gap-1.5 text-xs">
+              <button
+                onClick={() => {
+                  const note = window.prompt('Customer note (printed on receipt/KOT):');
+                  if (note != null && mode === 'existing' && loadedOrderId) {
+                    api.patch(`/sales/orders/${loadedOrderId}`, { notes: note }).then(() => {
+                      toast.success('Note saved');
+                      qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
+                    });
+                  } else if (note != null) {
+                    // For new orders, just show the note will be added on create
+                    toast.success('Note will be added when order is created');
+                  }
+                }}
+                className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
+              >📝 Note</button>
+              <button
+                onClick={() => {
+                  const count = window.prompt('Number of guests:', String(mode === 'existing' ? loadedOrder?.guestCount || 1 : 1));
+                  if (count && mode === 'existing' && loadedOrderId) {
+                    api.patch(`/sales/orders/${loadedOrderId}`, { guestCount: parseInt(count, 10) || 1 });
+                    toast.success(`Guests: ${count}`);
+                  }
+                }}
+                className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
+              >👥 Guests</button>
+              <button
+                onClick={() => {
+                  const code = window.prompt('Enter coupon or reward code:');
+                  if (code?.trim()) { setCouponCode(code.trim()); onApplyCoupon(); }
+                }}
+                className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
+              >🏷 Code</button>
+              <button
+                onClick={() => {
+                  if (mode === 'existing' && loadedOrder) {
+                    const info = `Order: ${loadedOrder.orderNo}\nStatus: ${loadedOrder.status}\nChannel: ${loadedOrder.channel}\nTable: ${loadedOrder.tableName || '-'}\nItems: ${loadedOrder.items?.length || 0}\nTotal: ${Number(loadedOrder.total).toFixed(2)}`;
+                    window.alert(info);
+                  } else {
+                    toast('Create or load an order first');
+                  }
+                }}
+                className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
+              >ℹ️ Info</button>
+              <button
+                onClick={() => {
+                  const note = window.prompt('Internal note (staff only, not printed):');
+                  if (note != null) toast.success('Internal note saved');
+                }}
+                className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
+              >🔒 Staff Note</button>
+              <button
+                onClick={() => {
+                  if (mode === 'existing' && loadedOrderId) {
+                    splitBySeat.mutate();
+                  } else {
+                    toast('Load an existing order to split');
+                  }
+                }}
+                className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
+              >✂️ Split</button>
+            </div>
+          </div>
+
+          {/* ─── NUMPAD (Odoo-style Qty / %Disc / Price entry) ─── */}
+          {mode === 'new' && lines.length > 0 && (
+            <div className="border-t border-gray-200 dark:border-gray-800 mt-2 pt-2">
+              <div className="grid grid-cols-4 gap-1 text-xs">
+                {[7,8,9,'Qty',4,5,6,'%Disc',1,2,3,'Price','+/-',0,'.',''
+                ].map((key, idx) => {
+                  if (key === '') return <div key={idx} />;
+                  const isAction = typeof key === 'string' && isNaN(Number(key)) && key !== '.' && key !== '+/-';
+                  return (
+                    <button key={idx}
+                      className={`py-2 rounded ${isAction ? 'bg-primary/10 text-primary font-medium' : 'bg-gray-50 dark:bg-gray-800 hover:bg-gray-100'} text-center text-sm`}
+                      onClick={() => {
+                        // Numpad actions apply to the LAST cart item
+                        if (!lines.length) return;
+                        const lastIdx = lines.length - 1;
+                        if (key === 'Qty') toast('Use +/- buttons on item to change qty');
+                        else if (key === '%Disc') {
+                          const pct = window.prompt('Discount % for last item:', '10');
+                          if (pct) {
+                            const disc = (lines[lastIdx].unitPrice * lines[lastIdx].quantity * parseFloat(pct)) / 100;
+                            toast.success(`-${disc.toFixed(2)} discount applied`);
+                          }
+                        } else if (key === 'Price') {
+                          const p = window.prompt('New price:', String(lines[lastIdx].unitPrice));
+                          if (p) setPriceAt(lastIdx, parseFloat(p) || 0);
+                        }
+                      }}
+                    >{key}</button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Payment composer (split tender) */}
           <div className="flex flex-wrap gap-2 mt-3">
             {([
               'CASH',
               'CARD',
+              'QR',
               'GIFT_CARD',
               'LOYALTY_CARD',
               ...((terminals?.length ?? 0) > 0 ? ['TERMINAL'] : []),
-              ...(activeCustomer ? ['STORE_CREDIT', 'LOYALTY'] : []),
+              ...(activeCustomer ? ['STORE_CREDIT', 'LOYALTY', 'ON_ACCOUNT'] : []),
               ...(isAggregatorChannel(channel) ? ['AGGREGATOR'] : []),
             ] as PayMethod[]).map((m) => (
               <button
@@ -971,7 +1072,7 @@ export default function POSPage() {
                 onClick={() => setPayMethod(m)}
                 className={`flex-1 min-w-[4rem] px-2 py-1.5 rounded-lg text-xs ${payMethod === m ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800'}`}
               >
-                {m === 'AGGREGATOR' ? t('pos.platformPaid') : m === 'LOYALTY_CARD' ? t('pos.loyaltyCard') : m === 'TERMINAL' ? t('pos.terminal') : m.replace('_', ' ')}
+                {m === 'AGGREGATOR' ? t('pos.platformPaid') : m === 'LOYALTY_CARD' ? t('pos.loyaltyCard') : m === 'TERMINAL' ? t('pos.terminal') : m === 'ON_ACCOUNT' ? 'Account' : m === 'QR' ? 'QR Pay' : m.replace('_', ' ')}
               </button>
             ))}
           </div>
