@@ -806,6 +806,82 @@ export class SalesService {
   }
 
   /**
+   * PARTIAL REFUND — refund specific items (by itemId) from a COMPLETED order.
+   * Each item is restocked (RETURN_IN via FEFO) and its proportion of revenue
+   * is reversed in the finance journal. The order remains COMPLETED (not REFUNDED)
+   * but items get isVoided=true with reason "PARTIAL_REFUND".
+   */
+  async partialRefund(orderId: number, itemIds: number[], reason?: string, userId?: number) {
+    const pre = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+    if (!pre) throw new NotFoundException(`Order ${orderId} not found`);
+    if (pre.status !== OrderStatus.COMPLETED) {
+      throw new BadRequestException(`Only COMPLETED orders can be partially refunded (order is ${pre.status}).`);
+    }
+    const itemsToRefund = pre.items.filter((it) => itemIds.includes(it.id) && !it.isVoided);
+    if (!itemsToRefund.length) throw new BadRequestException('No valid items to refund.');
+
+    let refundTotal = 0;
+    let refundCost = 0;
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const item of itemsToRefund) {
+        // Restock via FEFO (same logic as full refund)
+        const recipe = await tx.recipe.findFirst({
+          where: { productId: item.productId, isActive: true },
+          orderBy: { version: 'desc' },
+          include: { components: true },
+        });
+        if (recipe && recipe.components.length) {
+          const yieldQty = recipe.yieldQty || 1;
+          const recipeLoss = 1 + (recipe.prepLossPct + recipe.cookingLossPct + recipe.wastePct) / 100;
+          for (const comp of recipe.components) {
+            const qty = (comp.quantity * (1 + (comp.wastePct ?? 0) / 100) / yieldQty) * item.quantity * recipeLoss;
+            if (qty <= 0) continue;
+            await this.inventory.applyManualAdjustment(tx, {
+              productId: comp.componentProductId,
+              branchId: pre.branchId,
+              quantity: qty,
+              type: InventoryTxType.RETURN_IN,
+              notes: `Partial refund ${pre.orderNo} — item #${item.id}`,
+              performedById: userId,
+            });
+          }
+        } else {
+          await this.inventory.applyManualAdjustment(tx, {
+            productId: item.productId,
+            branchId: pre.branchId,
+            quantity: item.quantity,
+            type: InventoryTxType.RETURN_IN,
+            notes: `Partial refund ${pre.orderNo} — item #${item.id}`,
+            performedById: userId,
+          });
+        }
+
+        // Mark item as voided (partial refund)
+        await tx.orderItem.update({
+          where: { id: item.id },
+          data: { isVoided: true, voidReason: reason || 'PARTIAL_REFUND', voidedById: userId, voidedAt: new Date() },
+        });
+
+        const lineValue = item.unitPrice * item.quantity - item.discount;
+        refundTotal += lineValue;
+        refundCost += item.lineCost;
+      }
+
+      // Post refund finance entries for the partial amount
+      await this.finance.createMany([
+        { type: FinanceEntryType.REFUND, amount: -refundTotal, branchId: pre.branchId, sourceType: 'order', sourceId: pre.id, reference: pre.orderNo, notes: `Partial refund: ${itemsToRefund.length} item(s)`, createdById: userId },
+        { type: FinanceEntryType.COGS, amount: Math.abs(refundCost), branchId: pre.branchId, sourceType: 'order', sourceId: pre.id, reference: pre.orderNo, notes: 'COGS reversal (partial refund)', createdById: userId },
+      ]);
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20_000 });
+
+    return { order: await this.findOne(orderId), refundedItems: itemIds, refundTotal, refundCost };
+  }
+
+  /**
    * PAYMENT METHOD CORRECTION on a COMPLETED order.
    * A manager discovers the till recorded e.g. "Cash" but the guest actually
    * paid by card. This method:
@@ -976,8 +1052,41 @@ export class SalesService {
       );
     }
 
+    // Oversell prevention: check stock availability before completing.
+    // Configurable via Setting 'pos.allowNegativeStock' (default: false = block).
+    const allowNegSetting = await this.prisma.setting.findUnique({ where: { key: 'pos.allowNegativeStock' } });
+    const allowNegativeStock = allowNegSetting?.value === 'true';
+    if (!allowNegativeStock) {
+      for (const item of pre.items) {
+        if (item.isVoided) continue;
+        const stock = await this.prisma.inventory.aggregate({
+          where: { productId: item.productId, branchId: pre.branchId },
+          _sum: { quantity: true },
+        });
+        const available = stock._sum.quantity ?? 0;
+        if (available < item.quantity) {
+          const prod = await this.prisma.product.findUnique({ where: { id: item.productId }, select: { name: true } });
+          throw new BadRequestException(
+            `Insufficient stock for "${prod?.name ?? item.productId}": available ${available}, needed ${item.quantity}. Enable "pos.allowNegativeStock" to override.`,
+          );
+        }
+      }
+    }
+
     // Stamp the open POS session (if any) for Z-report aggregation.
     const sessionId = await this.posSessions.currentSessionId(pre.branchId);
+
+    // Cash rounding: if configured, round the total to the nearest precision.
+    // Example: precision=0.05 → 10.03 rounds to 10.05, 10.02 rounds to 10.00.
+    const rounding = await this.prisma.cashRounding.findFirst({ where: { isActive: true } });
+    let roundedTotal = pre.total;
+    let roundingAmount = 0;
+    if (rounding && rounding.precision > 0) {
+      const precision = rounding.precision;
+      roundedTotal = Math.round(pre.total / precision) * precision;
+      roundedTotal = Math.round(roundedTotal * 100) / 100; // fix float
+      roundingAmount = Math.round((roundedTotal - pre.total) * 100) / 100;
+    }
 
     const completed = await this.prisma.$transaction(
       async (tx) => {

@@ -6,11 +6,22 @@ import { Toaster } from 'react-hot-toast';
 import App from './App';
 import { AuthProvider } from './contexts/AuthContext';
 import { bootstrapTheme } from './lib/theme';
+import { initSyncManager } from './lib/syncManager';
 import './i18n';
 import './index.css';
 
 // Apply the saved theme synchronously before first paint (prevents color flash).
 bootstrapTheme();
+
+// Register service worker for offline support.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+
+// Initialize offline sync manager.
+initSyncManager();
 
 const queryClient = new QueryClient({
   defaultOptions: {

@@ -109,6 +109,20 @@ export class AuthService {
     };
   }
 
+  /**
+   * PIN Verify — confirms a manager/admin PIN for single-action override.
+   * Does NOT create a session/token. Returns authorized + user info only.
+   */
+  async pinVerify(pin: string) {
+    if (!pin) throw new UnauthorizedException('PIN required');
+    const user = await this.prisma.user.findFirst({
+      where: { posPin: pin, isActive: true, role: { in: ['SUPER_ADMIN', 'BRANCH_MANAGER'] } },
+      select: { id: true, firstName: true, lastName: true, role: true },
+    });
+    if (!user) throw new UnauthorizedException('Invalid manager PIN');
+    return { authorized: true, user };
+  }
+
   async refreshToken(token: string) {
     try {
       const payload = this.jwt.verify(token, {

@@ -187,6 +187,56 @@ export class ReportsService {
     const hasProductWhere = Object.keys(productWhere).length > 0;
 
     switch (type) {
+      case 'sales-orders': {
+        const data = await this.prisma.order.findMany({
+          where: {
+            ...(branchId ? { branchId } : {}),
+            ...(status ? { status: status as any } : {}),
+            ...(from || to ? { completedAt: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to + 'T23:59:59.999Z') } : {}) } } : {}),
+          },
+          include: {
+            items: { include: { product: { select: { name: true, nameAr: true, sku: true } } } },
+            payments: true,
+            customer: { select: { name: true, phone: true } },
+            branch: { select: { name: true } },
+            createdBy: { select: { firstName: true, lastName: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 5000,
+        });
+        let csv = UTF8_BOM + row(['OrderNo','Branch','Status','Channel','Table','Customer','CustomerPhone','CreatedBy','CreatedAt','CompletedAt','Subtotal','Discount','Tax','ServiceCharge','Tip','Total','PaidTotal','FoodCost','GrossProfit','PaymentMethods','ItemCount']);
+        for (const o of data) {
+          const methods = (o.payments || []).filter((p: any) => !p.isReversed).map((p: any) => `${p.method}:${p.amount}`).join('; ');
+          csv += row([o.orderNo, o.branch?.name || '', o.status, o.channel, o.tableName || '', o.customer?.name || '', o.customer?.phone || '', o.createdBy ? `${o.createdBy.firstName} ${o.createdBy.lastName}` : '', o.createdAt.toISOString(), o.completedAt?.toISOString() || '', o.subtotal, o.discountTotal, o.taxTotal, o.serviceCharge, o.tip, o.total, o.paidTotal, o.foodCost, o.grossProfit, methods, o.items.length]);
+        }
+        return csv;
+      }
+
+      case 'customers': {
+        const data = await this.prisma.customer.findMany({
+          where: search ? { OR: [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }, { email: { contains: search, mode: 'insensitive' } }] } : undefined,
+          orderBy: { name: 'asc' },
+        });
+        let csv = UTF8_BOM + row(['ID','Name','Phone','Email','LoyaltyPoints','CreditBalance','TotalSpent','OrderCount','CreatedAt']);
+        for (const c of data) {
+          csv += row([c.id, c.name, c.phone || '', c.email || '', c.loyaltyPoints, c.creditBalance, c.totalSpent, c.orderCount, c.createdAt.toISOString()]);
+        }
+        return csv;
+      }
+
+      case 'tax-report': {
+        const entries = await this.prisma.financeEntry.findMany({
+          where: { type: 'TAX', ...(branchId ? { branchId } : {}), ...(from || to ? { occurredAt: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to + 'T23:59:59.999Z') } : {}) } } : {}) },
+          orderBy: { occurredAt: 'desc' },
+          take: 5000,
+        });
+        let csv = UTF8_BOM + row(['ID','Date','Amount','Reference','SourceType','SourceId','BranchId','Notes']);
+        for (const e of entries) {
+          csv += row([e.id, e.occurredAt.toISOString(), e.amount, e.reference || '', e.sourceType || '', e.sourceId || '', e.branchId || '', e.notes || '']);
+        }
+        return csv;
+      }
+
       case 'requisitions': {
         const data = await this.prisma.requisition.findMany({
           where: {

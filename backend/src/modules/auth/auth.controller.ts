@@ -42,6 +42,19 @@ export class AuthController {
     return this.authService.pinLogin(body?.pin, body?.branchId);
   }
 
+  /**
+   * Manager PIN Override — verify a manager/admin PIN without creating a full session.
+   * Returns { authorized: true, user: { id, name, role } } if the PIN belongs to
+   * a SUPER_ADMIN or BRANCH_MANAGER. Used for single-action overrides (void, refund,
+   * price change) without requiring the cashier to log out.
+   */
+  @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @Post('pin-verify')
+  pinVerify(@Body() body: { pin: string }) {
+    return this.authService.pinVerify(body?.pin);
+  }
+
   @ApiBearerAuth()
   @Get('profile')
   getProfile(@CurrentUser('sub') userId: number) {

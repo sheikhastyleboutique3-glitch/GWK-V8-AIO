@@ -10,6 +10,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import PosSessionBar from '../components/PosSessionBar';
 import ModifierModal, { ModGroup, ChosenModifier } from '../components/ModifierModal';
 import { printReceipt, printKot } from '../lib/thermalPrint';
+import { useOnlineStatus } from '../lib/useOnlineStatus';
 
 interface CartLine {
   itemId?: number; // present when the line lives on a persisted (loaded) order
@@ -38,6 +39,7 @@ export default function POSPage() {
   const { activeBranch, user } = useAuth();
   const qc = useQueryClient();
   const branchId = activeBranch?.id;
+  const { isOnline, isSyncing, pendingCount } = useOnlineStatus();
   const canRefund = user?.role === 'SUPER_ADMIN' || user?.role === 'BRANCH_MANAGER';
   const canEditFloor = user?.role === 'SUPER_ADMIN' || user?.role === 'BRANCH_MANAGER' || user?.role === 'CASHIER';
 
@@ -730,6 +732,8 @@ export default function POSPage() {
           </button>
         </div>
         <div className="ms-auto flex items-center gap-2 text-xs text-gray-400">
+          {!isOnline && <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-bold animate-pulse">OFFLINE{pendingCount > 0 ? ` (${pendingCount})` : ''}</span>}
+          {isSyncing && <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold">SYNCING...</span>}
           <PosSessionBar branchId={branchId} businessInfo={businessInfo} />
         </div>
       </div>

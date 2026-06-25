@@ -231,6 +231,11 @@ export class SalesController {
     return this.svc.refund(id, userId);
   }
 
+  @Post(':id/partial-refund') @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
+  partialRefund(@Param('id', ParseIntPipe) id: number, @Body() dto: { itemIds: number[]; reason?: string }, @CurrentUser('id') userId: number) {
+    return this.svc.partialRefund(id, dto.itemIds, dto.reason, userId);
+  }
+
   @Patch(':id/payments/:paymentId/correct') @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
   async correctPaymentMethod(
     @Param('id', ParseIntPipe) id: number,

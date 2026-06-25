@@ -75,7 +75,7 @@ export class ReportsController {
     @Query('productId') productId?: string,
     @Res() res?: Response,
   ) {
-    const validTypes = ['requisitions', 'inventory', 'purchase-orders', 'wastage', 'expiry-alerts', 'low-stock'];
+    const validTypes = ['requisitions', 'inventory', 'purchase-orders', 'wastage', 'expiry-alerts', 'low-stock', 'sales-orders', 'customers', 'tax-report'];
     if (!validTypes.includes(type)) {
       res.status(400).json({ message: `Invalid export type. Valid: ${validTypes.join(', ')}` });
       return;
