@@ -980,42 +980,7 @@ export default function POSPage() {
         />
       )}
 
-      {/* Table Order Picker Modal — shows when a table has multiple orders */}
-      {tableOrderPicker && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setTableOrderPicker(null)}>
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-base font-bold mb-1">{t('pos.tableOrders')}</h3>
-            <p className="text-xs text-gray-500 mb-3">{tableOrderPicker.tableName} — {tableOrderPicker.orders.length} {t('pos.activeOrders')}</p>
-            <div className="space-y-2 mb-4 max-h-[50vh] overflow-y-auto">
-              {tableOrderPicker.orders.map((o: any) => (
-                <button
-                  key={o.id}
-                  onClick={() => {
-                    loadBill(o);
-                    setTableOrderPicker(null);
-                    setPosView('order');
-                  }}
-                  className="w-full text-left px-3 py-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-primary hover:bg-primary/5 transition"
-                >
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium">{o.orderNo.slice(-6)}</span>
-                    <span className="text-sm font-bold">{Number(o.total).toFixed(2)}</span>
-                  </div>
-                  <div className="text-[11px] text-gray-500 mt-0.5">
-                    {new Date(o.createdAt).toLocaleTimeString()} · {o.items?.length ?? 0} items · {o.status}
-                  </div>
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => addOrderToTable(tableOrderPicker.tableName)}
-              className="w-full py-2.5 rounded-xl bg-primary text-white text-sm font-semibold"
-            >
-              + {t('pos.newOrderForTable')}
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Table Order Picker — moved outside posView blocks so it renders on floor plan */}
 
       {/* Split Bill Modal — select items + quantities to split, with pay now or later */}
       {splitModal && loadedOrder && (
@@ -1507,7 +1472,30 @@ export default function POSPage() {
                       toast.error(`❌ Kitchen fire failed: ${msg}\n\nCheck: Is the order open? Does it have items?`, { duration: 5000 });
                     }
                   } else if (mode === 'new' && lines.length > 0) {
-                    toast('Add items to cart first, then click Payment. Kitchen fire happens automatically on new orders.');
+                    // New order: create it first, then fire to kitchen
+                    try {
+                      const { data: created } = await api.post('/sales/orders', {
+                        branchId,
+                        channel,
+                        tableName: tableName || undefined,
+                        customerId: customer?.id,
+                        presetId: presetId,
+                        items: cart.map((l) => ({ productId: l.productId, quantity: l.quantity, unitPrice: l.unitPrice, modifiers: l.modifiers })),
+                      });
+                      const newOrderId = created.data.id;
+                      // Fire to kitchen
+                      const fireRes = await api.post(`/sales/orders/${newOrderId}/courses/1/fire`);
+                      if (fireRes.data?.data) printKot(fireRes.data.data, { splitByStation: true });
+                      // Switch to existing mode with this order loaded
+                      setLoadedOrderId(newOrderId);
+                      setCart([]);
+                      setTableName(created.data.tableName || '');
+                      toast.success('🔥 Order created & sent to kitchen!', { duration: 3000 });
+                      qc.invalidateQueries({ queryKey: ['pos-pending'] });
+                      qc.invalidateQueries({ queryKey: ['kds-board'] });
+                    } catch (e: any) {
+                      toast.error(e.response?.data?.message || 'Failed to create order');
+                    }
                   } else {
                     toast('Load an existing order or add items first');
                   }
@@ -1813,6 +1801,43 @@ export default function POSPage() {
                 Clear Payments
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Table Order Picker Modal — rendered outside posView blocks so it works from floor plan */}
+      {tableOrderPicker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setTableOrderPicker(null)}>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-bold mb-1">{t('pos.tableOrders')}</h3>
+            <p className="text-xs text-gray-500 mb-3">{tableOrderPicker.tableName} — {tableOrderPicker.orders.length} {t('pos.activeOrders')}</p>
+            <div className="space-y-2 mb-4 max-h-[50vh] overflow-y-auto">
+              {tableOrderPicker.orders.map((o: any) => (
+                <button
+                  key={o.id}
+                  onClick={() => {
+                    loadBill(o);
+                    setTableOrderPicker(null);
+                    setPosView('order');
+                  }}
+                  className="w-full text-left px-3 py-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-primary hover:bg-primary/5 transition"
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">{o.orderNo.slice(-6)}</span>
+                    <span className="text-sm font-bold">{Number(o.total).toFixed(2)}</span>
+                  </div>
+                  <div className="text-[11px] text-gray-500 mt-0.5">
+                    {new Date(o.createdAt).toLocaleTimeString()} · {o.items?.length ?? 0} items · {o.status}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => addOrderToTable(tableOrderPicker.tableName)}
+              className="w-full py-2.5 rounded-xl bg-primary text-white text-sm font-semibold"
+            >
+              + {t('pos.newOrderForTable')}
+            </button>
           </div>
         </div>
       )}
