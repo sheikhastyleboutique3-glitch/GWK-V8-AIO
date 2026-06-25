@@ -500,14 +500,17 @@ export class SalesService {
     const order = await this.prisma.order.findUnique({ where: { id: orderId } });
     if (!order) throw new NotFoundException(`Order ${orderId} not found`);
     const now = new Date();
+    // Mark the course as fired — items stay QUEUED until kitchen starts them
     await this.prisma.orderCourse.upsert({
       where: { orderId_courseNo: { orderId, courseNo } },
-      update: { status: KdsStatus.PREPARING, firedAt: now },
-      create: { orderId, courseNo, status: KdsStatus.PREPARING, firedAt: now },
+      update: { firedAt: now },
+      create: { orderId, courseNo, status: KdsStatus.QUEUED, firedAt: now },
     });
+    // Items that haven't been sent yet get firedAt timestamp (so they appear on KDS)
+    // but stay QUEUED — kitchen staff manually advances them to PREPARING
     await this.prisma.orderItem.updateMany({
-      where: { orderId, courseNo, kdsStatus: KdsStatus.QUEUED },
-      data: { kdsStatus: KdsStatus.PREPARING, firedAt: now },
+      where: { orderId, courseNo, firedAt: null },
+      data: { firedAt: now },
     });
     this.events.emit(KDS_CHANGED, { branchId: order.branchId });
     return this.findOne(orderId);

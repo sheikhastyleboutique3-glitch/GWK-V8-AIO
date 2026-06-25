@@ -8,10 +8,11 @@ import { KdsStatus, OrderStatus } from '@prisma/client';
 export class KdsService {
   constructor(private prisma: PrismaService, private events: EventEmitter2) {}
 
-  /** Live kitchen board: open line items grouped by KDS status for a branch. */
+  /** Live kitchen board: fired line items grouped by KDS status for a branch. */
   async board(branchId?: number) {
     const items = await this.prisma.orderItem.findMany({
       where: {
+        firedAt: { not: null }, // Only show items that have been fired to kitchen
         kdsStatus: { in: [KdsStatus.QUEUED, KdsStatus.PREPARING, KdsStatus.READY] },
         isVoided: false,
         order: {
