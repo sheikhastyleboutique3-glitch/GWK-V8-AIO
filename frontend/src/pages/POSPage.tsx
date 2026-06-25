@@ -87,6 +87,8 @@ export default function POSPage() {
   const [coupon, setCoupon] = useState<{ code: string; discount: number } | null>(null);
   const [discountRuleId, setDiscountRuleId] = useState<number | ''>('');
   const [lastReceipt, setLastReceipt] = useState<any>(null);
+  const [showPayment, setShowPayment] = useState(false);
+  const [payNumpad, setPayNumpad] = useState('');
   // When set, the POS is settling an EXISTING order (e.g. a waiter's bill).
   const [loadedOrderId, setLoadedOrderId] = useState<number | null>(null);
 
@@ -1466,6 +1468,13 @@ export default function POSPage() {
             >
               {charge.isPending ? 'Processing…' : !posSession ? t('pos.session.openSessionFirst') : remaining > 0 ? `Add ${remaining.toFixed(2)} to complete` : 'Complete sale'}
             </button>
+            <button
+              disabled={(!lines.length && !comboCart.length) || !posSession}
+              onClick={() => setShowPayment(true)}
+              className="w-full mt-2 py-3 rounded-xl bg-emerald-600 text-white font-semibold disabled:opacity-50 text-lg"
+            >
+              💳 Payment
+            </button>
           </div>
 
           {lastReceipt && (
@@ -1497,6 +1506,124 @@ export default function POSPage() {
         </div>
       </div>
     </div>
+
+      {/* ═══ ODOO-STYLE FULL-SCREEN PAYMENT ═══ */}
+      {showPayment && (
+        <div className="fixed inset-0 z-50 bg-white dark:bg-gray-950 flex flex-col">
+          {/* Payment header */}
+          <div className="bg-gray-900 text-white px-6 py-3 flex items-center justify-between">
+            <button onClick={() => setShowPayment(false)} className="text-sm hover:text-gray-300">« Back</button>
+            <h2 className="text-lg font-bold">Payment</h2>
+            <span className="text-sm text-gray-400">{loadedOrderId ? `Order #${loadedOrder?.orderNo?.slice(-6) || ''}` : 'New Order'}</span>
+          </div>
+
+          <div className="flex-1 flex">
+            {/* LEFT: Payment methods + Summary */}
+            <div className="w-64 border-r border-gray-200 dark:border-gray-800 flex flex-col">
+              <div className="p-4 flex-1">
+                <div className="text-xs font-semibold text-gray-400 uppercase mb-3">Payment Method</div>
+                <div className="space-y-2">
+                  {['CASH', 'CARD', 'QR', 'GIFT_CARD', 'ON_ACCOUNT'].map((m) => (
+                    <button key={m} onClick={() => {
+                      const amt = payNumpad ? parseFloat(payNumpad) : remaining;
+                      if (amt > 0) {
+                        setTenders((prev) => [...prev, { method: m as PayMethod, amount: +amt.toFixed(2) }]);
+                        setPayNumpad('');
+                      }
+                    }} className="w-full text-left px-4 py-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm font-medium transition">
+                      {m === 'CASH' ? '💵 Cash' : m === 'CARD' ? '💳 Card' : m === 'QR' ? '📱 QR Pay' : m === 'GIFT_CARD' ? '🎁 Gift Card' : m === 'ON_ACCOUNT' ? '📋 Customer Account' : m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Summary */}
+              <div className="border-t border-gray-200 dark:border-gray-800 p-4">
+                <div className="text-xs font-semibold text-gray-400 uppercase mb-2">Summary</div>
+                <div className="space-y-1 mb-3 max-h-32 overflow-y-auto">
+                  {tenders.map((ten, i) => (
+                    <div key={i} className="flex justify-between items-center text-sm bg-gray-50 dark:bg-gray-800 rounded px-2 py-1">
+                      <span>{ten.method.replace('_', ' ')}</span>
+                      <span className="flex items-center gap-2">
+                        <span className="font-medium">{ten.amount.toFixed(2)}</span>
+                        <button onClick={() => setTenders((prev) => prev.filter((_, idx) => idx !== i))} className="text-red-500 text-xs">✕</button>
+                      </span>
+                    </div>
+                  ))}
+                  {!tenders.length && <p className="text-xs text-gray-400">Click a payment method to add</p>}
+                </div>
+                <button
+                  onClick={() => { charge.mutate(); setShowPayment(false); }}
+                  disabled={remaining > 0 || charge.isPending || (!lines.length && !comboCart.length)}
+                  className="w-full py-3 rounded-xl bg-emerald-600 text-white font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <span className="text-2xl">▶</span> Validate
+                </button>
+              </div>
+            </div>
+
+            {/* CENTER: Remaining + Numpad */}
+            <div className="flex-1 flex flex-col items-center justify-center p-8">
+              <div className="grid grid-cols-3 gap-8 text-center mb-8">
+                <div>
+                  <div className="text-sm text-gray-400">Remaining</div>
+                  <div className={`text-3xl font-bold ${remaining > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>{remaining.toFixed(2)}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-400">Total Due</div>
+                  <div className="text-xl font-semibold text-gray-800 dark:text-gray-200">{total.toFixed(2)}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-400">Change</div>
+                  <div className={`text-3xl font-bold ${change > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>{change.toFixed(2)}</div>
+                </div>
+              </div>
+
+              {/* Amount input */}
+              <div className="text-4xl font-mono font-bold mb-6 min-h-[3rem] text-center text-gray-800 dark:text-gray-100">
+                {payNumpad || remaining.toFixed(2)}
+              </div>
+
+              {/* Numpad */}
+              <div className="grid grid-cols-4 gap-3 w-80">
+                {['1','2','3','+10','4','5','6','+20','7','8','9','+50','+/-','0','.','⌫'].map((key) => (
+                  <button key={key} onClick={() => {
+                    if (key === '⌫') setPayNumpad((p) => p.slice(0, -1));
+                    else if (key === '+/-') setPayNumpad((p) => p.startsWith('-') ? p.slice(1) : '-' + p);
+                    else if (key.startsWith('+')) {
+                      const add = parseInt(key.slice(1), 10);
+                      setPayNumpad((p) => String((parseFloat(p) || 0) + add));
+                    }
+                    else setPayNumpad((p) => p + key);
+                  }}
+                  className={`py-4 rounded-xl text-xl font-bold transition ${key.startsWith('+') ? 'bg-primary/10 text-primary' : key === '⌫' ? 'bg-red-50 dark:bg-red-500/10 text-red-600' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
+                    {key}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* RIGHT: Customer + actions */}
+            <div className="w-48 border-l border-gray-200 dark:border-gray-800 p-4">
+              {activeCustomer && (
+                <div className="mb-4">
+                  <div className="text-xs text-gray-400 mb-1">Customer</div>
+                  <div className="font-medium text-sm text-primary">👤 {activeCustomer.name}</div>
+                </div>
+              )}
+              <button onClick={() => { /* TODO: generate invoice */ toast('Invoice feature coming soon'); }}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 mb-2">
+                🧾 Invoice
+              </button>
+              <button onClick={() => { setTenders([]); setPayNumpad(''); }}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 text-red-600">
+                Clear Payments
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       )}
     </div>
   );
