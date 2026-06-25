@@ -37,6 +37,7 @@ export default function POSPage() {
   const qc = useQueryClient();
   const branchId = activeBranch?.id;
   const canRefund = user?.role === 'SUPER_ADMIN' || user?.role === 'BRANCH_MANAGER';
+  const canEditFloor = user?.role === 'SUPER_ADMIN' || user?.role === 'BRANCH_MANAGER' || user?.role === 'CASHIER';
 
   // ─── TOP-LEVEL VIEW SWITCH (Odoo-style: Floor Plan / Order / Orders) ───
   const [posView, setPosView] = useState<'floor' | 'order' | 'orders'>('floor');
@@ -701,11 +702,13 @@ export default function POSPage() {
                 }} className="px-3 py-2 rounded-lg bg-primary text-white text-xs font-medium">+ Table</button>
               </>
             )}
+            {canEditFloor && (
             <button onClick={() => setFloorEditMode(!floorEditMode)}
               className={`ms-auto w-9 h-9 rounded-lg flex items-center justify-center text-lg transition ${floorEditMode ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200'}`}
               title={floorEditMode ? 'Exit edit mode' : 'Edit floor plan'}>
               ✏️
             </button>
+            )}
           </div>
 
           {/* Floor canvas with positioned tables */}
