@@ -675,6 +675,7 @@ export default function POSPage() {
   // ---- Numpad target: which line item is selected ----
   const [selectedLineIdx, setSelectedLineIdx] = useState<number>(-1);
   const [numBuffer, setNumBuffer] = useState<string>('');
+  const [numMode, setNumMode] = useState<'Qty' | '%Disc' | 'Price' | null>(null);
 
   // Open a table from the floor plan → switch to order view
   const openTableOrder = async (table: any) => {
@@ -1360,7 +1361,7 @@ export default function POSPage() {
                     )}
                     <span className="text-sm font-semibold">{((l.unitPrice * l.quantity) - (l.discount ?? 0)).toFixed(2)}</span>
                     {(l.discount ?? 0) > 0 && (
-                      <span className="text-[10px] text-green-600 ms-1">(-{(l.discount ?? 0).toFixed(2)})</span>
+                      <span className="text-[10px] text-green-600 ms-1">(-{(l.discount ?? 0).toFixed(2)}{l.unitPrice * l.quantity > 0 ? ` / ${Math.round((l.discount ?? 0) / (l.unitPrice * l.quantity) * 100)}%` : ''})</span>
                     )}
                   </div>
                 </div>
@@ -1641,17 +1642,52 @@ export default function POSPage() {
             </div>
           </div>
 
-          {/* ─── NUMPAD (Odoo-style Qty / %Disc / Price entry) ─── */}
-          {lines.length > 0 && (
+          {/* ─── NUMPAD (Odoo-style: tap Qty → type digits → changes live) ─── */}
+          {/* applyNumpad: executes the action with the given buffer value */}
+          {lines.length > 0 && (() => {
+            const applyNumpad = async (action: 'Qty' | '%Disc' | 'Price', buf: string, targetIdx: number, line: any) => {
+              if (action === 'Qty') {
+                const val = parseInt(buf, 10);
+                if (!val || val <= 0) return;
+                if (mode === 'new') { setQtyAt(targetIdx, val); }
+                else if (line.itemId) {
+                  try {
+                    await api.patch(`/sales/orders/${loadedOrderId}/items/${line.itemId}`, { quantity: val });
+                    qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
+                  } catch {}
+                }
+              } else if (action === '%Disc') {
+                const percent = parseFloat(buf);
+                if (!percent || percent <= 0) return;
+                const discAmt = Math.round(line.unitPrice * line.quantity * percent) / 100;
+                if (mode === 'existing' && line.itemId) {
+                  try {
+                    await api.patch(`/sales/orders/${loadedOrderId}/items/${line.itemId}`, { discount: discAmt });
+                    qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
+                    toast.success(`-${discAmt.toFixed(2)} (${percent}%)`);
+                  } catch (e: any) { toast.error(e.response?.data?.message || 'Failed'); }
+                } else {
+                  toast.success(`-${discAmt.toFixed(2)} (${percent}%)`);
+                }
+              } else if (action === 'Price') {
+                const newPrice = parseFloat(buf);
+                if (isNaN(newPrice)) return;
+                if (mode === 'new') { setPriceAt(targetIdx, newPrice); toast.success(`Price → ${newPrice.toFixed(2)}`); }
+                else { toast('Price change requires manager override — use %Disc instead'); }
+              }
+            };
+            return (
             <div className="border-t border-gray-200 dark:border-gray-800 mt-2 pt-2">
               {selectedLineIdx >= 0 && selectedLineIdx < lines.length && (
                 <div className="text-[10px] text-primary font-medium mb-1">
                   Selected: {lines[selectedLineIdx].name} (×{lines[selectedLineIdx].quantity})
+                  {lines[selectedLineIdx].discount ? <span className="ms-1 text-emerald-600">(-{Number(lines[selectedLineIdx].discount).toFixed(2)})</span> : null}
                 </div>
               )}
               {/* Numpad buffer display */}
               {numBuffer && (
-                <div className="text-right text-lg font-mono font-bold text-gray-800 dark:text-gray-100 mb-1 px-1">
+                <div className="text-right text-lg font-mono font-bold text-gray-800 dark:text-gray-100 mb-1 px-1 flex items-center justify-end gap-2">
+                  <span className="text-[10px] text-gray-400 font-normal">{numMode || 'Qty'}</span>
                   {numBuffer}
                 </div>
               )}
@@ -1660,65 +1696,53 @@ export default function POSPage() {
                 ].map((key, idx) => {
                   const isAction = typeof key === 'string' && ['Qty','%Disc','Price'].includes(key as string);
                   const isClear = key === 'C';
+                  const isActiveMode = isAction && numMode === key;
                   return (
                     <button key={idx}
-                      className={`py-2 rounded ${isAction ? 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-blue-400 font-medium' : isClear ? 'bg-red-50 dark:bg-red-500/10 text-red-600 font-medium' : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-600'} text-center text-sm`}
+                      className={`py-2 rounded ${isAction ? (isActiveMode ? 'bg-primary text-white font-bold ring-2 ring-primary/50' : 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-blue-400 font-medium') : isClear ? 'bg-red-50 dark:bg-red-500/10 text-red-600 font-medium' : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-600'} text-center text-sm`}
                       onClick={async () => {
                         // Clear button
-                        if (isClear) { setNumBuffer(''); return; }
+                        if (isClear) { setNumBuffer(''); setNumMode(null); return; }
 
-                        // Number/decimal/sign keys → accumulate in buffer
-                        if (!isAction) {
-                          if (key === '+/-') {
-                            setNumBuffer(b => b.startsWith('-') ? b.slice(1) : '-' + b);
+                        const targetIdx = selectedLineIdx >= 0 && selectedLineIdx < lines.length ? selectedLineIdx : lines.length - 1;
+                        const line = lines[targetIdx];
+
+                        // Action keys: if buffer has value → apply immediately. Otherwise → select mode.
+                        if (isAction) {
+                          const actionKey = key as 'Qty' | '%Disc' | 'Price';
+                          if (numBuffer && line) {
+                            // Apply the buffer with this action
+                            await applyNumpad(actionKey, numBuffer, targetIdx, line);
+                            setNumBuffer('');
+                            setNumMode(null);
                           } else {
-                            setNumBuffer(b => b + String(key));
+                            // Just select the mode (next digit input will apply live)
+                            setNumMode(actionKey);
+                            setNumBuffer('');
                           }
                           return;
                         }
 
-                        // Action keys: apply buffered value (or prompt if buffer empty)
-                        const targetIdx = selectedLineIdx >= 0 && selectedLineIdx < lines.length ? selectedLineIdx : lines.length - 1;
-                        const line = lines[targetIdx];
-                        if (!line) { toast.error('Select an item first'); return; }
+                        // Number/decimal/sign keys
+                        let newBuf = numBuffer;
+                        if (key === '+/-') {
+                          newBuf = numBuffer.startsWith('-') ? numBuffer.slice(1) : '-' + numBuffer;
+                        } else {
+                          newBuf = numBuffer + String(key);
+                        }
+                        setNumBuffer(newBuf);
 
-                        if (key === 'Qty') {
-                          const val = numBuffer ? parseInt(numBuffer, 10) : 0;
-                          if (!val || val <= 0) { toast.error('Enter quantity on numpad first'); setNumBuffer(''); return; }
-                          setNumBuffer('');
-                          if (mode === 'new') {
-                            setQtyAt(targetIdx, val);
-                            toast.success(`Qty → ${val}`);
-                          } else if (line.itemId) {
-                            try {
-                              await api.patch(`/sales/orders/${loadedOrderId}/items/${line.itemId}`, { quantity: val });
-                              qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
-                              toast.success(`Qty → ${val}`);
-                            } catch (e: any) { toast.error(e.response?.data?.message || 'Failed'); }
-                          }
-                        } else if (key === '%Disc') {
-                          const percent = numBuffer ? parseFloat(numBuffer) : 0;
-                          if (!percent || percent <= 0) { toast.error('Enter discount % on numpad first'); setNumBuffer(''); return; }
-                          setNumBuffer('');
-                          const discAmt = Math.round(line.unitPrice * line.quantity * percent) / 100;
-                          if (mode === 'existing' && line.itemId) {
-                            try {
-                              await api.patch(`/sales/orders/${loadedOrderId}/items/${line.itemId}`, { discount: discAmt });
-                              qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
-                              toast.success(`-${discAmt.toFixed(2)} (${percent}%) discount`);
-                            } catch (e: any) { toast.error(e.response?.data?.message || 'Failed'); }
-                          } else {
-                            toast.success(`-${discAmt.toFixed(2)} (${percent}%) discount`);
-                          }
-                        } else if (key === 'Price') {
-                          const newPrice = numBuffer ? parseFloat(numBuffer) : 0;
-                          if (!newPrice && newPrice !== 0) { toast.error('Enter price on numpad first'); setNumBuffer(''); return; }
-                          setNumBuffer('');
-                          if (mode === 'new') {
-                            setPriceAt(targetIdx, newPrice);
-                            toast.success(`Price → ${newPrice.toFixed(2)}`);
-                          } else {
-                            toast('Price change requires manager override — use %Disc instead');
+                        // In Qty mode: apply immediately as digits are typed
+                        if (numMode === 'Qty' && line) {
+                          const val = parseInt(newBuf, 10);
+                          if (val > 0) {
+                            if (mode === 'new') {
+                              setQtyAt(targetIdx, val);
+                            } else if (line.itemId) {
+                              api.patch(`/sales/orders/${loadedOrderId}/items/${line.itemId}`, { quantity: val })
+                                .then(() => qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] }))
+                                .catch(() => {});
+                            }
                           }
                         }
                       }}
@@ -1727,7 +1751,7 @@ export default function POSPage() {
                 })}
               </div>
             </div>
-          )}
+            ); })()}
 
           {/* ─── TOTALS + PAYMENT BUTTON ─── */}
           <div className="border-t border-gray-200 dark:border-gray-800 mt-3 pt-3">
@@ -1741,6 +1765,15 @@ export default function POSPage() {
                 <span>-{discount.toFixed(2)}</span>
               </div>
             )}
+            {(() => {
+              const itemDisc = lines.reduce((s, l) => s + (l.discount ?? 0), 0);
+              return itemDisc > 0 ? (
+                <div className="flex justify-between text-sm text-green-600">
+                  <span>Item discounts</span>
+                  <span>-{itemDisc.toFixed(2)}</span>
+                </div>
+              ) : null;
+            })()}
             <div className="flex justify-between text-lg font-bold my-2">
               <span>Total</span>
               <span>{total.toFixed(2)}</span>
