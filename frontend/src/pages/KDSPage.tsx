@@ -61,41 +61,84 @@ export default function KDSPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {columns.map((col) => {
             const items = board?.[col] ?? [];
+            // Group items by order (one card per order, all items inside)
+            const orderMap = new Map<string, { orderNo: string; tableName: string; channel: string; orderId: number; items: any[] }>();
+            for (const it of items) {
+              const key = it.order?.orderNo || `#${it.orderId}`;
+              if (!orderMap.has(key)) {
+                orderMap.set(key, {
+                  orderNo: it.order?.orderNo || `#${it.orderId}`,
+                  tableName: it.order?.tableName || '',
+                  channel: it.order?.channel || '',
+                  orderId: it.orderId,
+                  items: [],
+                });
+              }
+              orderMap.get(key)!.items.push(it);
+            }
+            const orders = Array.from(orderMap.values());
+
             return (
               <div key={col} className={`rounded-xl border-t-4 ${COLUMN_STYLE[col]} bg-gray-50 dark:bg-gray-900/50 p-3`}>
                 <h3 className="font-semibold text-sm mb-3 flex justify-between">
                   <span>{col}</span>
-                  <span className="text-gray-400">{items.length}</span>
+                  <span className="text-gray-400">{orders.length} order{orders.length !== 1 ? 's' : ''} · {items.length} item{items.length !== 1 ? 's' : ''}</span>
                 </h3>
                 <div className="space-y-3">
-                  {items.map((it: any) => (
-                    <div key={it.id} className="rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-3">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="font-medium text-sm text-gray-900 dark:text-gray-100">{it.product?.name}</div>
-                          <div className="text-xs text-gray-500">
-                            ×{it.quantity} · {it.order?.orderNo}
-                            {it.order?.tableName ? ` · ${it.order.tableName}` : ''} · {it.order?.channel}
-                          </div>
-                          {Array.isArray(it.modifiers) && it.modifiers.length > 0 && (
-                            <div className="text-xs font-medium text-amber-600 dark:text-amber-400 mt-1">
-                              → {it.modifiers.map((m: any) => m.name).filter(Boolean).join(', ')}
-                            </div>
-                          )}
-                          {it.notes && <div className="text-xs text-gray-500 mt-0.5 italic">* {it.notes}</div>}
+                  {orders.map((order) => (
+                    <div key={order.orderNo} className="rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-3">
+                      {/* Order header */}
+                      <div className="flex justify-between items-center mb-2 pb-2 border-b border-gray-100 dark:border-gray-800">
+                        <div className="font-bold text-sm text-gray-900 dark:text-gray-100">{order.orderNo}</div>
+                        <div className="text-xs text-gray-500">
+                          {order.tableName && <span className="font-medium">{order.tableName} · </span>}
+                          {order.channel?.replace('_', ' ')}
                         </div>
                       </div>
-                      {NEXT[col] && (
+                      {/* Items list */}
+                      <div className="space-y-1.5">
+                        {order.items.map((it: any) => (
+                          <div key={it.id} className="flex justify-between items-start gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                                <span className="font-bold text-gray-600 dark:text-gray-400 me-1">×{it.quantity}</span>
+                                {it.product?.name}
+                              </div>
+                              {Array.isArray(it.modifiers) && it.modifiers.length > 0 && (
+                                <div className="text-[11px] text-amber-600 dark:text-amber-400">
+                                  → {it.modifiers.map((m: any) => m.name).filter(Boolean).join(', ')}
+                                </div>
+                              )}
+                              {it.notes && <div className="text-[11px] text-gray-500 italic">* {it.notes}</div>}
+                            </div>
+                            {NEXT[col] && (
+                              <button
+                                onClick={() => advance.mutate({ id: it.id, status: NEXT[col].status })}
+                                disabled={advance.isPending}
+                                className="px-2 py-1 rounded text-[10px] font-medium bg-primary/10 text-primary hover:bg-primary hover:text-white transition-colors flex-shrink-0"
+                              >
+                                {NEXT[col].label}
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {/* Advance all items at once */}
+                      {NEXT[col] && order.items.length > 1 && (
                         <button
-                          onClick={() => advance.mutate({ id: it.id, status: NEXT[col].status })}
+                          onClick={() => {
+                            for (const it of order.items) {
+                              advance.mutate({ id: it.id, status: NEXT[col].status });
+                            }
+                          }}
                           className="mt-2 w-full py-1.5 rounded-lg bg-primary text-white text-xs font-medium"
                         >
-                          {NEXT[col].label}
+                          {NEXT[col].label} All ({order.items.length})
                         </button>
                       )}
                     </div>
                   ))}
-                  {!items.length && <p className="text-xs text-gray-400 text-center py-6">Empty</p>}
+                  {!orders.length && <p className="text-xs text-gray-400 text-center py-6">Empty</p>}
                 </div>
               </div>
             );
