@@ -8,6 +8,7 @@ import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { printCustomerStatement } from '../lib/thermalPrint';
 import DataToolbar from '../components/DataToolbar';
+import { usePrompt } from '../lib/usePrompt';
 
 const blankForm = { name: '', phone: '', email: '', group: '', creditLimit: '0', notes: '' };
 
@@ -15,6 +16,7 @@ export default function CustomersPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const { activeBranch } = useAuth();
+  const [prompt, PromptDialog] = usePrompt();
   const { data: settings } = useQuery({ queryKey: ['settings-receipt'], queryFn: () => api.get('/settings').then((r) => r.data.data) });
   const businessInfo = useMemo(() => {
     const m: Record<string, string> = {};
@@ -54,8 +56,8 @@ export default function CustomersPage() {
   const openNew = () => { setEditing(null); setForm(blankForm); setModal(true); };
   const openEdit = (c: any) => { setEditing(c); setForm({ name: c.name, phone: c.phone || '', email: c.email || '', group: c.group || '', creditLimit: String(c.creditLimit ?? 0), notes: c.notes || '' }); setModal(true); };
 
-  const topUp = () => { const v = window.prompt(t('customers.topUpPrompt')); if (!v) return; const a = parseFloat(v); if (a > 0) wallet.mutate({ creditDelta: a }); };
-  const grant = () => { const v = window.prompt(t('customers.grantPrompt')); if (!v) return; const p = parseInt(v, 10); if (p) wallet.mutate({ pointsDelta: p }); };
+  const topUp = async () => { const v = await prompt({ title: t('customers.topUpPrompt'), type: 'number', placeholder: 'Amount' }); if (!v) return; const a = parseFloat(v); if (a > 0) wallet.mutate({ creditDelta: a }); };
+  const grant = async () => { const v = await prompt({ title: t('customers.grantPrompt'), type: 'number', placeholder: 'Points' }); if (!v) return; const p = parseInt(v, 10); if (p) wallet.mutate({ pointsDelta: p }); };
   const printStatement = async () => {
     if (!detail) return;
     try {
@@ -67,6 +69,7 @@ export default function CustomersPage() {
   return (
     <div>
       <PageHeader title={t('nav.customers')} subtitle={t('customers.subtitle')} />
+      <PromptDialog />
 
       <div className="flex flex-wrap gap-2 mb-4">
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('customers.search')} className="flex-1 min-w-[200px] rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm" />

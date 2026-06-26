@@ -12,6 +12,7 @@ import ModifierModal, { ModGroup, ChosenModifier } from '../components/ModifierM
 import { printReceipt, printKot } from '../lib/thermalPrint';
 import { useOnlineStatus } from '../lib/useOnlineStatus';
 import OfflineBanner from '../components/OfflineBanner';
+import { usePrompt } from '../lib/usePrompt';
 
 interface CartLine {
   itemId?: number; // present when the line lives on a persisted (loaded) order
@@ -41,6 +42,7 @@ export default function POSPage() {
   const qc = useQueryClient();
   const branchId = activeBranch?.id;
   const { isOnline, isSyncing, pendingCount } = useOnlineStatus();
+  const [prompt, PromptDialog] = usePrompt();
   const canRefund = user?.role === 'SUPER_ADMIN' || user?.role === 'BRANCH_MANAGER';
   const canEditFloor = user?.role === 'SUPER_ADMIN' || user?.role === 'BRANCH_MANAGER' || user?.role === 'CASHIER';
 
@@ -331,14 +333,14 @@ export default function POSPage() {
         const batches = batchRes.data?.data || [];
         if (batches.length > 0) {
           const options = batches.map((b: any) => `${b.batchNumber || 'N/A'} (qty: ${b.availableQuantity}, exp: ${b.expiryDate ? new Date(b.expiryDate).toLocaleDateString() : 'N/A'})`).join('\n');
-          const pick = window.prompt(`Select batch for ${p.name}:\n\n${options}\n\nEnter batch number (or leave blank for auto-FEFO):`, batches[0]?.batchNumber || '');
+          const pick = await prompt({ title: `Select batch for ${p.name}`, description: options, defaultValue: batches[0]?.batchNumber || '', placeholder: 'Enter batch number (blank = auto-FEFO)' });
           if (pick === null) return;
           const label = pick.trim() || batches[0]?.batchNumber || '';
           addLine(p, p.salePrice ?? p.costPrice ?? 0, label ? [{ optionId: -1, name: `Lot: ${label}`, priceDelta: 0 }] as any : undefined);
           return;
         }
       } catch { /* fallback to text prompt */ }
-      const serial = window.prompt(t('pos.enterSerial', { name: p.name }) as string, '');
+      const serial = await prompt({ title: t('pos.enterSerial', { name: p.name }) as string, placeholder: 'Serial / Lot number' });
       if (serial === null) return;
       if (serial.trim()) {
         addLine(p, p.salePrice ?? p.costPrice ?? 0, [{ optionId: -1, name: `S/N ${serial.trim()}`, priceDelta: 0 }] as any);
@@ -351,8 +353,8 @@ export default function POSPage() {
   };
 
   // Weighed product: prompt for weight and compute price = weight × unit price
-  const handleWeighed = (p: any) => {
-    const raw = window.prompt(`${p.name} — Enter weight (kg):`, '1');
+  const handleWeighed = async (p: any) => {
+    const raw = await prompt({ title: `${p.name} — Enter weight (kg)`, defaultValue: '1', type: 'number' });
     if (raw === null) return;
     const weight = parseFloat(raw);
     if (!(weight > 0)) { toast.error('Invalid weight'); return; }
@@ -650,7 +652,7 @@ export default function POSPage() {
 
   // Cancel an order with confirmation + reason note (no KOT print)
   const cancelOrderWithNote = async (orderId: number, orderNo: string) => {
-    const reason = window.prompt(`Cancel order ${orderNo}?\n\nEnter cancellation reason:`);
+    const reason = await prompt({ title: `Cancel order ${orderNo}?`, description: 'Enter cancellation reason:', placeholder: 'Reason...' });
     if (reason === null) return; // user pressed Cancel on prompt
     try {
       await api.patch(`/sales/orders/${orderId}/void`);
@@ -764,8 +766,8 @@ export default function POSPage() {
             ))}
             {floorEditMode && (
               <>
-                <button onClick={() => {
-                  const name = window.prompt('New area name:', '');
+                <button onClick={async () => {
+                  const name = await prompt({ title: 'New area name', placeholder: 'e.g. Terrace' });
                   if (name?.trim()) {
                     api.post('/floors', { branchId, name: name.trim(), background: '#e9d5ff' }).then(() => {
                       toast.success('Area created');
@@ -1985,6 +1987,7 @@ export default function POSPage() {
         </div>
       )}
 
+      <PromptDialog />
     </div>
   );
 }

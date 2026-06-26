@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 import DataToolbar from '../components/DataToolbar';
+import { usePrompt } from '../lib/usePrompt';
 
 const bucketTone: Record<string, string> = {
   '0-30': 'text-emerald-600',
@@ -18,6 +19,7 @@ export default function ReceivablesPage() {
   const { t } = useTranslation();
   const { activeBranch } = useAuth();
   const qc = useQueryClient();
+  const [prompt, PromptDialog] = usePrompt();
   const branchId = activeBranch?.id;
   const params = branchId ? { branchId } : {};
 
@@ -43,18 +45,20 @@ export default function ReceivablesPage() {
     onError: (e: any) => toast.error(e.response?.data?.message || 'Failed'),
   });
 
-  const recordPayment = (r: any) => {
-    const raw = window.prompt(t('receivables.amountPrompt', { max: r.outstanding.toFixed(2) }), r.outstanding.toFixed(2));
+  const recordPayment = async (r: any) => {
+    const raw = await prompt({ title: t('receivables.amountPrompt', { max: r.outstanding.toFixed(2) }), defaultValue: r.outstanding.toFixed(2), type: 'number' });
     if (raw == null) return;
     const amount = parseFloat(raw);
     if (!(amount > 0)) return toast.error(t('receivables.badAmount'));
-    const method = (window.prompt(t('receivables.methodPrompt'), 'CASH') || 'CASH').toUpperCase().replace(/\s+/g, '_');
+    const method = await prompt({ title: t('receivables.methodPrompt'), defaultValue: 'CASH', type: 'select', options: [{ value: 'CASH', label: 'Cash' }, { value: 'CARD', label: 'Card' }, { value: 'BANK_TRANSFER', label: 'Bank Transfer' }] });
+    if (!method) return;
     pay.mutate({ orderId: r.orderId, amount, method });
   };
 
   return (
     <div>
       <PageHeader title={t('nav.receivables')} subtitle={activeBranch?.name} />
+      <PromptDialog />
 
       {/* Odoo-style toolbar */}
       <DataToolbar

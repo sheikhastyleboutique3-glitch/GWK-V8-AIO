@@ -6,12 +6,14 @@ import api from '../lib/api';
 import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 import DataToolbar from '../components/DataToolbar';
+import { usePrompt } from '../lib/usePrompt';
 
 const PROGRAM_TYPES = ['LOYALTY', 'EWALLET', 'GIFT_CARD', 'PROMOTION', 'DISCOUNT', 'COUPON', 'BUY_X_GET_Y'];
 
 export default function LoyaltyPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const [prompt, PromptDialog] = usePrompt();
   const [prog, setProg] = useState({ name: '', type: 'LOYALTY', pointsPerCurrency: 1 });
   const [card, setCard] = useState({ programId: '', code: '', balance: 0 });
 
@@ -40,8 +42,8 @@ export default function LoyaltyPage() {
     onError: (e: any) => toast.error(e.response?.data?.message || 'Failed'),
   });
 
-  const doAdjust = (c: any, kind: 'earn' | 'redeem') => {
-    const raw = window.prompt(`${kind === 'earn' ? 'Add' : 'Redeem'} — points,amount (e.g. 10,0 or 0,25)`, '0,0');
+  const doAdjust = async (c: any, kind: 'earn' | 'redeem') => {
+    const raw = await prompt({ title: `${kind === 'earn' ? 'Add' : 'Redeem'}`, description: 'Enter points,amount (e.g. 10,0 or 0,25)', defaultValue: '0,0' });
     if (raw == null) return;
     const [points, amount] = raw.split(',').map((x) => parseFloat(x.trim()) || 0);
     adjust.mutate({ code: c.code, kind, points, amount });
@@ -50,6 +52,7 @@ export default function LoyaltyPage() {
   return (
     <div>
       <PageHeader title={t('nav.loyalty')} subtitle={t('loyalty.subtitle')} />
+      <PromptDialog />
 
       {/* Odoo-style toolbar */}
       <DataToolbar
