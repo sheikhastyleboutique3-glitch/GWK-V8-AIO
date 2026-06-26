@@ -1114,9 +1114,11 @@ async function main() {
   // DEMO POS SESSION + ORDERS (realistic dine-in scenarios)
   // ==========================================================================
   // Open a POS session for Doha branch so orders can be created
-  const demoSession = await prisma.posSession.create({
-    data: {
-      sessionNo: `POS-DEMO-B2-0001`,
+  const demoSession = await prisma.posSession.upsert({
+    where: { sessionNo: 'POS-DEMO-B2-0001' },
+    update: {},
+    create: {
+      sessionNo: 'POS-DEMO-B2-0001',
       branchId: branches.doha.id,
       status: 'OPEN',
       openingFloat: 1500,
