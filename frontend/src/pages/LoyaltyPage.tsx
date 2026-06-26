@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import api from '../lib/api';
 import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
+import DataToolbar from '../components/DataToolbar';
 
 const PROGRAM_TYPES = ['LOYALTY', 'EWALLET', 'GIFT_CARD', 'PROMOTION', 'DISCOUNT', 'COUPON', 'BUY_X_GET_Y'];
 
@@ -49,6 +50,22 @@ export default function LoyaltyPage() {
   return (
     <div>
       <PageHeader title={t('nav.loyalty')} subtitle={t('loyalty.subtitle')} />
+
+      {/* Odoo-style toolbar */}
+      <DataToolbar
+        pageId="loyalty"
+        filterFields={[
+          { key: 'search', label: 'Program Name / Card Code', type: 'text' as const },
+          { key: 'type', label: 'Program Type', type: 'select' as const, options: PROGRAM_TYPES.map(tp => ({ value: tp, label: tp.replace(/_/g, ' ') })) },
+        ]}
+        groupByFields={[
+          { key: 'type', label: 'Type' },
+        ]}
+        onFilterApply={() => {}}
+        groupByValue={[]}
+        onGroupByChange={() => {}}
+        className="mb-4"
+      />
 
       <div className="grid md:grid-cols-2 gap-5">
         {/* Programs */}

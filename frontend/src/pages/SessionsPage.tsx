@@ -8,6 +8,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import StatusBadge from '../components/StatusBadge';
 import { printSessionReport } from '../lib/thermalPrint';
 import { downloadSessionReportPdf } from '../lib/pdf';
+import DataToolbar from '../components/DataToolbar';
 
 export default function SessionsPage() {
   const { t } = useTranslation();
@@ -41,6 +42,23 @@ export default function SessionsPage() {
   return (
     <div>
       <PageHeader title={t('nav.sessions')} subtitle={activeBranch?.name} />
+
+      {/* Odoo-style toolbar */}
+      <DataToolbar
+        pageId="sessions"
+        filterFields={[
+          { key: 'status', label: 'Status', type: 'select' as const, options: [{ value: 'OPEN', label: 'Open' }, { value: 'CLOSED', label: 'Closed' }] },
+          { key: 'openedAt', label: 'Opened Date', type: 'date' as const },
+        ]}
+        groupByFields={[
+          { key: 'status', label: 'Status' },
+        ]}
+        onFilterApply={() => {}}
+        groupByValue={[]}
+        onGroupByChange={() => {}}
+        className="mb-4"
+      />
+
       {isLoading ? <LoadingSpinner /> : (
         <div className="space-y-2">
           {(sessions || []).map((s: any) => (

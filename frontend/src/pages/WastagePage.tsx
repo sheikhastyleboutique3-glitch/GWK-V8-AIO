@@ -8,6 +8,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import Modal from '../components/Modal';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
+import DataToolbar from '../components/DataToolbar';
 
 const REASONS = ['EXPIRED', 'DAMAGED', 'SPILLAGE', 'OVERPRODUCTION', 'QUALITY_REJECTION', 'OTHER'];
 
@@ -91,6 +92,31 @@ export default function WastagePage() {
       />
 
       {/* Search + Filters */}
+      <DataToolbar
+        pageId="wastage"
+        filterFields={[
+          { key: 'search', label: 'Product Name / SKU', type: 'text' as const },
+          { key: 'reason', label: 'Reason', type: 'select' as const, options: REASONS.map(r => ({ value: r, label: r.replace(/_/g, ' ') })) },
+          { key: 'createdAt', label: 'Date', type: 'date' as const },
+        ]}
+        groupByFields={[
+          { key: 'reason', label: 'Reason' },
+          { key: 'productName', label: 'Product' },
+        ]}
+        onFilterApply={(params) => {
+          if (params.search) setSearch(params.search);
+          if (params.reason) setReasonFilter(params.reason);
+          if (params.from) setFromDate(params.from);
+          if (params.to) setToDate(params.to);
+        }}
+        groupByValue={[]}
+        onGroupByChange={() => {}}
+        onExport={handleExport}
+        exporting={exporting}
+        className="mb-4"
+      />
+
+      {/* Legacy inline filters (kept for backward compat) */}
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
         <div className="relative flex-1">
           <span className="absolute inset-y-0 start-3 flex items-center text-gray-400">🔍</span>

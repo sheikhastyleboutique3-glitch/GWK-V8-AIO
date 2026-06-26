@@ -6,6 +6,7 @@ import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Modal from '../components/Modal';
 import toast from 'react-hot-toast';
+import DataToolbar from '../components/DataToolbar';
 
 const ROLES = ['SUPER_ADMIN', 'BRANCH_MANAGER', 'PROCUREMENT', 'WAREHOUSE', 'KITCHEN', 'BARISTA', 'PASTRY', 'CASHIER', 'WAITER', 'DRIVER', 'CLEANER'];
 const ROLE_COLORS: Record<string, string> = {
@@ -93,6 +94,24 @@ export default function UsersPage() {
             + Add User
           </button>
         }
+      />
+
+      {/* Odoo-style toolbar */}
+      <DataToolbar
+        pageId="users"
+        filterFields={[
+          { key: 'search', label: 'Name / Email', type: 'text' as const },
+          { key: 'role', label: 'Role', type: 'select' as const, options: ROLES.map(r => ({ value: r, label: r.replace(/_/g, ' ') })) },
+          { key: 'isActive', label: 'Active', type: 'boolean' as const },
+        ]}
+        groupByFields={[
+          { key: 'role', label: 'Role' },
+          { key: 'branchName', label: 'Branch' },
+        ]}
+        onFilterApply={() => {}}
+        groupByValue={[]}
+        onGroupByChange={() => {}}
+        className="mb-4"
       />
 
       {isLoading ? <LoadingSpinner /> : (

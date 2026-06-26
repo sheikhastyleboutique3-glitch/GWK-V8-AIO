@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { PlusIcon, ArrowsRightLeftIcon, TrashIcon } from '@heroicons/react/24/outline';
 import type { Branch, Product, TransferOrder, FefoAllocation } from '../types';
+import DataToolbar from '../components/DataToolbar';
 
 interface LineDraft { productId: string; quantity: string; preview?: FefoAllocation[]; previewError?: string; }
 
@@ -125,6 +126,26 @@ export default function TransfersPage() {
           </button>
         ))}
       </div>
+
+      {/* Odoo-style toolbar */}
+      <DataToolbar
+        pageId="transfers"
+        filterFields={[
+          { key: 'status', label: 'Status', type: 'select' as const, options: [{ value: 'DRAFT', label: 'Draft' }, { value: 'IN_TRANSIT', label: 'In Transit' }, { value: 'RECEIVED', label: 'Received' }, { value: 'CANCELLED', label: 'Cancelled' }] },
+          { key: 'createdAt', label: 'Dispatch Date', type: 'date' as const },
+        ]}
+        groupByFields={[
+          { key: 'status', label: 'Status' },
+          { key: 'fromBranchName', label: 'From Branch' },
+          { key: 'toBranchName', label: 'To Branch' },
+        ]}
+        onFilterApply={(params) => {
+          if (params.status) setStatusFilter(params.status);
+        }}
+        groupByValue={[]}
+        onGroupByChange={() => {}}
+        className="mb-4"
+      />
 
       {isLoading ? (
         <p className="text-sm text-gray-500">Loading…</p>

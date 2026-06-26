@@ -6,6 +6,7 @@ import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
+import DataToolbar from '../components/DataToolbar';
 
 export default function StockCountPage() {
   const { t } = useTranslation();
@@ -58,6 +59,22 @@ export default function StockCountPage() {
   return (
     <div>
       <PageHeader title={t('nav.stockCount')} subtitle={activeBranch?.name} />
+
+      {/* Odoo-style toolbar */}
+      <DataToolbar
+        pageId="stock-counts"
+        filterFields={[
+          { key: 'status', label: 'Status', type: 'select' as const, options: [{ value: 'DRAFT', label: 'Draft' }, { value: 'FINALIZED', label: 'Finalized' }] },
+        ]}
+        groupByFields={[
+          { key: 'status', label: 'Status' },
+        ]}
+        onFilterApply={() => {}}
+        groupByValue={[]}
+        onGroupByChange={() => {}}
+        className="mb-4"
+      />
+
       {!branchId && <p className="text-xs text-amber-600 mb-3">{t('stockCount.selectBranch')}</p>}
 
       <div className="flex flex-wrap gap-2 mb-4">

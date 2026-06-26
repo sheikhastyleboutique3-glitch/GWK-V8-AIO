@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 import StatusBadge from '../components/StatusBadge';
+import DataToolbar from '../components/DataToolbar';
 
 const NEXT: Record<string, string> = {
   ASSIGNED: 'OUT_FOR_DELIVERY',
@@ -59,6 +60,25 @@ export default function DeliveriesPage() {
   return (
     <div>
       <PageHeader title={t('nav.deliveries')} subtitle={isDriver ? t('deliveries.myRuns') : activeBranch?.name} />
+
+      {/* Odoo-style toolbar */}
+      {!isDriver && (
+        <DataToolbar
+          pageId="deliveries"
+          filterFields={[
+            { key: 'status', label: 'Status', type: 'select' as const, options: [{ value: 'PENDING', label: 'Pending' }, { value: 'ASSIGNED', label: 'Assigned' }, { value: 'OUT_FOR_DELIVERY', label: 'Out for Delivery' }, { value: 'DELIVERED', label: 'Delivered' }] },
+          ]}
+          groupByFields={[
+            { key: 'status', label: 'Status' },
+            { key: 'driverName', label: 'Driver' },
+          ]}
+          onFilterApply={() => {}}
+          groupByValue={[]}
+          onGroupByChange={() => {}}
+          className="mb-4"
+        />
+      )}
+
       {isLoading ? <LoadingSpinner /> : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {(deliveries || []).map((d: any) => (

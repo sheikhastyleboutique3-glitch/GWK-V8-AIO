@@ -5,6 +5,7 @@ import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
+import DataToolbar from '../components/DataToolbar';
 
 const bucketTone: Record<string, string> = {
   '0-30': 'text-emerald-600',
@@ -54,6 +55,23 @@ export default function ReceivablesPage() {
   return (
     <div>
       <PageHeader title={t('nav.receivables')} subtitle={activeBranch?.name} />
+
+      {/* Odoo-style toolbar */}
+      <DataToolbar
+        pageId="receivables"
+        filterFields={[
+          { key: 'search', label: 'Order No / Customer', type: 'text' as const },
+          { key: 'bucket', label: 'Aging Bucket', type: 'select' as const, options: [{ value: '0-30', label: '0-30 days' }, { value: '31-60', label: '31-60 days' }, { value: '61-90', label: '61-90 days' }, { value: '90+', label: '90+ days' }] },
+        ]}
+        groupByFields={[
+          { key: 'bucket', label: 'Aging Bucket' },
+          { key: 'customerName', label: 'Customer' },
+        ]}
+        onFilterApply={() => {}}
+        groupByValue={[]}
+        onGroupByChange={() => {}}
+        className="mb-4"
+      />
 
       {/* Aging summary */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">

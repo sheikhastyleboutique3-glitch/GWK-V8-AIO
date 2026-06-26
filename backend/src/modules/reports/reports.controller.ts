@@ -73,9 +73,10 @@ export class ReportsController {
     @Query('priority') priority?: string,
     @Query('department') department?: string,
     @Query('productId') productId?: string,
+    @Query('_logic') logic?: string,
     @Res() res?: Response,
   ) {
-    const validTypes = ['requisitions', 'inventory', 'purchase-orders', 'wastage', 'expiry-alerts', 'low-stock', 'sales-orders', 'customers', 'tax-report'];
+    const validTypes = ['requisitions', 'inventory', 'purchase-orders', 'wastage', 'expiry-alerts', 'low-stock', 'sales-orders', 'customers', 'tax-report', 'sessions', 'transfers', 'deliveries', 'receivables', 'payables', 'users', 'production', 'loyalty'];
     if (!validTypes.includes(type)) {
       res.status(400).json({ message: `Invalid export type. Valid: ${validTypes.join(', ')}` });
       return;
@@ -94,6 +95,7 @@ export class ReportsController {
         priority: priority || undefined,
         department: department || undefined,
         productId: productId ? +productId : undefined,
+        logic: logic === 'OR' ? 'OR' : 'AND',
       });
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader(

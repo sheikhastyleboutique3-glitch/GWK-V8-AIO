@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 import StatusBadge from '../components/StatusBadge';
+import DataToolbar from '../components/DataToolbar';
 
 export default function ProductionPage() {
   const { t } = useTranslation();
@@ -15,6 +16,8 @@ export default function ProductionPage() {
   const [productId, setProductId] = useState<string>('');
   const [plannedQty, setPlannedQty] = useState<string>('');
   const [expiryDate, setExpiryDate] = useState<string>('');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
 
   const branchId = activeBranch?.id;
 
@@ -70,6 +73,25 @@ export default function ProductionPage() {
   return (
     <div>
       <PageHeader title={t('nav.production')} subtitle={activeBranch?.name} />
+
+      {/* Odoo-style toolbar */}
+      <DataToolbar
+        pageId="production"
+        filterFields={[
+          { key: 'search', label: 'Production No / Product', type: 'text' as const },
+          { key: 'status', label: 'Status', type: 'select' as const, options: [{ value: 'PLANNED', label: 'Planned' }, { value: 'IN_PROGRESS', label: 'In Progress' }, { value: 'COMPLETED', label: 'Completed' }, { value: 'CANCELLED', label: 'Cancelled' }] },
+        ]}
+        groupByFields={[
+          { key: 'status', label: 'Status' },
+        ]}
+        onFilterApply={(params) => {
+          if (params.search) setSearch(params.search);
+          if (params.status) setStatusFilter(params.status);
+        }}
+        groupByValue={[]}
+        onGroupByChange={() => {}}
+        className="mb-4"
+      />
 
       <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 mb-5">
         <h3 className="font-semibold text-sm mb-1">New production run</h3>

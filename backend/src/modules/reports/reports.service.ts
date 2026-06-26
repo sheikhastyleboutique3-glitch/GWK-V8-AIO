@@ -35,6 +35,7 @@ export interface ExportFilters {
   priority?: string;
   department?: string;
   productId?: number;
+  logic?: 'AND' | 'OR'; // Odoo-style: OR combines filter conditions with OR instead of AND
 }
 
 @Injectable()
@@ -170,7 +171,8 @@ export class ReportsService {
   }
 
   async exportCsv(type: string, opts: ExportFilters = {}): Promise<string> {
-    const { branchId, from, to, search, status, supplierId, categoryId, reason, priority, department, productId } = opts;
+    const { branchId, from, to, search, status, supplierId, categoryId, reason, priority, department, productId, logic } = opts;
+    const useOR = logic === 'OR';
     const dateFilter = (from || to)
       ? { createdAt: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to + 'T23:59:59.999Z') } : {}) } }
       : {};
@@ -186,15 +188,35 @@ export class ReportsService {
     if (supplierId) productWhere.supplierId = supplierId;
     const hasProductWhere = Object.keys(productWhere).length > 0;
 
+    /**
+     * OR-logic helper: when _logic=OR, instead of ANDing all conditions,
+     * we wrap each non-empty condition in an OR array so any one match counts.
+     * branchId is always AND (scope constraint) — only the filter conditions go into OR.
+     */
+    const buildOrWhere = (conditions: Record<string, any>[]): any => {
+      const nonEmpty = conditions.filter(c => Object.keys(c).length > 0);
+      if (!nonEmpty.length) return {};
+      if (!useOR || nonEmpty.length === 1) {
+        // AND mode (default): merge all conditions into one where object
+        return Object.assign({}, ...nonEmpty);
+      }
+      // OR mode: each condition becomes an OR branch
+      return { OR: nonEmpty };
+    };
+
     switch (type) {
       case 'sales-orders': {
+        const filterConditions = [
+          ...(status ? [{ status: status as any }] : []),
+          ...(from || to ? [{ completedAt: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to + 'T23:59:59.999Z') } : {}) } }] : []),
+          ...(search ? [{ orderNo: { contains: search, mode: 'insensitive' } }] : []),
+        ];
+        const where = {
+          ...(branchId ? { branchId } : {}),
+          ...buildOrWhere(filterConditions),
+        };
         const data = await this.prisma.order.findMany({
-          where: {
-            ...(branchId ? { branchId } : {}),
-            ...(status ? { status: status as any } : {}),
-            ...(from || to ? { completedAt: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to + 'T23:59:59.999Z') } : {}) } } : {}),
-            ...(search ? { orderNo: { contains: search, mode: 'insensitive' } } : {}),
-          },
+          where,
           include: {
             items: { include: { product: { select: { name: true, nameAr: true, sku: true, category: { select: { name: true } } } } } },
             payments: true,
@@ -428,6 +450,174 @@ export class ReportsService {
         for (const w of data) {
           const totalCost = Math.round(w.quantity * (w.product.costPrice ?? 0) * 100) / 100;
           csv += row([w.product.sku, w.product.name, w.product.nameAr, w.branch.name, w.branch.nameAr, w.quantity, w.unit?.abbreviation || '', w.product.costPrice ?? 0, totalCost, w.reason, w.notes || '', w.loggedBy.firstName + ' ' + w.loggedBy.lastName, w.createdAt.toISOString()]);
+        }
+        return csv;
+      }
+
+      // ── NEW EXPORT TYPES (Odoo parity) ───────────────────────────────────
+
+      case 'sessions': {
+        const data = await this.prisma.posSession.findMany({
+          where: {
+            ...(branchId ? { branchId } : {}),
+            ...(status ? { status: status as any } : {}),
+            ...dateFilter,
+          },
+          include: {
+            branch: { select: { name: true } },
+            openedBy: { select: { firstName: true, lastName: true } },
+            closedBy: { select: { firstName: true, lastName: true } },
+          },
+          orderBy: { openedAt: 'desc' },
+          take: 5000,
+        });
+        let csv = UTF8_BOM + row(['SessionNo','Branch','Status','OpenedBy','OpenedAt','ClosedBy','ClosedAt','OpeningFloat','ClosingCounted','ExpectedCash','CashDifference','SalesTotal','OrderCount']);
+        for (const s of data) {
+          csv += row([s.sessionNo, s.branch?.name || '', s.status, s.openedBy ? `${s.openedBy.firstName} ${s.openedBy.lastName}` : '', s.openedAt.toISOString(), s.closedBy ? `${s.closedBy.firstName} ${s.closedBy.lastName}` : '', s.closedAt?.toISOString() || '', s.openingFloat, s.closingCounted, s.expectedCash, s.cashDifference, s.salesTotal, s.orderCount]);
+        }
+        return csv;
+      }
+
+      case 'transfers': {
+        const data = await this.prisma.transferOrder.findMany({
+          where: {
+            ...(status ? { status: status as any } : {}),
+            ...(branchId ? { OR: [{ fromBranchId: branchId }, { toBranchId: branchId }] } : {}),
+            ...dateFilter,
+          },
+          include: {
+            fromBranch: { select: { name: true } },
+            toBranch: { select: { name: true } },
+            items: { include: { product: { select: { name: true, sku: true } } } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 5000,
+        });
+        let csv = UTF8_BOM + row(['TransferNo','Status','FromBranch','ToBranch','DispatchedAt','ReceivedAt','SKU','Product','Quantity']);
+        for (const t of data) {
+          if (!t.items?.length) {
+            csv += row([t.transferNo, t.status, t.fromBranch?.name || '', t.toBranch?.name || '', t.dispatchedAt?.toISOString() || '', t.receivedAt?.toISOString() || '', '', '', '']);
+          } else {
+            for (const item of t.items) {
+              csv += row([t.transferNo, t.status, t.fromBranch?.name || '', t.toBranch?.name || '', t.dispatchedAt?.toISOString() || '', t.receivedAt?.toISOString() || '', item.product?.sku || '', item.product?.name || '', item.quantity]);
+            }
+          }
+        }
+        return csv;
+      }
+
+      case 'deliveries': {
+        const data = await this.prisma.orderDelivery.findMany({
+          where: {
+            ...(branchId ? { branchId } : {}),
+            ...(status ? { status: status as any } : {}),
+          },
+          include: {
+            order: { select: { orderNo: true, total: true, tableName: true } },
+            branch: { select: { name: true } },
+            driver: { select: { firstName: true, lastName: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 5000,
+        });
+        let csv = UTF8_BOM + row(['OrderNo','Branch','Status','Driver','Total','Address','Phone','CreatedAt','DeliveredAt']);
+        for (const d of data) {
+          csv += row([d.order?.orderNo || '', d.branch?.name || '', d.status, d.driver ? `${d.driver.firstName} ${d.driver.lastName}` : '', d.order?.total ?? '', d.address || '', d.phone || '', d.createdAt.toISOString(), d.deliveredAt?.toISOString() || '']);
+        }
+        return csv;
+      }
+
+      case 'receivables': {
+        const data = await this.prisma.order.findMany({
+          where: {
+            status: 'COMPLETED' as any,
+            ...(branchId ? { branchId } : {}),
+            paidTotal: { lt: this.prisma.order.fields?.total as any },
+          },
+          include: {
+            customer: { select: { name: true, phone: true } },
+            branch: { select: { name: true } },
+          },
+          orderBy: { completedAt: 'desc' },
+          take: 5000,
+        });
+        // Filter in-memory for paidTotal < total (Prisma doesn't support field-to-field comparisons easily)
+        const filtered = data.filter((o: any) => o.paidTotal < o.total);
+        let csv = UTF8_BOM + row(['OrderNo','Customer','Phone','Branch','Total','Paid','Outstanding','CompletedAt']);
+        for (const o of filtered) {
+          csv += row([o.orderNo, o.customer?.name || '', o.customer?.phone || '', o.branch?.name || '', o.total, o.paidTotal, Math.round((o.total - o.paidTotal) * 100) / 100, o.completedAt?.toISOString() || '']);
+        }
+        return csv;
+      }
+
+      case 'payables': {
+        const data = await this.prisma.purchaseOrder.findMany({
+          where: {
+            ...(branchId ? { branchId } : {}),
+            status: { in: ['FULLY_RECEIVED', 'PARTIALLY_RECEIVED'] as any[] },
+          },
+          include: {
+            supplier: { select: { name: true, phone: true } },
+            branch: { select: { name: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 5000,
+        });
+        let csv = UTF8_BOM + row(['PONumber','Supplier','Phone','Branch','TotalAmount','PaidAmount','Outstanding','CreatedAt','ReceivedDate']);
+        for (const po of data) {
+          const outstanding = Math.round(((po.totalAmount as number) - (po.paidAmount as number)) * 100) / 100;
+          csv += row([po.poNumber, po.supplier?.name || '', po.supplier?.phone || '', po.branch?.name || '', po.totalAmount, po.paidAmount, outstanding, po.createdAt.toISOString(), po.receivedDate?.toISOString() || '']);
+        }
+        return csv;
+      }
+
+      case 'users': {
+        const data = await this.prisma.user.findMany({
+          include: {
+            branch: { select: { name: true } },
+            userBranches: { include: { branch: { select: { name: true } } } },
+          },
+          orderBy: { firstName: 'asc' },
+        });
+        let csv = UTF8_BOM + row(['ID','FirstName','LastName','FirstNameAr','LastNameAr','Email','Role','IsActive','PrimaryBranch','AssignedBranches','CreatedAt']);
+        for (const u of data) {
+          const assigned = u.userBranches.map((ub: any) => ub.branch?.name).filter(Boolean).join('; ');
+          csv += row([u.id, u.firstName, u.lastName, u.firstNameAr || '', u.lastNameAr || '', u.email, u.role, u.isActive, u.branch?.name || '', assigned, u.createdAt.toISOString()]);
+        }
+        return csv;
+      }
+
+      case 'production': {
+        const data = await this.prisma.productionOrder.findMany({
+          where: {
+            ...(branchId ? { branchId } : {}),
+            ...(status ? { status: status as any } : {}),
+            ...dateFilter,
+          },
+          include: {
+            product: { select: { name: true, sku: true } },
+            branch: { select: { name: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 5000,
+        });
+        let csv = UTF8_BOM + row(['ProductionNo','Product','SKU','Branch','Status','PlannedQty','ProducedQty','TotalCost','CreatedAt','CompletedAt']);
+        for (const p of data) {
+          csv += row([p.productionNo, p.product?.name || '', p.product?.sku || '', p.branch?.name || '', p.status, p.plannedQty, p.producedQty, p.totalCost, p.createdAt.toISOString(), p.completedAt?.toISOString() || '']);
+        }
+        return csv;
+      }
+
+      case 'loyalty': {
+        const programs = await this.prisma.loyaltyProgram.findMany({ orderBy: { name: 'asc' } });
+        const cards = await this.prisma.loyaltyCard.findMany({
+          include: { program: { select: { name: true, type: true } } },
+          orderBy: { createdAt: 'desc' },
+          take: 5000,
+        });
+        let csv = UTF8_BOM + row(['CardCode','ProgramName','ProgramType','Points','Balance','CreatedAt']);
+        for (const c of cards) {
+          csv += row([c.code, c.program?.name || '', c.program?.type || '', c.points, c.balance, c.createdAt.toISOString()]);
         }
         return csv;
       }

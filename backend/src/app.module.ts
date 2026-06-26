@@ -64,6 +64,7 @@ import { ProductAttributesModule } from './modules/product-attributes/product-at
 import { CombosModule } from './modules/combos/combos.module';
 import { PaymentMethodsModule } from './modules/payment-methods/payment-methods.module';
 import { PricelistsModule } from './modules/pricelists/pricelists.module';
+import { UserViewsModule } from './modules/user-views/user-views.module';
 
 @Module({
   imports: [
@@ -138,6 +139,7 @@ import { PricelistsModule } from './modules/pricelists/pricelists.module';
     CombosModule,
     PaymentMethodsModule,
     PricelistsModule,
+    UserViewsModule,
   ],
   providers: [
     // Apply rate limiting globally.

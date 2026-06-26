@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
-import api from '../lib/api';
+import api, { downloadCsv } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -88,6 +88,14 @@ export default function CustomersPage() {
         onFilterApply={(params) => { if (params.search) setSearch(params.search); }}
         onGroupByChange={() => {}}
         groupByValue={[]}
+        onExport={async () => {
+          try {
+            const params = new URLSearchParams();
+            if (search) params.set('search', search);
+            const qs = params.toString();
+            await downloadCsv(`/reports/export/customers/csv${qs ? `?${qs}` : ''}`, `customers-${new Date().toISOString().slice(0, 10)}.csv`);
+          } catch { toast.error('Export failed'); }
+        }}
         className="mb-4"
       />
 
