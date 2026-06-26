@@ -74,6 +74,8 @@ async function main() {
   });
   console.log('✅ Branches (3)');
 
+  const branches = { warehouse, doha: branchDoha, wakra: branchWakra };
+
   // ==========================================================================
   // DELIVERY PLATFORMS (third-party aggregators)
   // ==========================================================================

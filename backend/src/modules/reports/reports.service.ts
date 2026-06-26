@@ -250,9 +250,9 @@ export class ReportsService {
           where: search ? { OR: [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }, { email: { contains: search, mode: 'insensitive' } }] } : undefined,
           orderBy: { name: 'asc' },
         });
-        let csv = UTF8_BOM + row(['ID','Name','Phone','Email','LoyaltyPoints','CreditBalance','TotalSpent','OrderCount','CreatedAt']);
+        let csv = UTF8_BOM + row(['ID','Name','Phone','Email','LoyaltyPoints','CreditBalance','Group','CreatedAt']);
         for (const c of data) {
-          csv += row([c.id, c.name, c.phone || '', c.email || '', c.loyaltyPoints, c.creditBalance, c.totalSpent, c.orderCount, c.createdAt.toISOString()]);
+          csv += row([c.id, c.name, c.phone || '', c.email || '', c.loyaltyPoints, c.creditBalance, c.group || '', c.createdAt.toISOString()]);
         }
         return csv;
       }
@@ -461,7 +461,6 @@ export class ReportsService {
           where: {
             ...(branchId ? { branchId } : {}),
             ...(status ? { status: status as any } : {}),
-            ...dateFilter,
           },
           include: {
             branch: { select: { name: true } },
@@ -471,9 +470,9 @@ export class ReportsService {
           orderBy: { openedAt: 'desc' },
           take: 5000,
         });
-        let csv = UTF8_BOM + row(['SessionNo','Branch','Status','OpenedBy','OpenedAt','ClosedBy','ClosedAt','OpeningFloat','ClosingCounted','ExpectedCash','CashDifference','SalesTotal','OrderCount']);
+        let csv = UTF8_BOM + row(['SessionNo','Branch','Status','OpenedBy','OpenedAt','ClosedBy','ClosedAt','OpeningFloat','ClosingCounted','ExpectedCash','CashDifference']);
         for (const s of data) {
-          csv += row([s.sessionNo, s.branch?.name || '', s.status, s.openedBy ? `${s.openedBy.firstName} ${s.openedBy.lastName}` : '', s.openedAt.toISOString(), s.closedBy ? `${s.closedBy.firstName} ${s.closedBy.lastName}` : '', s.closedAt?.toISOString() || '', s.openingFloat, s.closingCounted, s.expectedCash, s.cashDifference, s.salesTotal, s.orderCount]);
+          csv += row([s.sessionNo, s.branch?.name || '', s.status, s.openedBy ? `${s.openedBy.firstName} ${s.openedBy.lastName}` : '', s.openedAt.toISOString(), s.closedBy ? `${s.closedBy.firstName} ${s.closedBy.lastName}` : '', s.closedAt?.toISOString() || '', s.openingFloat, s.closingCounted ?? '', s.expectedCash ?? '', s.cashDifference ?? '']);
         }
         return csv;
       }
@@ -512,17 +511,12 @@ export class ReportsService {
             ...(branchId ? { branchId } : {}),
             ...(status ? { status: status as any } : {}),
           },
-          include: {
-            order: { select: { orderNo: true, total: true, tableName: true } },
-            branch: { select: { name: true } },
-            driver: { select: { firstName: true, lastName: true } },
-          },
           orderBy: { createdAt: 'desc' },
           take: 5000,
         });
-        let csv = UTF8_BOM + row(['OrderNo','Branch','Status','Driver','Total','Address','Phone','CreatedAt','DeliveredAt']);
+        let csv = UTF8_BOM + row(['ID','OrderId','BranchId','DriverId','Status','Address','Phone','CreatedAt','DeliveredAt']);
         for (const d of data) {
-          csv += row([d.order?.orderNo || '', d.branch?.name || '', d.status, d.driver ? `${d.driver.firstName} ${d.driver.lastName}` : '', d.order?.total ?? '', d.address || '', d.phone || '', d.createdAt.toISOString(), d.deliveredAt?.toISOString() || '']);
+          csv += row([d.id, d.orderId, d.branchId, d.driverId ?? '', d.status, d.address || '', d.phone || '', d.createdAt.toISOString(), d.deliveredAt?.toISOString() || '']);
         }
         return csv;
       }
@@ -532,7 +526,6 @@ export class ReportsService {
           where: {
             status: 'COMPLETED' as any,
             ...(branchId ? { branchId } : {}),
-            paidTotal: { lt: this.prisma.order.fields?.total as any },
           },
           include: {
             customer: { select: { name: true, phone: true } },
@@ -541,7 +534,7 @@ export class ReportsService {
           orderBy: { completedAt: 'desc' },
           take: 5000,
         });
-        // Filter in-memory for paidTotal < total (Prisma doesn't support field-to-field comparisons easily)
+        // Filter in-memory for paidTotal < total
         const filtered = data.filter((o: any) => o.paidTotal < o.total);
         let csv = UTF8_BOM + row(['OrderNo','Customer','Phone','Branch','Total','Paid','Outstanding','CompletedAt']);
         for (const o of filtered) {
@@ -594,16 +587,12 @@ export class ReportsService {
             ...(status ? { status: status as any } : {}),
             ...dateFilter,
           },
-          include: {
-            product: { select: { name: true, sku: true } },
-            branch: { select: { name: true } },
-          },
           orderBy: { createdAt: 'desc' },
           take: 5000,
         });
-        let csv = UTF8_BOM + row(['ProductionNo','Product','SKU','Branch','Status','PlannedQty','ProducedQty','TotalCost','CreatedAt','CompletedAt']);
+        let csv = UTF8_BOM + row(['ProductionNo','ProductId','BranchId','Status','PlannedQty','ProducedQty','TotalCost','BatchNumber','CreatedAt','CompletedAt']);
         for (const p of data) {
-          csv += row([p.productionNo, p.product?.name || '', p.product?.sku || '', p.branch?.name || '', p.status, p.plannedQty, p.producedQty, p.totalCost, p.createdAt.toISOString(), p.completedAt?.toISOString() || '']);
+          csv += row([p.productionNo, p.productId, p.branchId, p.status, p.plannedQty, p.producedQty, p.totalCost, p.batchNumber || '', p.createdAt.toISOString(), p.completedAt?.toISOString() || '']);
         }
         return csv;
       }
