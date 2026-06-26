@@ -594,6 +594,7 @@ model Product {
   expiryTrackingType ExpiryTrackingType?
   shelfLifeDays      Int?
   isArchived         Boolean             @default(false)
+  allowNegativeStock Boolean             @default(false)  // Per-product override: allow selling even when stock = 0
   archivedAt         DateTime?
   allergens          String[]            @default([])
   allergenNotes      String?

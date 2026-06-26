@@ -239,6 +239,27 @@ export default function MenuPage() {
                             {on ? '86 Off' : 'Back On'}
                           </button>
                         </div>
+                        {/* Per-product negative stock toggle */}
+                        {canWrite && (
+                          <div className="flex items-center justify-between mt-2 px-1">
+                            <span className="text-[10px] text-gray-400">Allow negative stock</span>
+                            <label className="relative inline-flex cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={p.allowNegativeStock ?? false}
+                                onChange={async (e) => {
+                                  try {
+                                    await api.patch(`/products/${p.id}`, { allowNegativeStock: e.target.checked });
+                                    toast.success(e.target.checked ? 'Negative stock allowed' : 'Negative stock blocked');
+                                    refresh();
+                                  } catch (err: any) { toast.error(err.response?.data?.message || 'Failed'); }
+                                }}
+                                className="sr-only peer"
+                              />
+                              <div className="w-8 h-4 rounded-full bg-gray-300 dark:bg-gray-600 peer-checked:bg-emerald-500 transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:w-3 after:h-3 after:bg-white after:rounded-full after:transition-transform peer-checked:after:translate-x-4" />
+                            </label>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );

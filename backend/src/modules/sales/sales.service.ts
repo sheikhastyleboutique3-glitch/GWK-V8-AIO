@@ -1091,20 +1091,23 @@ export class SalesService {
 
     // Oversell prevention: check stock availability before completing.
     // Configurable via Setting 'pos.allowNegativeStock' (default: false = block).
+    // Also respects per-product `allowNegativeStock` field (product-level override).
     const allowNegSetting = await this.prisma.setting.findUnique({ where: { key: 'pos.allowNegativeStock' } });
-    const allowNegativeStock = allowNegSetting?.value === 'true';
-    if (!allowNegativeStock) {
+    const globalAllowNeg = allowNegSetting?.value === 'true';
+    if (!globalAllowNeg) {
       for (const item of pre.items) {
         if (item.isVoided) continue;
+        // Check per-product override
+        const prod = await this.prisma.product.findUnique({ where: { id: item.productId }, select: { name: true, allowNegativeStock: true } });
+        if (prod?.allowNegativeStock) continue; // This product allows negative stock
         const stock = await this.prisma.inventory.aggregate({
           where: { productId: item.productId, branchId: pre.branchId },
           _sum: { quantity: true },
         });
         const available = stock._sum.quantity ?? 0;
         if (available < item.quantity) {
-          const prod = await this.prisma.product.findUnique({ where: { id: item.productId }, select: { name: true } });
           throw new BadRequestException(
-            `Insufficient stock for "${prod?.name ?? item.productId}": available ${available}, needed ${item.quantity}. Enable "pos.allowNegativeStock" to override.`,
+            `Insufficient stock for "${prod?.name ?? item.productId}": available ${available}, needed ${item.quantity}. Enable "pos.allowNegativeStock" in Settings or enable it per-product in Menu.`,
           );
         }
       }

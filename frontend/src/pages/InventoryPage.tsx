@@ -378,7 +378,12 @@ export default function InventoryPage() {
                       className={`transition-colors hover:bg-surface-2 ${grouped ? 'cursor-pointer' : ''}`}
                     >
                       <td className="px-4 py-2.5">
-                        <p className="font-medium text-fg">{isRTL ? item.product?.nameAr : item.product?.name}</p>
+                        <p className="font-medium text-fg">
+                          {isRTL ? item.product?.nameAr : item.product?.name}
+                          {item.product?.allowNegativeStock && (
+                            <span className="ms-1.5 inline-block text-[9px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400 font-medium align-middle">∞ neg OK</span>
+                          )}
+                        </p>
                         <p className="text-xs text-fg-subtle nums">{item.product?.sku}</p>
                       </td>
                       <td className="px-4 py-2.5 text-fg-muted">{isRTL ? item.branch?.nameAr : item.branch?.name}</td>
