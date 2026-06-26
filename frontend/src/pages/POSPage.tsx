@@ -1173,7 +1173,7 @@ export default function POSPage() {
                     <div className="font-medium text-sm text-gray-900 dark:text-gray-100 line-clamp-2">{p.name}</div>
                     <div className="flex justify-between items-center mt-0.5">
                       <span className="text-xs text-gray-500">{p.sku}</span>
-                      <span className="text-xs font-semibold text-primary">{Number(p.salePrice || p.costPrice || 0).toFixed(2)}</span>
+                      <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">{Number(p.salePrice || p.costPrice || 0).toFixed(2)}</span>
                     </div>
                   </div>
                 </button>
@@ -1283,7 +1283,7 @@ export default function POSPage() {
 
           <div className="flex-1 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800 -mx-1 min-h-[6rem]">
             {lines.map((l, i) => (
-              <div key={l.itemId ?? `${l.productId}-${i}`} className={`px-1 py-2 cursor-pointer rounded ${selectedLineIdx === i ? 'bg-primary/10 ring-1 ring-primary' : ''}`}
+              <div key={l.itemId ?? `${l.productId}-${i}`} className={`px-1 py-2 cursor-pointer rounded ${selectedLineIdx === i ? 'bg-emerald-50 dark:bg-emerald-900/30 ring-2 ring-emerald-500 dark:ring-emerald-400' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}
                 onClick={() => setSelectedLineIdx(i)}
                 onDoubleClick={async () => {
                   // Double-click: add a note to this specific item (shows on KOT)
@@ -1644,7 +1644,7 @@ export default function POSPage() {
                   const isAction = typeof key === 'string' && isNaN(Number(key)) && key !== '.' && key !== '+/-';
                   return (
                     <button key={idx}
-                      className={`py-2 rounded ${isAction ? 'bg-primary/10 text-primary font-medium' : 'bg-gray-50 dark:bg-gray-800 hover:bg-gray-100'} text-center text-sm`}
+                      className={`py-2 rounded ${isAction ? 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-blue-400 font-medium' : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-600'} text-center text-sm`}
                       onClick={async () => {
                         const targetIdx = selectedLineIdx >= 0 && selectedLineIdx < lines.length ? selectedLineIdx : lines.length - 1;
                         const line = lines[targetIdx];
