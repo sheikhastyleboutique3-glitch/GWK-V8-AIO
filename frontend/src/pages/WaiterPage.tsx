@@ -42,7 +42,7 @@ export default function WaiterPage() {
   // "Send to kitchen" only fires the new lines.
   const [sentItemIds, setSentItemIds] = useState<Set<number>>(new Set());
   const [splitMode, setSplitMode] = useState(false);
-  const [splitSel, setSplitSel] = useState<number[]>([]);
+  const [splitQty, setSplitQty] = useState<Record<number, number>>({});
   const seededOrderRef = useRef<number | null>(null);
   // Modifier modal state
   const [modProduct, setModProduct] = useState<{ product: any; groups: ModGroup[] } | null>(null);
@@ -233,7 +233,7 @@ export default function WaiterPage() {
     setSearch('');
     setCategoryId(undefined);
     setSplitMode(false);
-    setSplitSel([]);
+    setSplitQty({});
   };
 
   // Tables other than the current one (for transfer); and those with an active bill (for merge).
@@ -259,11 +259,16 @@ export default function WaiterPage() {
     onError: (e: any) => toast.error(e.response?.data?.message || 'Failed'),
   });
   const splitMut = useMutation({
-    mutationFn: () => api.post(`/sales/orders/${activeOrderId}/split`, { itemIds: splitSel }),
+    mutationFn: () => {
+      const itemIds = Object.entries(splitQty)
+        .filter(([, qty]) => qty > 0)
+        .map(([id]) => Number(id));
+      return api.post(`/sales/orders/${activeOrderId}/split`, { itemIds });
+    },
     onSuccess: () => {
       toast.success(t('waiter.splitDone'));
       setSplitMode(false);
-      setSplitSel([]);
+      setSplitQty({});
       qc.invalidateQueries({ queryKey: ['waiter-order', activeOrderId] });
       refreshTablesAndOrders();
     },
@@ -526,14 +531,19 @@ export default function WaiterPage() {
                 <div key={it.id} className="px-1 py-2 flex justify-between items-center gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     {splitMode && (
-                      <input
-                        type="checkbox"
-                        checked={splitSel.includes(it.id)}
-                        onChange={(e) =>
-                          setSplitSel((prev) => (e.target.checked ? [...prev, it.id] : prev.filter((x) => x !== it.id)))
-                        }
-                        className="rounded border-gray-300 flex-shrink-0"
-                      />
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          onClick={() => setSplitQty(p => ({ ...p, [it.id]: Math.max(0, (p[it.id] ?? 0) - 1) }))}
+                          disabled={(splitQty[it.id] ?? 0) <= 0}
+                          className="w-6 h-6 rounded bg-gray-100 dark:bg-gray-800 text-xs font-bold disabled:opacity-30"
+                        >−</button>
+                        <span className="w-5 text-center text-xs font-semibold">{splitQty[it.id] ?? 0}</span>
+                        <button
+                          onClick={() => setSplitQty(p => ({ ...p, [it.id]: Math.min(it.quantity, (p[it.id] ?? 0) + 1) }))}
+                          disabled={(splitQty[it.id] ?? 0) >= it.quantity}
+                          className="w-6 h-6 rounded bg-gray-100 dark:bg-gray-800 text-xs font-bold disabled:opacity-30"
+                        >+</button>
+                      </div>
                     )}
                     <div className="min-w-0">
                       <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate flex items-center gap-1">
@@ -606,11 +616,19 @@ export default function WaiterPage() {
               </select>
             </div>
             {splitMode ? (
-              <div className="flex gap-2 mb-2">
-                <button onClick={() => splitMut.mutate()} disabled={!splitSel.length || splitMut.isPending} className="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-xs font-medium disabled:opacity-50">
-                  {t('waiter.splitConfirm')} ({splitSel.length})
+              <div className="space-y-2 mb-2">
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                  <span>Split total: {(order?.items || []).reduce((s: number, it: any) => s + (it.unitPrice ?? 0) * (splitQty[it.id] ?? 0), 0).toFixed(2)}</span>
+                  <span>{Object.values(splitQty).filter(q => q > 0).length} item(s)</span>
+                </div>
+                <button
+                  onClick={() => splitMut.mutate()}
+                  disabled={!Object.values(splitQty).some(q => q > 0) || splitMut.isPending}
+                  className="w-full py-2.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold disabled:opacity-50"
+                >
+                  {splitMut.isPending ? 'Splitting...' : `✂ Create separate bill (${Object.values(splitQty).filter(q => q > 0).length})`}
                 </button>
-                <button onClick={() => { setSplitMode(false); setSplitSel([]); }} className="px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs">
+                <button onClick={() => { setSplitMode(false); setSplitQty({}); }} className="w-full py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs">
                   {t('common.cancel')}
                 </button>
               </div>
