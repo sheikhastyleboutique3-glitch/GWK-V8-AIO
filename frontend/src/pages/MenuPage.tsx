@@ -11,7 +11,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 const EMPTY = {
   name: '', nameAr: '', sku: '', salePrice: '', costPrice: '', categoryId: '',
-  description: '', descriptionAr: '', isSellable: true, isAvailable: true,
+  description: '', descriptionAr: '', isSellable: true, isAvailable: true, allowNegativeStock: false,
 };
 
 export default function MenuPage() {
@@ -54,6 +54,7 @@ export default function MenuPage() {
         descriptionAr: form.descriptionAr || undefined,
         isSellable: form.isSellable,
         isAvailable: form.isAvailable,
+        allowNegativeStock: (form as any).allowNegativeStock ?? false,
         productType: 'MENU',
       };
       if (editId) {
@@ -110,6 +111,7 @@ export default function MenuPage() {
       descriptionAr: p.descriptionAr || '',
       isSellable: p.isSellable !== false,
       isAvailable: p.isAvailable !== false,
+      allowNegativeStock: p.allowNegativeStock ?? false,
     });
     setEditId(p.id);
     setShowForm(true);
@@ -386,6 +388,15 @@ export default function MenuPage() {
                   className="rounded"
                 />
                 Available now
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={(form as any).allowNegativeStock ?? false}
+                  onChange={(e) => setForm({ ...form, allowNegativeStock: e.target.checked } as any)}
+                  className="rounded"
+                />
+                Allow negative stock
               </label>
             </div>
 
