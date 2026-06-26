@@ -1,7 +1,7 @@
 /**
  * GWK V8 Theme Engine — Enterprise-grade theme system.
  *
- * 4 Production Presets + 3 Density Modes + OS Sync + Persistence.
+ * 4 Production Presets + 3 Density Modes + OS Sync + Schedule + Auto-touch + Persistence.
  * All values map to CSS custom properties on :root for instant switching.
  */
 
@@ -197,28 +197,108 @@ export const DENSITIES: DensityConfig[] = [
 
 const STORAGE_KEY = 'gwk-theme-config';
 
+export interface ThemeSchedule {
+  enabled: boolean;
+  lightStart: string; // HH:mm (e.g., "06:00")
+  darkStart: string;  // HH:mm (e.g., "18:00")
+}
+
 export interface ThemeState {
   theme: ThemeMode;
   density: DensityMode;
   osSync: boolean;
+  autoDensity: boolean; // auto-detect touch → spacious
+  schedule: ThemeSchedule;
 }
 
 export function loadThemeState(): ThemeState {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return JSON.parse(stored);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      // Migrate old state format (no schedule/autoDensity fields)
+      return {
+        theme: parsed.theme || 'corporate-light',
+        density: parsed.density || 'default',
+        osSync: parsed.osSync ?? false,
+        autoDensity: parsed.autoDensity ?? false,
+        schedule: parsed.schedule || { enabled: false, lightStart: '06:00', darkStart: '18:00' },
+      };
+    }
   } catch {}
-  return { theme: 'corporate-light', density: 'default', osSync: false };
+  return {
+    theme: 'corporate-light',
+    density: 'default',
+    osSync: false,
+    autoDensity: false,
+    schedule: { enabled: false, lightStart: '06:00', darkStart: '18:00' },
+  };
 }
 
 export function saveThemeState(state: ThemeState) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
+/** Detect if the device is a touch-primary device (tablet/POS terminal). */
+export function isTouchDevice(): boolean {
+  return (
+    'ontouchstart' in window ||
+    navigator.maxTouchPoints > 0 ||
+    (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)
+  );
+}
+
+/** Auto-select density based on device type. */
+export function getAutoDetectedDensity(): DensityMode {
+  if (!isTouchDevice()) return 'default';
+  // Touch device → spacious for larger tap targets
+  const width = window.innerWidth;
+  if (width <= 768) return 'spacious'; // Mobile / small POS
+  if (width <= 1280) return 'spacious'; // Tablet / POS terminal
+  return 'default'; // Large touch display — still comfortable
+}
+
+/** Determine theme based on schedule. */
+export function getScheduledTheme(schedule: ThemeSchedule): ThemeMode | null {
+  if (!schedule.enabled) return null;
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  const [lh, lm] = schedule.lightStart.split(':').map(Number);
+  const [dh, dm] = schedule.darkStart.split(':').map(Number);
+  const lightMinutes = lh * 60 + lm;
+  const darkMinutes = dh * 60 + dm;
+
+  if (lightMinutes < darkMinutes) {
+    // Normal: light during day, dark during night
+    return currentMinutes >= lightMinutes && currentMinutes < darkMinutes
+      ? 'corporate-light'
+      : 'deep-slate';
+  } else {
+    // Inverted: dark during day (unusual but supported)
+    return currentMinutes >= darkMinutes && currentMinutes < lightMinutes
+      ? 'deep-slate'
+      : 'corporate-light';
+  }
+}
+
 /** Apply theme + density CSS variables to :root */
 export function applyThemeToDOM(state: ThemeState) {
-  const theme = THEMES.find((t) => t.id === state.theme) || THEMES[0];
-  const density = DENSITIES.find((d) => d.id === state.density) || DENSITIES[1];
+  // Determine effective theme (schedule > osSync > manual)
+  let effectiveTheme = state.theme;
+  if (state.schedule.enabled) {
+    const scheduled = getScheduledTheme(state.schedule);
+    if (scheduled) effectiveTheme = scheduled;
+  }
+
+  // Determine effective density (autoDensity > manual)
+  let effectiveDensity = state.density;
+  if (state.autoDensity) {
+    effectiveDensity = getAutoDetectedDensity();
+  }
+
+  const theme = THEMES.find((t) => t.id === effectiveTheme) || THEMES[0];
+  const density = DENSITIES.find((d) => d.id === effectiveDensity) || DENSITIES[1];
   const root = document.documentElement;
 
   // Theme colors
@@ -232,11 +312,11 @@ export function applyThemeToDOM(state: ThemeState) {
   });
 
   // Set data attributes for Tailwind dark mode + density
-  root.setAttribute('data-theme', state.theme);
-  root.setAttribute('data-density', state.density);
+  root.setAttribute('data-theme', effectiveTheme);
+  root.setAttribute('data-density', effectiveDensity);
 
   // Toggle Tailwind dark class
-  if (state.theme === 'deep-slate' || state.theme === 'amoled-pos') {
+  if (effectiveTheme === 'deep-slate' || effectiveTheme === 'amoled-pos') {
     root.classList.add('dark');
   } else {
     root.classList.remove('dark');
@@ -253,4 +333,64 @@ export function listenOSScheme(callback: (isDark: boolean) => void): () => void 
   const handler = (e: MediaQueryListEvent) => callback(e.matches);
   mq.addEventListener('change', handler);
   return () => mq.removeEventListener('change', handler);
+}
+
+/** Schedule interval that checks time every minute and applies theme switch. */
+export function startScheduleWatcher(
+  state: ThemeState,
+  onThemeChange: (theme: ThemeMode) => void,
+): () => void {
+  if (!state.schedule.enabled) return () => {};
+  let lastTheme: ThemeMode | null = null;
+
+  const check = () => {
+    const scheduled = getScheduledTheme(state.schedule);
+    if (scheduled && scheduled !== lastTheme) {
+      lastTheme = scheduled;
+      onThemeChange(scheduled);
+    }
+  };
+
+  check(); // Immediate check
+  const interval = setInterval(check, 60_000); // Check every minute
+  return () => clearInterval(interval);
+}
+
+/** Sync theme state to the backend user profile. */
+export async function syncThemeToBackend(state: ThemeState, apiBase: string, token: string): Promise<void> {
+  try {
+    await fetch(`${apiBase}/users/me/preferences`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(state),
+    });
+  } catch {
+    // Silent fail — localStorage is the primary source
+  }
+}
+
+/** Load theme state from backend user profile. Falls back to localStorage. */
+export async function loadThemeFromBackend(apiBase: string, token: string): Promise<ThemeState | null> {
+  try {
+    const res = await fetch(`${apiBase}/users/me/preferences`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const prefs = data?.data || data;
+      if (prefs && prefs.theme) {
+        return {
+          theme: prefs.theme,
+          density: prefs.density || 'default',
+          osSync: prefs.osSync ?? false,
+          autoDensity: prefs.autoDensity ?? false,
+          schedule: prefs.schedule || { enabled: false, lightStart: '06:00', darkStart: '18:00' },
+        };
+      }
+    }
+  } catch {}
+  return null;
 }

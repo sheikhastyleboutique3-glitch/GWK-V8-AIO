@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { printCustomerStatement } from '../lib/thermalPrint';
+import DataToolbar from '../components/DataToolbar';
 
 const blankForm = { name: '', phone: '', email: '', group: '', creditLimit: '0', notes: '' };
 
@@ -71,6 +72,24 @@ export default function CustomersPage() {
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('customers.search')} className="flex-1 min-w-[200px] rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm" />
         <button onClick={openNew} className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium">+ {t('customers.new')}</button>
       </div>
+
+      {/* Odoo-style advanced toolbar */}
+      <DataToolbar
+        pageId="customers"
+        filterFields={[
+          { key: 'search', label: 'Name / Phone / Email', type: 'text' as const },
+          { key: 'group', label: 'Group', type: 'select' as const, options: [{ value: 'VIP', label: 'VIP' }, { value: 'Regular', label: 'Regular' }, { value: 'Corporate', label: 'Corporate' }] },
+          { key: 'totalSpent', label: 'Total Spent', type: 'number' as const },
+          { key: 'loyaltyPoints', label: 'Loyalty Points', type: 'number' as const },
+        ]}
+        groupByFields={[
+          { key: 'group', label: 'Group' },
+        ]}
+        onFilterApply={(params) => { if (params.search) setSearch(params.search); }}
+        onGroupByChange={() => {}}
+        groupByValue={[]}
+        className="mb-4"
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* List */}

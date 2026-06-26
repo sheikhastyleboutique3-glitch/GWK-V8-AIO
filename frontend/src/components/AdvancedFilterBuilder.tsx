@@ -91,6 +91,7 @@ export default function AdvancedFilterBuilder({ fields, onApply, presets, onSave
   const { t } = useTranslation();
   const [rules, setRules] = useState<FilterRule[]>([]);
   const [open, setOpen] = useState(false);
+  const [logic, setLogic] = useState<'AND' | 'OR'>('AND');
 
   const addRule = () => {
     const first = fields[0];
@@ -106,6 +107,10 @@ export default function AdvancedFilterBuilder({ fields, onApply, presets, onSave
 
   const applyFilters = () => {
     const params: Record<string, string> = {};
+    // Include logic connector so the backend/consumer knows how to combine rules
+    if (rules.length > 1) {
+      params['_logic'] = logic;
+    }
     for (const rule of rules) {
       if (!rule.field || !rule.value) continue;
       const field = fields.find((f) => f.key === rule.field);
@@ -220,7 +225,19 @@ export default function AdvancedFilterBuilder({ fields, onApply, presets, onSave
             const ops = fieldDef ? OPERATORS[fieldDef.type] : OPERATORS.text;
             return (
               <div key={rule.id} className="flex flex-wrap items-center gap-2">
-                {idx > 0 && <span className="text-[10px] text-gray-400 font-bold uppercase w-8">AND</span>}
+                {idx > 0 && (
+                  <button
+                    onClick={() => setLogic((l) => l === 'AND' ? 'OR' : 'AND')}
+                    className={`text-[10px] font-bold uppercase w-8 rounded px-1 py-0.5 transition-colors ${
+                      logic === 'OR'
+                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                        : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                    }`}
+                    title="Click to toggle AND/OR logic"
+                  >
+                    {logic}
+                  </button>
+                )}
                 {idx === 0 && <span className="w-8" />}
                 {/* Field picker */}
                 <select

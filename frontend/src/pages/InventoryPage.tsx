@@ -13,6 +13,9 @@ import {
   InboxIcon, ChevronRightIcon, ArrowDownIcon, ArrowUpIcon, PencilSquareIcon,
 } from '@heroicons/react/24/outline';
 import OpeningStockDrawer from '../components/OpeningStockDrawer';
+import DataToolbar from '../components/DataToolbar';
+import { FilterField } from '../components/AdvancedFilterBuilder';
+import { GroupByField } from '../components/GroupBySelect';
 
 type Tab = 'all' | 'expiry' | 'lowstock';
 
@@ -52,7 +55,8 @@ export default function InventoryPage() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [supplierFilter, setSupplierFilter] = useState('');
-
+  const [advFilters, setAdvFilters] = useState<Record<string, string>>({});
+  const [groupByFields, setGroupByFields] = useState<string[]>([]);
   const isAdmin = ['SUPER_ADMIN', 'PROCUREMENT', 'WAREHOUSE'].includes(user?.role || '');
 
   const buildParams = () => {
@@ -280,6 +284,45 @@ export default function InventoryPage() {
           </div>
         </div>
       )}
+
+      {/* Odoo-style advanced toolbar (filter builder + group by + export) */}
+      <DataToolbar
+        pageId="inventory"
+        filterFields={[
+          { key: 'search', label: 'Product Name / SKU', type: 'text' as const },
+          { key: 'categoryId', label: 'Category', type: 'select' as const, options: availCategories.map((c: any) => ({ value: String(c.id), label: c.name })) },
+          { key: 'supplierId', label: 'Supplier', type: 'select' as const, options: availSuppliers.map((s: any) => ({ value: String(s.id), label: s.name })) },
+          { key: 'quantity', label: 'Quantity', type: 'number' as const },
+        ]}
+        groupByFields={[
+          { key: 'categoryName', label: 'Category' },
+          { key: 'supplierName', label: 'Supplier' },
+          { key: 'branchName', label: 'Branch' },
+        ]}
+        onFilterApply={(params) => {
+          setAdvFilters(params);
+          if (params.search) setSearch(params.search);
+          if (params.categoryId) setCategoryFilter(params.categoryId);
+          if (params.supplierId) setSupplierFilter(params.supplierId);
+        }}
+        groupByValue={groupByFields}
+        onGroupByChange={setGroupByFields}
+        onExport={async () => {
+          try {
+            setExporting(true);
+            const params = new URLSearchParams();
+            if (activeBranch?.id) params.set('branchId', String(activeBranch.id));
+            if (search) params.set('search', search);
+            if (categoryFilter) params.set('categoryId', categoryFilter);
+            if (supplierFilter) params.set('supplierId', supplierFilter);
+            const qs = params.toString();
+            const exportType = tab === 'expiry' ? 'expiry-alerts' : tab === 'lowstock' ? 'low-stock' : 'inventory';
+            await downloadCsv(`/reports/export/${exportType}/csv${qs ? `?${qs}` : ''}`, `${exportType}-${new Date().toISOString().slice(0, 10)}.csv`);
+          } catch { toast.error('Export failed'); } finally { setExporting(false); }
+        }}
+        exporting={exporting}
+        className="mb-4"
+      />
 
       {/* Segmented tab control */}
       <div className="inline-flex p-1 bg-surface-2 rounded-lg mb-5">

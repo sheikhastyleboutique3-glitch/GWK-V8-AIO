@@ -50,6 +50,7 @@ export interface CreateOrderInput {
   isSelfOrder?: boolean;
   selfOrderMode?: any;
   items?: OrderItemInput[];
+  idempotencyKey?: string; // Prevents duplicate order creation on double-submit
 }
 
 export interface PaymentInput {
@@ -66,6 +67,10 @@ const LOYALTY_POINT_VALUE = 0.05;
 
 @Injectable()
 export class SalesService {
+  // In-memory idempotency cache: key → { orderId, expiry }
+  // Keys expire after 60 seconds to prevent indefinite memory growth.
+  private idempotencyCache = new Map<string, { orderId: number; expiry: number }>();
+
   constructor(
     private prisma: PrismaService,
     private inventory: InventoryService,
@@ -73,7 +78,15 @@ export class SalesService {
     private promotions: PromotionsService,
     private events: EventEmitter2,
     private posSessions: PosSessionsService,
-  ) {}
+  ) {
+    // Periodically purge expired idempotency keys (every 5 minutes)
+    setInterval(() => {
+      const now = Date.now();
+      for (const [key, val] of this.idempotencyCache) {
+        if (val.expiry < now) this.idempotencyCache.delete(key);
+      }
+    }, 5 * 60_000);
+  }
 
   private orderInclude = {
     items: {
@@ -186,6 +199,21 @@ export class SalesService {
   }
 
   async create(dto: CreateOrderInput, userId?: number) {
+    // ── Idempotency guard ──────────────────────────────────────────────────
+    // If the client sends an idempotencyKey, check if an order was already
+    // created with this key within the 60-second window. Return the existing
+    // order instead of creating a duplicate (double-click prevention).
+    if (dto.idempotencyKey) {
+      const cached = this.idempotencyCache.get(dto.idempotencyKey);
+      if (cached && cached.expiry > Date.now()) {
+        const existing = await this.prisma.order.findUnique({
+          where: { id: cached.orderId },
+          include: this.orderInclude,
+        });
+        if (existing) return existing;
+      }
+    }
+
     // Qatar regulatory lock: block new orders on an admin-locked branch.
     const branch = await this.prisma.branch.findUnique({
       where: { id: dto.branchId },
@@ -346,6 +374,15 @@ export class SalesService {
         .create({ data: { orderId: order.id, branchId: order.branchId, status: 'PENDING' } })
         .catch(() => {});
     }
+
+    // ── Cache idempotency key → orderId for 60 seconds ────────────────────
+    if (dto.idempotencyKey) {
+      this.idempotencyCache.set(dto.idempotencyKey, {
+        orderId: order.id,
+        expiry: Date.now() + 60_000,
+      });
+    }
+
     return order;
   }
 

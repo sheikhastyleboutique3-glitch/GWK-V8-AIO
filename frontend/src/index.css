@@ -139,12 +139,28 @@
   .scrollbar-hide::-webkit-scrollbar { display: none; }
 }
 
+/* Indeterminate progress bar animation (hardware-accelerated). */
+@keyframes indeterminate-bar {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+.animate-indeterminate-bar {
+  animation: indeterminate-bar 1.5s cubic-bezier(0.65, 0.815, 0.735, 0.395) infinite;
+  will-change: transform;
+}
+
 /* Smooth, scoped transitions (avoid `* { transition }` which is wasteful). */
 a, button, input, select, textarea,
 [role='button'], .transition-theme {
   transition-property: color, background-color, border-color, box-shadow, opacity, transform;
   transition-duration: 180ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Touch micro-interaction: subtle press-down effect on all tappable elements. */
+button:active:not(:disabled),
+[role='button']:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 /* Respect users who prefer reduced motion (MASTER a11y requirement). */

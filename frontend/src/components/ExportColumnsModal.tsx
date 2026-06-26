@@ -1,6 +1,7 @@
 /**
  * ExportColumnsModal — Column picker before exporting data.
  * Users can select/deselect columns and save the layout as a template.
+ * Supports CSV and Excel format selection.
  */
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -11,10 +12,12 @@ export interface ExportColumn {
   default?: boolean; // included by default
 }
 
+export type ExportFormat = 'csv' | 'excel';
+
 interface Props {
   columns: ExportColumn[];
   exportType: string;
-  onExport: (selectedColumns: string[]) => void;
+  onExport: (selectedColumns: string[], format: ExportFormat) => void;
   onClose: () => void;
 }
 
@@ -34,6 +37,7 @@ export default function ExportColumnsModal({ columns, exportType, onExport, onCl
     new Set(columns.filter((c) => c.default !== false).map((c) => c.key))
   );
   const [templates, setTemplates] = useState(loadTemplates(exportType));
+  const [format, setFormat] = useState<ExportFormat>('csv');
 
   const toggle = (key: string) => {
     const next = new Set(selected);
@@ -64,6 +68,25 @@ export default function ExportColumnsModal({ columns, exportType, onExport, onCl
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-bold">Export Columns</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+        </div>
+
+        {/* Format selector */}
+        <div className="mb-3 flex items-center gap-2">
+          <span className="text-xs text-gray-500 font-medium">Format:</span>
+          <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <button
+              onClick={() => setFormat('csv')}
+              className={`px-3 py-1 text-xs font-medium transition-colors ${format === 'csv' ? 'bg-primary text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50'}`}
+            >
+              CSV
+            </button>
+            <button
+              onClick={() => setFormat('excel')}
+              className={`px-3 py-1 text-xs font-medium transition-colors ${format === 'excel' ? 'bg-primary text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50'}`}
+            >
+              Excel (.xls)
+            </button>
+          </div>
         </div>
 
         {/* Template loader */}
@@ -101,11 +124,11 @@ export default function ExportColumnsModal({ columns, exportType, onExport, onCl
 
         {/* Export button */}
         <button
-          onClick={() => onExport([...selected])}
+          onClick={() => onExport([...selected], format)}
           disabled={selected.size === 0}
           className="w-full py-2.5 rounded-xl bg-primary text-white text-sm font-semibold disabled:opacity-50"
         >
-          Export ({selected.size} columns)
+          Export as {format === 'excel' ? 'Excel' : 'CSV'} ({selected.size} columns)
         </button>
       </div>
     </div>

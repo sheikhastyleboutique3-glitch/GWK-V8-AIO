@@ -11,6 +11,7 @@ import PosSessionBar from '../components/PosSessionBar';
 import ModifierModal, { ModGroup, ChosenModifier } from '../components/ModifierModal';
 import { printReceipt, printKot } from '../lib/thermalPrint';
 import { useOnlineStatus } from '../lib/useOnlineStatus';
+import OfflineBanner from '../components/OfflineBanner';
 
 interface CartLine {
   itemId?: number; // present when the line lives on a persisted (loaded) order
@@ -517,6 +518,7 @@ export default function POSPage() {
       if (mode === 'existing') {
         orderId = loadedOrderId as number;
       } else {
+        const idempotencyKey = `pos-${branchId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const { data: created } = await api.post('/sales/orders', {
           branchId,
           channel,
@@ -526,6 +528,7 @@ export default function POSPage() {
           presetId: presetId,
           deliveryPlatformId: isAggregatorChannel(channel) ? deliveryPlatformId : undefined,
           platformRef: isAggregatorChannel(channel) ? (platformRef || undefined) : undefined,
+          idempotencyKey,
           items: cart.map((l) => ({ productId: l.productId, quantity: l.quantity, unitPrice: l.unitPrice, modifiers: l.modifiers })),
           combos: comboCart.map((c) => ({ comboId: c.comboId, choiceIds: c.choiceIds })),
         });
@@ -714,6 +717,8 @@ export default function POSPage() {
 
   return (
     <div className="h-full flex flex-col">
+      {/* Offline status banner */}
+      <OfflineBanner />
       {/* ─── ODOO-STYLE TOP NAV BAR ─── */}
       <div className="bg-gray-900 text-white px-3 md:px-4 py-2 flex items-center gap-2 md:gap-4 rounded-t-xl -mx-4 -mt-4 mb-4 no-print overflow-x-auto">
         <span className="font-bold text-sm">{activeBranch?.name || 'POS'}</span>
@@ -1155,7 +1160,7 @@ export default function POSPage() {
                 <button
                   key={p.id}
                   onClick={() => onProduct(p)}
-                  className="text-left rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden hover:border-primary hover:shadow-sm transition"
+                  className="text-left rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden hover:border-primary hover:shadow-sm active:scale-[0.96] transition-all duration-150 min-h-[120px]"
                 >
                   <div className="h-20 bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden">
                     {p.imageUrl ? (
@@ -1714,9 +1719,9 @@ export default function POSPage() {
               </div>
             )}
             <button
-              disabled={(!lines.length && !comboCart.length) || !posSession}
+              disabled={(!lines.length && !comboCart.length) || !posSession || charge.isPending}
               onClick={() => setShowPayment(true)}
-              className="w-full py-3 rounded-xl bg-emerald-600 text-white font-bold text-lg disabled:opacity-50"
+              className="w-full py-3 rounded-xl bg-emerald-600 text-white font-bold text-lg disabled:opacity-50 active:scale-[0.97] transition-transform"
             >
               {!posSession ? t('pos.session.openSessionFirst') : `💳 Payment${total > 0 ? ` · ${total.toFixed(2)}` : ''}`}
             </button>
@@ -1801,9 +1806,13 @@ export default function POSPage() {
                 <button
                   onClick={() => { charge.mutate(); setShowPayment(false); }}
                   disabled={remaining > 0 || charge.isPending || (!lines.length && !comboCart.length)}
-                  className="w-full py-3 rounded-xl bg-emerald-600 text-white font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full py-3 rounded-xl bg-emerald-600 text-white font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2 active:scale-[0.97] transition-transform"
                 >
-                  <span className="text-2xl">▶</span> Validate
+                  {charge.isPending ? (
+                    <><span className="inline-block w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Processing…</>
+                  ) : (
+                    <><span className="text-2xl">▶</span> Validate</>
+                  )}
                 </button>
               </div>
             </div>

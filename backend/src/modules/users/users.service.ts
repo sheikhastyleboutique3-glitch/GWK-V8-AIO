@@ -140,4 +140,23 @@ export class UsersService {
     }).catch(() => {});
     return { message: 'User deactivated' };
   }
+
+  // ── Theme Preferences ───────────────────────────────────────────────────
+  async getPreferences(userId: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { themePreferences: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    return user.themePreferences || { theme: 'corporate-light', density: 'default', osSync: false };
+  }
+
+  async updatePreferences(userId: number, dto: any) {
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { themePreferences: dto },
+      select: { themePreferences: true },
+    });
+    return user.themePreferences;
+  }
 }

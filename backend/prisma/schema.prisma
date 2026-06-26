@@ -434,7 +434,8 @@ model User {
   // V8.1: POS employee login — fast PIN / scan badge + per-cashier rights.
   posPin      String?
   badgeId     String?  @unique
-  posRights   Json?
+  posRights        Json?
+  themePreferences Json?   // { theme, density, osSync, schedule? }
   branchId    Int?
   branch      Branch?  @relation(fields: [branchId], references: [id])
   createdAt   DateTime @default(now())

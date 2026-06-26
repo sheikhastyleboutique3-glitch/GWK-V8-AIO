@@ -39,4 +39,15 @@ export class UsersController {
   @Delete(':id')
   @Roles(Role.SUPER_ADMIN)
   remove(@Param('id', ParseIntPipe) id: number, @CurrentUser('sub') actorId: number) { return this.usersService.remove(id, actorId); }
+
+  // ── Theme Preferences (any authenticated user) ──────────────────────────
+  @Get('me/preferences')
+  getPreferences(@CurrentUser('sub') userId: number) {
+    return this.usersService.getPreferences(userId);
+  }
+
+  @Patch('me/preferences')
+  updatePreferences(@CurrentUser('sub') userId: number, @Body() dto: any) {
+    return this.usersService.updatePreferences(userId, dto);
+  }
 }
