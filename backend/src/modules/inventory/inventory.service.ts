@@ -378,6 +378,7 @@ export class InventoryService {
   async applyManualAdjustment(
     tx: Prisma.TransactionClient,
     dto: AdjustInventoryDto,
+    options?: { allowNegative?: boolean },
   ): Promise<any> {
     if (dto.batchId != null) {
       // Explicit batch target. For a stock-out, enforce that the deduction fits
@@ -402,20 +403,28 @@ export class InventoryService {
 
     // DEDUCT across batches, earliest expiry first (FEFO), one tx-row per batch.
     if (isDeduct) {
-      const allocations = await this.planFefoAllocation(
-        tx,
-        dto.productId,
-        dto.branchId,
-        dto.quantity,
-      );
-      const results: any[] = [];
-      for (const a of allocations) {
-        results.push(
-          await this.applyAdjustment(tx, { ...dto, quantity: a.quantity, batchId: a.batchId }),
+      try {
+        const allocations = await this.planFefoAllocation(
+          tx,
+          dto.productId,
+          dto.branchId,
+          dto.quantity,
         );
+        const results: any[] = [];
+        for (const a of allocations) {
+          results.push(
+            await this.applyAdjustment(tx, { ...dto, quantity: a.quantity, batchId: a.batchId }),
+          );
+        }
+        const last = results[results.length - 1] ?? {};
+        return { ...last, batchesAffected: results.length };
+      } catch (e: any) {
+        // If allowNegative, deduct from the aggregate row (go negative) instead of failing
+        if (options?.allowNegative && e?.status === 409) {
+          return this.applyAdjustment(tx, { ...dto, batchId: null });
+        }
+        throw e;
       }
-      const last = results[results.length - 1] ?? {};
-      return { ...last, batchesAffected: results.length };
     }
 
     // ADD onto a real batch when the product is expiry-tracked.

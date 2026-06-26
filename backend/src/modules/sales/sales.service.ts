@@ -1140,6 +1140,9 @@ export class SalesService {
           });
 
           let lineCost = 0;
+          // Check if this product allows negative stock (skip FEFO constraint)
+          const itemProduct = await tx.product.findUnique({ where: { id: item.productId }, select: { allowNegativeStock: true } });
+          const allowNeg = globalAllowNeg || itemProduct?.allowNegativeStock;
 
           if (recipe && recipe.components.length) {
             const yieldQty = recipe.yieldQty || 1;
@@ -1159,7 +1162,7 @@ export class SalesService {
                 type: InventoryTxType.SALE,
                 notes: `Sale ${pre.orderNo} — recipe of product #${item.productId}`,
                 performedById: userId,
-              });
+              }, { allowNegative: !!allowNeg });
 
               lineCost += deductQty * (comp.componentProduct?.costPrice ?? 0);
             }
@@ -1176,7 +1179,7 @@ export class SalesService {
               type: InventoryTxType.SALE,
               notes: `Sale ${pre.orderNo} — direct stock item`,
               performedById: userId,
-            });
+            }, { allowNegative: !!allowNeg });
             lineCost = item.quantity * (prod?.costPrice ?? 0);
           }
 
@@ -1192,7 +1195,7 @@ export class SalesService {
                 type: InventoryTxType.SALE,
                 notes: `Sale ${pre.orderNo} — modifier ${m.name ?? ''}`,
                 performedById: userId,
-              });
+              }, { allowNegative: !!allowNeg });
               const mp = await tx.product.findUnique({ where: { id: m.componentProductId }, select: { costPrice: true } });
               lineCost += q * (mp?.costPrice ?? 0);
             }
