@@ -46,6 +46,8 @@ interface Props {
   onGroupByChange?: (fields: string[]) => void;
   /** Export handler (called on click) */
   onExport?: () => void;
+  /** Excel export handler (optional — shows Excel button when provided) */
+  onExportExcel?: () => void;
   /** Export button label */
   exportLabel?: string;
   /** Whether export is loading */
@@ -63,6 +65,7 @@ export default function DataToolbar({
   groupByValue = [],
   onGroupByChange,
   onExport,
+  onExportExcel,
   exportLabel = 'Export CSV',
   exporting = false,
   pageId,
@@ -117,6 +120,15 @@ export default function DataToolbar({
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
             </svg>
             {exporting ? 'Exporting...' : exportLabel}
+          </button>
+        )}
+        {onExportExcel && (
+          <button
+            onClick={onExportExcel}
+            disabled={exporting}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 text-xs font-medium hover:bg-emerald-50 dark:hover:bg-emerald-900/20 disabled:opacity-50 transition-colors"
+          >
+            📊 Excel
           </button>
         )}
 

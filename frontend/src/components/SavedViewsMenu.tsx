@@ -8,11 +8,12 @@
  * - Delete views
  * - Star icon for default indicator
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  SavedView, getViews, saveView, deleteView, setDefaultView,
+  SavedView, getViews, saveView, deleteView, setDefaultView, persistViews,
 } from '../lib/savedViews';
+import api from '../lib/api';
 
 interface Props {
   pageId: string;
@@ -33,22 +34,47 @@ export default function SavedViewsMenu({
   const [open, setOpen] = useState(false);
   const [views, setViews] = useState<SavedView[]>(getViews(pageId));
 
+  // Sync from backend on mount (best-effort — falls back to localStorage)
+  useEffect(() => {
+    api.get('/user-views', { params: { pageId } })
+      .then((res) => {
+        const backendViews = (res.data?.data || []).map((v: any) => ({
+          id: v.id?.toString() || String(Date.now()),
+          name: v.name,
+          filters: v.filters || {},
+          groupBy: v.groupBy || [],
+          columns: v.columns,
+          isDefault: v.isDefault,
+          createdAt: v.createdAt,
+        }));
+        if (backendViews.length) {
+          persistViews(pageId, backendViews);
+          setViews(backendViews);
+        }
+      })
+      .catch(() => {}); // silent — localStorage is primary
+  }, [pageId]);
+
   const refresh = () => setViews(getViews(pageId));
 
   const handleSave = () => {
     const name = window.prompt('View name:', '');
     if (!name?.trim()) return;
-    saveView(pageId, name.trim(), {
+    const view = saveView(pageId, name.trim(), {
       filters: currentFilters,
       groupBy: currentGroupBy,
       columns: currentColumns,
     });
+    // Best-effort backend sync
+    api.post('/user-views', { pageId, name: name.trim(), filters: currentFilters, groupBy: currentGroupBy, columns: currentColumns }).catch(() => {});
     refresh();
   };
 
   const handleDelete = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     deleteView(pageId, id);
+    // Best-effort backend sync
+    api.delete(`/user-views/${id}`).catch(() => {});
     refresh();
   };
 
