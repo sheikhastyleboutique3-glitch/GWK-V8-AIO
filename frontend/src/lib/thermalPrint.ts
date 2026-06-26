@@ -159,6 +159,7 @@ export function printReceipt(order: OrderLike, info: BusinessInfo = {}) {
     .join('');
 
   const payRows = (order.payments ?? [])
+    .filter((p: any) => !p.isReversed)
     .map((p) => `<div class="row"><span>${esc(p.method.replace('_', ' '))}</span><span>${money(p.amount)}</span></div>`)
     .join('');
 

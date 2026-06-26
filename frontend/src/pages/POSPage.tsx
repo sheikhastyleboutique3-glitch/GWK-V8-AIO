@@ -448,6 +448,7 @@ export default function POSPage() {
   const change = Math.max(0, +(paid - total).toFixed(2));
 
   const addTender = () => {
+    if (remaining <= 0) return toast.error('Payment already covers the total');
     const amt = tenderAmount.trim() ? parseFloat(tenderAmount) : remaining;
     if (!(amt > 0)) return toast.error('Enter a payment amount');
     if (payMethod === 'GIFT_CARD' && !giftCardCode.trim()) return toast.error('Enter a gift card code');
@@ -1843,8 +1844,9 @@ export default function POSPage() {
                   {['CASH', 'CARD', 'QR', 'GIFT_CARD', 'ON_ACCOUNT'].map((m) => (
                     <button key={m} onClick={() => {
                       const amt = payNumpad ? parseFloat(payNumpad) : remaining;
+                      if (remaining <= 0) { toast.error('Already paid'); return; }
                       if (amt > 0) {
-                        setTenders((prev) => [...prev, { method: m as PayMethod, amount: +amt.toFixed(2) }]);
+                        setTenders((prev) => [...prev, { method: m as PayMethod, amount: +Math.min(amt, remaining).toFixed(2) }]);
                         setPayNumpad('');
                       }
                     }} className="w-full text-left px-4 py-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm font-medium transition">
