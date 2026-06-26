@@ -22,7 +22,7 @@ export default function SettingsPage() {
   if (isLoading) return <LoadingSpinner />;
   const settingGroups = [
     { group: 'branding', label: '\ud83c\udfa8 ' + t('settings.companyInfo'), keys: ['company_logo'] },
-    { group: 'general', label: '\ud83c\udfe2 ' + t('settings.companyInfo'), keys: ['company_name', 'company_name_ar', 'company_tax_id', 'company_address'] },
+    { group: 'general', label: '\ud83c\udfe2 ' + t('settings.companyInfo'), keys: ['company_name', 'company_name_ar', 'company_tax_id', 'company_address', 'company_phone', 'company_email'] },
     { group: 'pos', label: '\ud83d\udecd\ufe0f POS & Sales', keys: ['pos.requireOpenSession', 'pos.allowNegativeStock'] },
     { group: 'finance', label: '\ud83d\udcb0 Finance & Currency', keys: ['default_currency', 'supported_currencies'] },
     { group: 'inventory', label: '\ud83d\udce6 Inventory', keys: ['expiry_warning_days', 'low_stock_alert'] },
