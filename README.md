@@ -3,7 +3,7 @@
 # GWK V8 AIO
 ### All-In-One Restaurant ERP & Point of Sale
 
-**Odoo 19.0 POS parity (~98%)** · Multi-branch · Bilingual (EN / AR) · Touch-first PWA
+**Odoo 19.0 POS + ERP parity (~95%)** · Multi-branch · Bilingual (EN / AR) · Touch-first PWA
 
 [![Stack](https://img.shields.io/badge/backend-NestJS%2010-e0234e)](#)
 [![ORM](https://img.shields.io/badge/ORM-Prisma%205-2d3748)](#)
@@ -127,6 +127,33 @@ npm run start:prod
 - Stock counts with variance audit
 - Wastage logging (6 reasons)
 
+### Search, Filter & Export (Odoo Parity)
+| Feature | Description |
+|---------|-------------|
+| **DataToolbar** | Unified toolbar on all 17 list pages: filter + group + export + saved views |
+| **Advanced Filter** | Multi-condition AND/OR logic, field picker, 5 types × 6+ operators |
+| **Group By** | Multi-layer collapsible accordion with subtotals per group |
+| **CSV Export** | 17 entity types, filter-aligned, relational (parent/child rows) |
+| **Excel Export** | Client-side .xls generation via ExportColumnsModal |
+| **Saved Views** | Named presets with "Set as Default" + backend persistence |
+
+### Theme Engine
+| Feature | Description |
+|---------|-------------|
+| **4 Themes** | Corporate Light ☀️ / Deep Slate 🌙 / AMOLED POS 🚨 / Accessibility 👁️ |
+| **3 Densities** | Compact (back-office) / Default / Spacious (touch POS) |
+| **Auto-detect** | Touch devices → Spacious; OS dark/light sync |
+| **Schedule** | Time-based auto-switch (light at 06:00, dark at 18:00) |
+| **Persistence** | localStorage + backend user profile (cross-device) |
+
+### Data Integrity & Safety
+| Feature | Description |
+|---------|-------------|
+| **Idempotency** | Server-side 60s key cache prevents duplicate orders on double-click |
+| **Offline POS** | IndexedDB queue + auto-sync with background sync API |
+| **Stock validation** | Pre-flight check before completing sale (configurable override) |
+| **Offline Banner** | Persistent red/blue/amber status bar on POS + Waiter |
+
 ---
 
 ## Tech Stack
@@ -152,19 +179,19 @@ npm run start:prod
 GWK-V8-AIO/
 ├── backend/
 │   ├── src/
-│   │   ├── modules/          # ~40 domain modules
+│   │   ├── modules/          # ~42 domain modules
 │   │   ├── common/           # Guards, filters, interceptors, decorators
 │   │   ├── main.ts           # Bootstrap (CORS, validation, Swagger)
 │   │   └── app.module.ts     # Module registry
 │   └── prisma/
-│       ├── schema.prisma     # ~95 models
+│       ├── schema.prisma     # ~97 models
 │       ├── seed.ts           # Demo data
 │       └── migrations/       # Single baseline migration
 ├── frontend/
 │   ├── src/
 │   │   ├── pages/            # 60+ pages
-│   │   ├── components/       # Shared UI components
-│   │   ├── lib/              # API, PDF, thermalPrint, hooks
+│   │   ├── components/       # Shared UI (DataToolbar, ThemePanel, Skeleton, etc.)
+│   │   ├── lib/              # API, PDF, themes, syncManager, exportExcel, savedViews
 │   │   ├── i18n/locales/     # en.json + ar.json
 │   │   └── App.tsx           # Router + role-based guards
 │   └── package.json
@@ -190,6 +217,11 @@ GWK-V8-AIO/
 8. **Waiter:** Login as `waiter@gwk.com` → tap table → add items → Send to Kitchen
 9. **Reports:** POS Reports → Product Sales / Staff Performance / Tips
 10. **Split:** Open order → Split → select items → Pay now (Card)
+11. **Theme:** Click 🎨 in sidebar → pick Deep Slate → Compact density → Schedule ON
+12. **Filter:** Inventory → DataToolbar → Add filter → status = LOW → Apply → Group by Category
+13. **Export:** Click Export CSV → downloads filtered data matching on-screen state
+14. **Saved View:** Apply filters → ⭐ Views → Save current → set as default
+15. **Offline:** Disconnect network → see red banner → add items → reconnect → auto-syncs
 
 ---
 

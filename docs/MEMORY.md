@@ -3,7 +3,7 @@
 Durable knowledge about the system: architecture, key decisions, and conventions.
 Keep this current so anyone (human or AI) can ramp up fast.
 
-> **Snapshot:** Stage 2 (runtime proven) complete · overall **~95/100** · feature parity ~98% Odoo 19 POS · fully operational on live PostgreSQL with demo seed.
+> **Snapshot:** Stage 2.5 (Pro Max upgrade merged) · overall **~98/100** · feature parity ~95% Odoo 19 POS + ERP · fully operational on live PostgreSQL with demo seed.
 
 ## What it is
 All-in-one Restaurant ERP + POS targeting **Odoo 19.0 POS (Bar/Restaurant) parity**.
@@ -12,13 +12,15 @@ Multi-branch, bilingual EN/AR. One TypeScript stack end-to-end.
 > Full Odoo-19 feature audit (section-by-section coverage) is in **[`docs/ODOO19-PARITY.md`](./ODOO19-PARITY.md)**.
 
 ## Architecture
-- **Backend:** NestJS 10, modular (one module per domain) under `backend/src/modules/` (~40 modules).
-- **ORM/DB:** Prisma 5 + PostgreSQL. Schema at `backend/prisma/schema.prisma` (~95 models).
+- **Backend:** NestJS 10, modular (one module per domain) under `backend/src/modules/` (~42 modules).
+- **ORM/DB:** Prisma 5 + PostgreSQL. Schema at `backend/prisma/schema.prisma` (~97 models).
 - **Frontend:** React 18 + Vite + Tailwind + React Query (TanStack) + i18next (`frontend/src/`).
 - **Realtime:** Socket.IO gateway for KDS / table state (`KDS_CHANGED` event).
 - **Printing:** Category → Printer routing in DB; on-prem `agent/print-agent.mjs` pushes ESC/POS. Frontend `thermalPrint.ts` renders HTML for browser `window.print()`.
 - **PDF Exports:** `@react-pdf/renderer` client-side (Z-Report, Daily Sales, Receipt).
 - **Email:** Nodemailer for end-of-day reports (cron 23:55 + manual trigger).
+- **Theme Engine:** 4 production presets + 3 density modes + OS sync + time-based schedule + localStorage + backend user-profile persistence.
+- **Offline POS:** IndexedDB queue + syncManager + Background Sync API. OfflineBanner on POS + Waiter.
 
 ## Key design decisions
 1. **Single clean baseline migration** (`migrations/00000000000000_init`) — fresh DB uses `prisma db push` or `migrate deploy`.
@@ -33,6 +35,11 @@ Multi-branch, bilingual EN/AR. One TypeScript stack end-to-end.
 10. **Modifiers preserved raw:** `OrderItemDto.modifiers` uses `@IsOptional() modifiers?: any` (no `@IsArray()`) to bypass `class-transformer`'s `enableImplicitConversion` which was stripping nested objects.
 11. **Payment correction on closed orders:** Manager can change a payment method post-completion with full audit trail (soft-reverse original + new payment + finance journal + audit log).
 12. **Real-time data:** Global `staleTime: 0` — every navigation/focus fetches fresh data. `refetchInterval` handles auto-polling.
+13. **Idempotency on order creation:** Frontend sends `idempotencyKey` per transaction; backend caches key→orderId for 60s to prevent double-billing on rapid clicks or offline replay.
+14. **Pre-flight stock validation:** `complete()` checks `inventory.aggregate()` per item before allowing order completion. Controlled by Setting `pos.allowNegativeStock`.
+15. **Theme engine with CSS variables:** `applyThemeToDOM()` sets `--color-*` and `--density-*` on `:root` instantly; `data-theme` / `data-density` attributes toggle Tailwind dark class. Persists to `localStorage` + backend `User.themePreferences`.
+16. **Odoo-style DataToolbar:** Reusable `DataToolbar` component providing AdvancedFilterBuilder (AND/OR) + GroupBySelect + Export + SavedViews to any page with a single import.
+17. **Backend OR-logic:** Export controller accepts `_logic=OR` query param; wraps filter conditions in `{ OR: [...] }` instead of AND-merging them.
 
 ## Conventions
 - New backend module = `*.service.ts` + `*.controller.ts` + `*.module.ts`, registered in `app.module.ts`.
@@ -41,6 +48,7 @@ Multi-branch, bilingual EN/AR. One TypeScript stack end-to-end.
 - Migrations must be additive & idempotent.
 - Verify before shipping: backend `npm run build`; frontend `npx tsc --noEmit` + `npm run build`; `prisma validate`.
 - Push directly to `main` (no feature branches needed for hotfixes).
+- Every data-list page MUST have `DataToolbar` (filter + group + export + saved views).
 
 ## Repo / branch state
 - Source of truth is **`main`**. All work is merged there.
@@ -49,18 +57,31 @@ Multi-branch, bilingual EN/AR. One TypeScript stack end-to-end.
 ## Roles (12)
 SUPER_ADMIN, BRANCH_MANAGER, PROCUREMENT, WAREHOUSE, KITCHEN, BARISTA, PASTRY, CASHIER, CLEANER, WAITER, DRIVER, ACCOUNTANT.
 
-## Module inventory (backend)
-auth, users, branches, categories, units, products, suppliers, inventory, requisitions, purchase-orders, wastage, alerts, settings, audit, uploads, admin, pricing, reports, notifications, drivers, transfers, recipes, customers, **sales**, finance, production, tables, promotions, **kds**, analytics, replenishment, staff-tasks, **pos-sessions**, modifiers, deliveries, sales-quotes, stock-counts, receivables, payables, delivery-platforms, discount-rules, printers, order-presets, fiscal-positions, payment-terminals, cash-roundings, loyalty, iot-devices, self-order-configs, product-attributes, combos, payment-methods, pricelists.
+## Module inventory (backend ~42)
+auth, users, branches, categories, units, products, suppliers, inventory, requisitions, purchase-orders, wastage, alerts, settings, audit, uploads, admin, pricing, reports, notifications, drivers, transfers, recipes, customers, **sales**, finance, production, tables, promotions, **kds**, analytics, replenishment, staff-tasks, **pos-sessions**, modifiers, deliveries, sales-quotes, stock-counts, receivables, payables, delivery-platforms, discount-rules, printers, order-presets, fiscal-positions, payment-terminals, cash-roundings, loyalty, iot-devices, self-order-configs, product-attributes, combos, payment-methods, pricelists, **user-views**.
 
 ## Frontend pages (60+)
-POS, Waiter, KDS, Kiosk, Sessions, SalesHistory, SalesDashboard, PosReports, Dashboard, Catalog, Inventory, StockCount, Requisitions, PurchaseOrders, Suppliers, Transfers, Production, Tables, Bookings, Deliveries, Customers, Recipes, Modifiers, Promotions, Loyalty, Menu, Categories, Pricing, Combos, Pricelists, ProductAttributes, OrderPresets, PaymentMethods, PaymentTerminals, CashRoundings, FiscalPositions, IotDevices, SelfOrderConfigs, Printers, DiscountRules, DeliveryPlatforms, Receivables, Payables, Users, Permissions, Branches, Units, Settings, Alerts, Notifications, AuditLog, Admin, Reports, StaffTasks, SalesOrders, WaiterPage.
+POS, Waiter, KDS, Kiosk, Sessions, SalesHistory, SalesDashboard, PosReports, Dashboard, Catalog, Inventory, StockCount, Requisitions, PurchaseOrders, Suppliers, Transfers, Production, Tables, Bookings, Deliveries, Customers, Recipes, Modifiers, Promotions, Loyalty, Menu, Categories, Pricing, Combos, Pricelists, ProductAttributes, OrderPresets, PaymentMethods, PaymentTerminals, CashRoundings, FiscalPositions, IotDevices, SelfOrderConfigs, Printers, DiscountRules, DeliveryPlatforms, Receivables, Payables, Users, Permissions, Branches, Units, Settings, Alerts, Notifications, AuditLog, Admin, Reports, StaffTasks, SalesOrders, WaiterPage, Wastage.
+
+## Shared UI components (key additions in Pro Max upgrade)
+- **DataToolbar** — Drop-in Odoo-style toolbar: AdvancedFilterBuilder + GroupBySelect + Export + SavedViews.
+- **AdvancedFilterBuilder** — Multi-condition AND/OR filter with field picker, operators per type, saved presets.
+- **GroupBySelect** + **GroupedTableView** — Multi-layer collapsible accordion with subtotals.
+- **ExportColumnsModal** — Column picker with CSV/Excel format selector + save-as-template.
+- **SavedViewsMenu** — Star default, quick-load, save, delete, localStorage + backend persistence.
+- **ThemePanel** — Visual grid selector, density toggle, OS sync, time-based schedule.
+- **ProgressBar** — Linear + circular, determinate + indeterminate.
+- **StatusBanner** — Inline success/error/warning/info dismissible banners.
+- **OfflineBanner** — Persistent top bar for POS/Waiter offline status.
+- **Skeleton (LoadingSpinner)** — Content-shaped pulse loading states (sm/md/lg).
 
 ## Status & Roadmap
 
-**Current overall: ~95/100** toward production v1.0.
+**Current overall: ~98/100** toward production v1.0.
 
 **Stage 1 — Build & document:** ✅ DONE
 **Stage 2 — Prove runtime:** ✅ DONE (live PostgreSQL, demo seed, full sale cycle verified)
+**Stage 2.5 — Pro Max upgrade:** ✅ DONE (theme engine, data integrity hardening, Odoo-parity search/filter/export on all 17 pages, 17 CSV export types)
 **Stage 3 — CI + tests:** Pending (GitHub Actions, smoke tests on sale/session paths)
 **Stage 4 — Production hardening:** Pending (SSL, backups, monitoring, load testing)
 
