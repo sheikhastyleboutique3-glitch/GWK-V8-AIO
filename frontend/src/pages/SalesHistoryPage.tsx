@@ -202,7 +202,13 @@ export default function SalesHistoryPage() {
         <button
           onClick={() => {
             // CSV export passes ALL active filters (filter alignment)
-            const params = new URLSearchParams({ type: 'sales-orders', ...apiParams });
+            const params = new URLSearchParams(
+              Object.fromEntries(
+                Object.entries({ type: 'sales-orders', ...apiParams })
+                  .filter(([, v]) => v != null && v !== '')
+                  .map(([k, v]) => [k, String(v)])
+              )
+            );
             window.open(`/api/reports/export/sales-orders/csv?${params.toString()}`, '_blank');
           }}
           className="px-3 py-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 text-xs font-medium"
