@@ -4,14 +4,12 @@ import { useTranslation } from 'react-i18next';
 import api from '../lib/api';
 import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
-import ThemePanel from '../components/ThemePanel';
 import toast from 'react-hot-toast';
 
 export default function SettingsPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [localSettings, setLocalSettings] = useState<Record<string, string>>({});
-  const [showThemePanel, setShowThemePanel] = useState(false);
   const { data: settings, isLoading } = useQuery({ queryKey: ['settings'], queryFn: () => api.get('/settings').then(r => r.data.data) });
   useEffect(() => { if (settings) { const map: Record<string, string> = {}; settings.forEach((s: any) => { map[s.key] = s.value; }); setLocalSettings(map); } }, [settings]);
   const saveMutation = useMutation({ mutationFn: (data: any) => api.post('/settings/bulk', { settings: data }), onSuccess: () => { toast.success('Settings saved'); qc.invalidateQueries({ queryKey: ['settings'] }); }, onError: (e: any) => toast.error(e.response?.data?.message || 'Failed') });
@@ -34,19 +32,6 @@ export default function SettingsPage() {
     <div className="max-w-2xl">
       <PageHeader title={t('nav.settings')} subtitle="System configuration" />
       <div className="space-y-5">
-        {/* Theme — opens the same panel as the sidebar 🎨 icon */}
-        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
-            <h3 className="font-semibold text-gray-900 dark:text-gray-100">🎨 Theme & Display</h3>
-            <button onClick={() => setShowThemePanel(true)} className="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-medium">
-              Open Theme Panel
-            </button>
-          </div>
-          <div className="p-5 text-sm text-gray-500 dark:text-gray-400">
-            Customize your visual theme, density, schedule, and OS sync. The panel is also accessible via the 🎨 button in the sidebar.
-          </div>
-        </div>
-        {showThemePanel && <ThemePanel onClose={() => setShowThemePanel(false)} />}
         {settingGroups.map(group => (<div key={group.group} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden"><div className="flex items-center gap-2 px-5 py-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50"><h3 className="font-semibold text-gray-900 dark:text-gray-100">{group.label}</h3></div><div className="p-5 space-y-4">
           {group.keys.map(key => (
             <div key={key}>
