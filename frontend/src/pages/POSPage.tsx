@@ -721,8 +721,8 @@ export default function POSPage() {
       {/* Offline status banner */}
       <OfflineBanner />
       {/* ─── ODOO-STYLE TOP NAV BAR ─── */}
-      <div className="bg-gray-900 text-white px-3 md:px-4 py-2 flex items-center gap-2 md:gap-4 rounded-t-xl -mx-4 -mt-4 mb-4 no-print overflow-x-auto">
-        <span className="font-bold text-sm">{activeBranch?.name || 'POS'}</span>
+      <div className="bg-gray-900 text-white px-3 md:px-4 py-2 flex items-center gap-2 md:gap-4 rounded-t-xl -mx-4 -mt-4 mb-0 no-print flex-shrink-0">
+        <span className="font-bold text-sm whitespace-nowrap">{activeBranch?.name || 'POS'}</span>
         <div className="flex gap-1 ms-4">
           <button onClick={() => setPosView('floor')}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${posView === 'floor' ? 'bg-primary text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}>
@@ -740,8 +740,11 @@ export default function POSPage() {
         <div className="ms-auto flex items-center gap-2 text-xs text-gray-400">
           {!isOnline && <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-bold animate-pulse">OFFLINE{pendingCount > 0 ? ` (${pendingCount})` : ''}</span>}
           {isSyncing && <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold">SYNCING...</span>}
-          <PosSessionBar branchId={branchId} businessInfo={businessInfo} />
         </div>
+      </div>
+      {/* Session bar — always fully visible below the nav, never clipped */}
+      <div className="-mx-4 mb-4 no-print">
+        <PosSessionBar branchId={branchId} businessInfo={businessInfo} />
       </div>
 
       {/* ─── FLOOR PLAN VIEW ─── */}
