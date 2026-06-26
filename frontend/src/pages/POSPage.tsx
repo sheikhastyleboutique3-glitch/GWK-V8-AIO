@@ -174,6 +174,7 @@ export default function POSPage() {
       logoUrl: map.company_logo ? `${window.location.origin}${map.company_logo}` : undefined,
       address: map.company_address || undefined,
       phone: map.company_phone || undefined,
+      email: map.company_email || undefined,
       taxId: map.company_tax_id || undefined,
       currency: map.default_currency || 'QAR',
     };

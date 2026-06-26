@@ -57,6 +57,7 @@ export interface BusinessInfo {
   logoUrl?: string;
   address?: string;
   phone?: string;
+  email?: string;
   taxId?: string;
   currency?: string; // e.g. 'QAR', 'SAR', 'USD' — shown on receipts
 }
@@ -173,6 +174,7 @@ export function printReceipt(order: OrderLike, info: BusinessInfo = {}) {
       ${info.branchName ? `<div class="c sm">${esc(info.branchName)}</div>` : ''}
       ${info.address ? `<div class="c sm">${esc(info.address)}</div>` : ''}
       ${info.phone ? `<div class="c sm">${esc(info.phone)}</div>` : ''}
+      ${info.email ? `<div class="c sm">${esc(info.email)}</div>` : ''}
       ${info.taxId ? `<div class="c sm">Tax ID: ${esc(info.taxId)}</div>` : ''}
       <div class="c sm">${esc(when)}</div>
       <div class="hr"></div>
@@ -289,6 +291,10 @@ export function printCustomerStatement(
       ${info.logoUrl ? `<img class="logo" src="${esc(info.logoUrl)}" alt="logo" />` : ''}
       <div class="c b lg">${esc(info.businessName || 'GWK Restaurant')}</div>
       ${info.branchName ? `<div class="c sm">${esc(info.branchName)}</div>` : ''}
+      ${info.address ? `<div class="c sm">${esc(info.address)}</div>` : ''}
+      ${info.phone ? `<div class="c sm">${esc(info.phone)}</div>` : ''}
+      ${info.email ? `<div class="c sm">${esc(info.email)}</div>` : ''}
+      ${info.taxId ? `<div class="c sm">Tax ID: ${esc(info.taxId)}</div>` : ''}
       <div class="c b">STATEMENT OF ACCOUNT</div>
       <div class="c sm">${esc(new Date().toLocaleString())}</div>
       <div class="hr"></div>
@@ -317,6 +323,10 @@ export function printSessionReport(rep: any, info: BusinessInfo = {}) {
       ${info.logoUrl ? `<img class="logo" src="${esc(info.logoUrl)}" alt="logo" />` : ''}
       <div class="c b lg">${esc(info.businessName || 'GWK Restaurant')}</div>
       ${info.branchName ? `<div class="c sm">${esc(info.branchName)}</div>` : ''}
+      ${info.address ? `<div class="c sm">${esc(info.address)}</div>` : ''}
+      ${info.phone ? `<div class="c sm">${esc(info.phone)}</div>` : ''}
+      ${info.email ? `<div class="c sm">${esc(info.email)}</div>` : ''}
+      ${info.taxId ? `<div class="c sm">Tax ID: ${esc(info.taxId)}</div>` : ''}
       <div class="c b">${isClosed ? 'Z-REPORT (SESSION CLOSE)' : 'X-REPORT (MID-SHIFT)'}</div>
       <div class="c sm">${esc(s.sessionNo ?? '')}</div>
       <div class="c sm">${esc(new Date(s.openedAt || Date.now()).toLocaleString())}${isClosed && s.closedAt ? ' → ' + esc(new Date(s.closedAt).toLocaleString()) : ''}</div>

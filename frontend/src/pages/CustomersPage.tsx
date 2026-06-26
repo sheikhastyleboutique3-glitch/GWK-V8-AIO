@@ -21,7 +21,7 @@ export default function CustomersPage() {
   const businessInfo = useMemo(() => {
     const m: Record<string, string> = {};
     (settings || []).forEach((s: any) => { m[s.key] = s.value; });
-    return { businessName: m.company_name || undefined, branchName: activeBranch?.name, logoUrl: m.company_logo ? `${window.location.origin}${m.company_logo}` : undefined, currency: m.default_currency || 'QAR' };
+    return { businessName: m.company_name || undefined, branchName: activeBranch?.name, logoUrl: m.company_logo ? `${window.location.origin}${m.company_logo}` : undefined, address: m.company_address || undefined, phone: m.company_phone || undefined, email: m.company_email || undefined, taxId: m.company_tax_id || undefined, currency: m.default_currency || 'QAR' };
   }, [settings, activeBranch]);
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<number | null>(null);
