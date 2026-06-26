@@ -133,6 +133,8 @@ export default function WaiterPage() {
     queryKey: ['waiter-order', activeOrderId],
     queryFn: () => api.get(`/sales/orders/${activeOrderId}`).then((r) => r.data.data),
     enabled: !!activeOrderId,
+    refetchInterval: 5_000, // Sync KOT status: pick up fires made by POS or other waiters
+  });
   });
 
   const refreshTablesAndOrders = () => {
@@ -276,16 +278,23 @@ export default function WaiterPage() {
 
   // Seed "already sent" items once per opened order so a resumed bill doesn't
   // reprint its existing lines; a fresh ticket starts empty.
+  // NOTE: sentItemIds is ONLY for print-dedup within a single Waiter session.
+  // The real source of truth for "fired to kitchen" is `firedAt` from the DB.
   useEffect(() => {
     if (order?.id && seededOrderRef.current !== order.id) {
       seededOrderRef.current = order.id;
-      setSentItemIds(new Set((order.items || []).map((it: any) => it.id)));
+      // Seed with items that already have firedAt (already sent to kitchen by anyone — POS or Waiter)
+      setSentItemIds(new Set(
+        (order.items || []).filter((it: any) => it.firedAt).map((it: any) => it.id)
+      ));
     }
   }, [order?.id, order?.items]);
 
+  // Items NOT yet fired to kitchen (source of truth = database firedAt field)
+  // This ensures if POS or another waiter fires, this waiter sees it too.
   const newItems = useMemo(
-    () => (order?.items || []).filter((it: any) => !sentItemIds.has(it.id)),
-    [order, sentItemIds],
+    () => (order?.items || []).filter((it: any) => !it.firedAt && !it.isVoided),
+    [order],
   );
 
   const sendToKitchen = async () => {
@@ -528,7 +537,12 @@ export default function WaiterPage() {
                       />
                     )}
                     <div className="min-w-0">
-                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate flex items-center gap-1">
+                        {it.firedAt ? (
+                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400" title="Sent to kitchen">🔥</span>
+                        ) : (
+                          <span className="text-[10px] text-gray-300 dark:text-gray-600" title="Not yet sent">○</span>
+                        )}
                         {it.product?.name ?? `#${it.productId}`}
                       </div>
                       {Array.isArray(it.modifiers) && it.modifiers.filter((m: any) => m?.name).length > 0 && (
@@ -610,9 +624,17 @@ export default function WaiterPage() {
             <button
               onClick={sendToKitchen}
               disabled={!newItems.length}
-              className="w-full mb-2 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
+              className={`w-full mb-2 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 ${
+                newItems.length > 0
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+              } disabled:opacity-70`}
             >
-              🍳 {t('waiter.sendToKitchen')}
+              {newItems.length > 0 ? (
+                <>🍳 {t('waiter.sendToKitchen')}</>
+              ) : (
+                <>✓ All items sent to kitchen</>
+              )}
               {newItems.length > 0 && (
                 <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-white/25 text-xs">
                   {newItems.length}

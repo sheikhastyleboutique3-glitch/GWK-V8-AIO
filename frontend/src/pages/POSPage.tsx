@@ -209,6 +209,7 @@ export default function POSPage() {
     queryKey: ['pos-loaded', loadedOrderId],
     queryFn: () => api.get(`/sales/orders/${loadedOrderId}`).then((r) => r.data.data),
     enabled: !!loadedOrderId,
+    refetchInterval: 5_000, // Sync KOT status: pick up fires made by Waiter
   });
 
   const refetchLoaded = () => {
@@ -1299,7 +1300,14 @@ export default function POSPage() {
                   }
                 }}>
                 <div className="flex justify-between items-center gap-2">
-                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100 flex-1 line-clamp-1 cursor-pointer" title="Double-click to add note">{l.name}</span>
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100 flex-1 line-clamp-1 cursor-pointer flex items-center gap-1" title="Double-click to add note">
+                    {l.firedAt ? (
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex-shrink-0" title="Sent to kitchen">🔥</span>
+                    ) : mode === 'existing' ? (
+                      <span className="text-[10px] text-gray-300 dark:text-gray-600 flex-shrink-0" title="Not yet sent to kitchen">○</span>
+                    ) : null}
+                    {l.name}
+                  </span>
                   {mode === 'new' ? (
                     <>
                       <button onClick={() => setQtyAt(i, l.quantity - 1)} className="w-7 h-7 rounded bg-gray-100 dark:bg-gray-800">−</button>
