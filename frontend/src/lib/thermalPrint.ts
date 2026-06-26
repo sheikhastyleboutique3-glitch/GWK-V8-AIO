@@ -133,8 +133,10 @@ function printDoc(title: string, bodyHtml: string, widthMm = 80) {
 export function printReceipt(order: OrderLike, info: BusinessInfo = {}) {
   const items = order.items ?? [];
   const subtotal = order.subtotal ?? items.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
-  const discount = order.couponDiscount ?? 0;
-  const total = order.total ?? Math.max(0, subtotal - discount);
+  const couponDiscount = order.couponDiscount ?? 0;
+  const itemDiscountTotal = items.reduce((s, i) => s + ((i as any).discount ?? 0), 0);
+  const discountTotal = order.discountTotal ?? (couponDiscount + itemDiscountTotal);
+  const total = order.total ?? Math.max(0, subtotal - discountTotal);
   const paid = order.paidTotal ?? (order.payments ?? []).reduce((s, p) => s + p.amount, 0);
   const change = Math.max(0, +(paid - total).toFixed(2));
   const when = new Date(order.completedAt || order.createdAt || Date.now()).toLocaleString();
@@ -144,10 +146,14 @@ export function printReceipt(order: OrderLike, info: BusinessInfo = {}) {
       (it) => {
         const mods = Array.isArray(it.modifiers) ? it.modifiers : (typeof it.modifiers === 'string' ? JSON.parse(it.modifiers) : []);
         const modText = mods.map((m: any) => m?.name || m?.nameAr).filter(Boolean).join(', ');
+        const lineTotal = it.unitPrice * it.quantity;
+        const disc = (it as any).discount ?? 0;
+        const discPct = lineTotal > 0 ? Math.round(disc / lineTotal * 100) : 0;
         return `
-      <div class="row"><span>${it.quantity} x ${esc(it.product?.name ?? `#${it.productId}`)}${it.product?.nameAr ? ` / ${esc(it.product.nameAr)}` : ''}</span><span>${money(it.unitPrice * it.quantity)}</span></div>
+      <div class="row"><span>${it.quantity} x ${esc(it.product?.name ?? `#${it.productId}`)}${it.product?.nameAr ? ` / ${esc(it.product.nameAr)}` : ''}</span><span>${money(lineTotal)}</span></div>
       ${modText ? `<div class="row sm muted"><span>+ ${esc(modText)}</span><span></span></div>` : ''}
-      <div class="row sm muted"><span>@ ${money(it.unitPrice)}</span><span></span></div>`;
+      ${disc > 0 ? `<div class="row sm" style="color:#059669"><span>  Discount (${discPct}%)</span><span>-${money(disc)}</span></div>` : ''}
+      <div class="row sm muted"><span>@ ${money(it.unitPrice)}</span><span>${disc > 0 ? money(lineTotal - disc) : ''}</span></div>`;
       },
     )
     .join('');
@@ -173,7 +179,9 @@ export function printReceipt(order: OrderLike, info: BusinessInfo = {}) {
       ${itemRows}
       <div class="hr"></div>
       <div class="row"><span>Subtotal</span><span>${money(subtotal)}</span></div>
-      ${discount > 0 ? `<div class="row"><span>Discount${order.couponCode ? ` (${esc(order.couponCode)})` : ''}</span><span>-${money(discount)}</span></div>` : ''}
+      ${itemDiscountTotal > 0 ? `<div class="row" style="color:#059669"><span>Item Discounts</span><span>-${money(itemDiscountTotal)}</span></div>` : ''}
+      ${couponDiscount > 0 ? `<div class="row" style="color:#059669"><span>Coupon${order.couponCode ? ` (${esc(order.couponCode)})` : ''}</span><span>-${money(couponDiscount)}</span></div>` : ''}
+      ${discountTotal > 0 ? `<div class="row b"><span>Total Discount</span><span>-${money(discountTotal)}</span></div>` : ''}
       <div class="row b lg"><span>TOTAL</span><span>${money(total)}</span></div>
       <div class="hr"></div>
       ${payRows}
