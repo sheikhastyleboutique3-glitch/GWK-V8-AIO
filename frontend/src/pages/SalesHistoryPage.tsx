@@ -278,15 +278,27 @@ export default function SalesHistoryPage() {
                     {(o.items || []).map((it: any) => (
                       <div key={it.id} className="flex justify-between text-xs">
                         <span>{it.quantity} × {it.product?.name ?? `#${it.productId}`}{Array.isArray(it.modifiers) && it.modifiers.filter((m: any) => m?.name).length ? ` (${it.modifiers.filter((m: any) => m?.name).map((m: any) => m.name).join(', ')})` : ''}</span>
-                        <span>{(it.unitPrice * it.quantity).toFixed(2)}</span>
+                        <span className="flex items-center gap-1">
+                          {(it.discount ?? 0) > 0 && <span className="text-emerald-600">-{Number(it.discount).toFixed(2)}</span>}
+                          <span>{((it.unitPrice * it.quantity) - (it.discount ?? 0)).toFixed(2)}</span>
+                        </span>
                       </div>
                     ))}
                   </div>
                   <div className="flex flex-wrap justify-between items-center gap-2 text-xs text-gray-500 border-t border-gray-100 dark:border-gray-800 pt-2">
+                    <div className="flex flex-wrap gap-1">
+                      {(o.payments || []).map((p: any, pi: number) => (
+                        <span key={pi} className={p.isReversed ? 'line-through text-gray-300' : ''}>
+                          {p.method.replace('_', ' ')} {Number(p.amount).toFixed(2)}{p.isReversed ? ' ✕' : ''}
+                          {pi < (o.payments || []).length - 1 ? ' · ' : ''}
+                        </span>
+                      ))}
+                      {!(o.payments || []).length && <span>{t('salesHistory.unpaid')}</span>}
+                    </div>
                     <span>
-                      {(o.payments || []).map((p: any) => `${p.method.replace('_', ' ')} ${Number(p.amount).toFixed(2)}`).join(' · ') || t('salesHistory.unpaid')}
+                      {(o.discountTotal ?? 0) > 0 && <span className="text-emerald-600 me-2">Disc: -{Number(o.discountTotal).toFixed(2)}</span>}
+                      {t('salesHistory.cost')}: {Number(o.foodCost ?? 0).toFixed(2)} · {t('salesHistory.gp')}: {Number(o.grossProfit ?? 0).toFixed(2)}
                     </span>
-                    <span>{t('salesHistory.cost')}: {Number(o.foodCost ?? 0).toFixed(2)} · {t('salesHistory.gp')}: {Number(o.grossProfit ?? 0).toFixed(2)}</span>
                   </div>
                   <div className="flex gap-2 mt-3">
                     <button onClick={() => printReceipt(o, businessInfo)} className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs font-medium">🖨 {t('salesHistory.reprint')}</button>
