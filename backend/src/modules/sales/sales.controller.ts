@@ -60,6 +60,7 @@ export class CreateOrderDto {
   @IsOptional() @IsArray() combos?: { comboId: number; choiceIds: number[] }[];
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => OrderItemDto)
   items?: OrderItemDto[];
+  @IsOptional() @IsString() idempotencyKey?: string;
 }
 
 export class AddPaymentDto {

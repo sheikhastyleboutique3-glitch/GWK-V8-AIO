@@ -8,6 +8,8 @@ import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ModifierModal, { ModGroup, ChosenModifier } from '../components/ModifierModal';
 import { printKot } from '../lib/thermalPrint';
+import { useOnlineStatus } from '../lib/useOnlineStatus';
+import OfflineBanner from '../components/OfflineBanner';
 
 interface TableRow { id: number; name: string; seats: number; status: string; branchId: number; isActive: boolean }
 interface OrderRow { id: number; orderNo: string; status: string; tableName?: string | null; total: number }
@@ -332,6 +334,7 @@ export default function WaiterPage() {
   if (!selectedTable) {
     return (
       <div>
+        <OfflineBanner />
         <PageHeader title={t('nav.waiter')} subtitle={activeBranch?.name} />
         <div className="flex flex-wrap gap-3 mb-4 text-xs text-gray-500">
           {['AVAILABLE', 'OCCUPIED', 'BILL_REQUESTED', 'RESERVED'].map((s) => (
@@ -427,6 +430,7 @@ export default function WaiterPage() {
   // ============ ORDER VIEW ============
   return (
     <div>
+      <OfflineBanner />
       <PageHeader title={`${t('waiter.table')} ${selectedTable.name}`} subtitle={order?.orderNo} />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Menu grid */}

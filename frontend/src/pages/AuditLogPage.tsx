@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { format } from 'date-fns';
+import DataToolbar from '../components/DataToolbar';
 
 const ENTITIES = ['', 'product', 'requisition', 'inventory', 'user', 'branch', 'purchaseOrder', 'wastage', 'setting'];
 const ACTIONS = ['', 'CREATE', 'UPDATE', 'DELETE', 'ARCHIVE', 'LOGIN', 'MANAGER_REVIEW', 'PROCUREMENT_UPDATE', 'CONFIRM_RECEIPT', 'DUPLICATE', 'BULK_IMPORT'];
@@ -110,6 +111,33 @@ export default function AuditLogPage() {
           </div>
         </div>
       )}
+
+      {/* Odoo-style advanced toolbar (filter builder + group by + export) */}
+      <DataToolbar
+        pageId="audit-log"
+        filterFields={[
+          { key: 'search', label: 'Entity ID / User', type: 'text' as const },
+          { key: 'action', label: 'Action', type: 'select' as const, options: ACTIONS.filter(Boolean).map(a => ({ value: a, label: a.replace(/_/g, ' ') })) },
+          { key: 'entity', label: 'Entity', type: 'select' as const, options: ENTITIES.filter(Boolean).map(e => ({ value: e, label: e })) },
+          { key: 'createdAt', label: 'Date', type: 'date' as const },
+        ]}
+        groupByFields={[
+          { key: 'action', label: 'Action' },
+          { key: 'entity', label: 'Entity' },
+          { key: 'userName', label: 'User' },
+        ]}
+        onFilterApply={(params) => {
+          if (params.search) setSearch(params.search);
+          if (params.action) setActionFilter(params.action);
+          if (params.entity) setEntity(params.entity);
+          if (params.from) setFromDate(params.from);
+          if (params.to) setToDate(params.to);
+        }}
+        groupByValue={[]}
+        onGroupByChange={() => {}}
+        onExport={handleExport}
+        className="mb-4"
+      />
 
       {/* Entity filter tabs */}
       <div className="flex gap-2 overflow-x-auto pb-2 mb-5 scrollbar-hide">

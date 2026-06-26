@@ -12,6 +12,7 @@ import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { pdf } from '@react-pdf/renderer';
 import { PurchaseOrderPDF } from '../components/PurchaseOrderPDF';
+import DataToolbar from '../components/DataToolbar';
 
 const STATUS_ACTIONS: Record<string, { labelKey: string; next: string; color: string; icon: string }[]> = {
   DRAFT: [
@@ -385,6 +386,47 @@ export default function PurchaseOrdersPage() {
           </div>
         </div>
       )}
+
+      {/* Odoo-style advanced toolbar (filter builder + group by + export) */}
+      <DataToolbar
+        pageId="purchase-orders"
+        filterFields={[
+          { key: 'search', label: 'PO Number / Notes', type: 'text' as const },
+          { key: 'status', label: 'Status', type: 'select' as const, options: PO_STATUSES.map(s => ({ value: s, label: s.replace(/_/g, ' ') })) },
+          { key: 'supplierId', label: 'Supplier', type: 'select' as const, options: (suppliers || []).map((s: any) => ({ value: String(s.id), label: s.name })) },
+          { key: 'expectedDate', label: 'Expected Date', type: 'date' as const },
+          { key: 'total', label: 'Total Amount', type: 'number' as const },
+        ]}
+        groupByFields={[
+          { key: 'status', label: 'Status' },
+          { key: 'supplierName', label: 'Supplier' },
+          { key: 'branchName', label: 'Branch' },
+        ]}
+        onFilterApply={(params) => {
+          if (params.search) setSearchPO(params.search);
+          if (params.status) setStatusFilter(params.status);
+          if (params.supplierId) setSupplierFilterPO(params.supplierId);
+          if (params.from) setFromDatePO(params.from);
+          if (params.to) setToDatePO(params.to);
+        }}
+        groupByValue={[]}
+        onGroupByChange={() => {}}
+        onExport={async () => {
+          try {
+            const params = new URLSearchParams();
+            if (branchFilterPO) params.set('branchId', branchFilterPO);
+            else if (activeBranch?.id) params.set('branchId', String(activeBranch.id));
+            if (fromDatePO) params.set('from', fromDatePO);
+            if (toDatePO) params.set('to', toDatePO);
+            if (statusFilter && statusFilter !== 'all') params.set('status', statusFilter);
+            if (searchPO) params.set('search', searchPO);
+            if (supplierFilterPO) params.set('supplierId', supplierFilterPO);
+            const qs = params.toString();
+            await downloadCsv(`/reports/export/purchase-orders/csv${qs ? `?${qs}` : ''}`, `purchase-orders-${new Date().toISOString().slice(0, 10)}.csv`);
+          } catch { toast.error('Export failed'); }
+        }}
+        className="mb-4"
+      />
 
       {/* Status Filter */}
       <div className="flex gap-2 mb-4 overflow-x-auto pb-1">

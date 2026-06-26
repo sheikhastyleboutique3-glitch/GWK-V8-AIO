@@ -460,6 +460,7 @@ model User {
   recipesCreated        Recipe[]                     @relation("RecipeCreatedBy")
   sessionsOpened        PosSession[]                 @relation("SessionOpenedBy")
   sessionsClosed        PosSession[]                 @relation("SessionClosedBy")
+  savedViews            UserView[]
 
   @@map("users")
 }
@@ -475,6 +476,22 @@ model UserBranch {
 
   @@unique([userId, branchId])
   @@map("user_branches")
+}
+
+model UserView {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pageId    String   // e.g. "sales-history", "inventory", "purchase-orders"
+  name      String
+  filters   Json     @default("{}")  // { search: "...", status: "..." }
+  groupBy   Json     @default("[]")  // ["status", "channel"]
+  columns   Json?    // optional saved column selection
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("user_views")
 }
 
 // =============================================================================

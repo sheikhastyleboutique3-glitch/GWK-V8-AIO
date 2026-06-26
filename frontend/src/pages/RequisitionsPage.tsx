@@ -9,6 +9,7 @@ import StatusBadge from '../components/StatusBadge';
 import LoadingSpinner from '../components/LoadingSpinner';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
+import DataToolbar from '../components/DataToolbar';
 
 const ALL_STATUSES = [
   'SUBMITTED', 'MANAGER_APPROVED', 'MANAGER_MODIFIED', 'MANAGER_CANCELLED',
@@ -159,6 +160,36 @@ export default function RequisitionsPage() {
           </div>
         </div>
       )}
+
+      {/* Odoo-style advanced toolbar (filter builder + group by + export) */}
+      <DataToolbar
+        pageId="requisitions"
+        filterFields={[
+          { key: 'search', label: 'Requisition No', type: 'text' as const },
+          { key: 'status', label: 'Status', type: 'select' as const, options: ALL_STATUSES.map(s => ({ value: s, label: s.replace(/_/g, ' ') })) },
+          { key: 'priority', label: 'Priority', type: 'select' as const, options: PRIORITIES.map(p => ({ value: p, label: p })) },
+          { key: 'department', label: 'Department', type: 'select' as const, options: departments.map(d => ({ value: d, label: d })) },
+          { key: 'createdAt', label: 'Date', type: 'date' as const },
+        ]}
+        groupByFields={[
+          { key: 'status', label: 'Status' },
+          { key: 'priority', label: 'Priority' },
+          { key: 'department', label: 'Department' },
+        ]}
+        onFilterApply={(params) => {
+          if (params.search) setSearch(params.search);
+          if (params.status) setStatusFilter(params.status);
+          if (params.priority) setPriorityFilter(params.priority);
+          if (params.department) setDepartmentFilter(params.department);
+          if (params.from) setFromDate(params.from);
+          if (params.to) setToDate(params.to);
+        }}
+        groupByValue={[]}
+        onGroupByChange={() => {}}
+        onExport={handleExport}
+        exporting={exporting}
+        className="mb-4"
+      />
 
       {/* Status filter tabs */}
       <div className="flex gap-2 overflow-x-auto pb-2 mb-5 scrollbar-hide">
