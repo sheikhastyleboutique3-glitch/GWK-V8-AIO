@@ -25,6 +25,7 @@ export default function SettingsPage() {
   const settingGroups = [
     { group: 'branding', label: '\ud83c\udfa8 ' + t('settings.companyInfo'), keys: ['company_logo'] },
     { group: 'general', label: '\ud83c\udfe2 ' + t('settings.companyInfo'), keys: ['company_name', 'company_name_ar', 'company_tax_id', 'company_address'] },
+    { group: 'pos', label: '\ud83d\udecd\ufe0f POS & Sales', keys: ['pos.requireOpenSession', 'pos.allowNegativeStock'] },
     { group: 'finance', label: '\ud83d\udcb0 Finance & Currency', keys: ['default_currency', 'supported_currencies'] },
     { group: 'inventory', label: '\ud83d\udce6 Inventory', keys: ['expiry_warning_days', 'low_stock_alert'] },
     { group: 'localization', label: '\ud83c\udf0d Localization', keys: ['default_language'] },
@@ -45,6 +46,18 @@ export default function SettingsPage() {
                 </div>
               ) : key.includes('color') ? (
                 <div className="flex items-center gap-3"><input type="color" value={localSettings[key] || '#2563eb'} onChange={e => setLocalSettings(p => ({ ...p, [key]: e.target.value }))} className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer" /><input value={localSettings[key] || ''} onChange={e => setLocalSettings(p => ({ ...p, [key]: e.target.value }))} className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm" /></div>
+              ) : key.startsWith('pos.') ? (
+                <div className="flex items-center gap-3">
+                  <label className="relative inline-flex cursor-pointer">
+                    <input type="checkbox" checked={localSettings[key] === 'true'} onChange={e => setLocalSettings(p => ({ ...p, [key]: e.target.checked ? 'true' : 'false' }))} className="sr-only peer" />
+                    <div className="w-10 h-5 rounded-full bg-gray-300 dark:bg-gray-600 peer-checked:bg-emerald-500 transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:w-4 after:h-4 after:bg-white after:rounded-full after:transition-transform peer-checked:after:translate-x-5" />
+                  </label>
+                  <span className="text-xs text-gray-500">{localSettings[key] === 'true' ? 'Enabled' : 'Disabled'}</span>
+                  <span className="text-[10px] text-gray-400 ms-2">
+                    {key === 'pos.requireOpenSession' && '(Orders blocked unless a session is open)'}
+                    {key === 'pos.allowNegativeStock' && '(Allow selling items even when stock is 0)'}
+                  </span>
+                </div>
               ) : (
                 <input value={localSettings[key] || ''} onChange={e => setLocalSettings(p => ({ ...p, [key]: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
               )}
