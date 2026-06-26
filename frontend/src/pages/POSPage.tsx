@@ -175,6 +175,7 @@ export default function POSPage() {
       address: map.company_address || undefined,
       phone: map.company_phone || undefined,
       taxId: map.company_tax_id || undefined,
+      currency: map.default_currency || 'QAR',
     };
   }, [settings, activeBranch]);
 

@@ -36,7 +36,7 @@ export default function SessionsPage() {
   const businessInfo = useMemo(() => {
     const m: Record<string, string> = {};
     (settings || []).forEach((s: any) => { m[s.key] = s.value; });
-    return { businessName: m.company_name || undefined, branchName: activeBranch?.name, logoUrl: m.company_logo ? `${window.location.origin}${m.company_logo}` : undefined };
+    return { businessName: m.company_name || undefined, branchName: activeBranch?.name, logoUrl: m.company_logo ? `${window.location.origin}${m.company_logo}` : undefined, currency: m.default_currency || 'QAR' };
   }, [settings, activeBranch]);
 
   return (

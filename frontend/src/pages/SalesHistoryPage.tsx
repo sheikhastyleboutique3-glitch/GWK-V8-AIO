@@ -94,6 +94,7 @@ export default function SalesHistoryPage() {
       address: m.company_address || undefined,
       phone: m.company_phone || undefined,
       taxId: m.company_tax_id || undefined,
+      currency: m.default_currency || 'QAR',
     };
   }, [settings, activeBranch]);
 

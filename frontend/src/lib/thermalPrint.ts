@@ -13,7 +13,8 @@ const esc = (v: unknown): string =>
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-const money = (v: unknown): string => Number(v ?? 0).toFixed(2);
+let _currency = 'QAR';
+const money = (v: unknown): string => `${_currency} ${Number(v ?? 0).toFixed(2)}`;
 
 interface CategoryLike {
   id?: number;
@@ -57,6 +58,7 @@ export interface BusinessInfo {
   address?: string;
   phone?: string;
   taxId?: string;
+  currency?: string; // e.g. 'QAR', 'SAR', 'USD' — shown on receipts
 }
 
 /** Map a line item to a kitchen station from its product category. */
@@ -131,6 +133,7 @@ function printDoc(title: string, bodyHtml: string, widthMm = 80) {
 
 /** Customer receipt (logo, business info, prices, payments, change). */
 export function printReceipt(order: OrderLike, info: BusinessInfo = {}) {
+  _currency = info.currency || 'QAR';
   const items = order.items ?? [];
   const subtotal = order.subtotal ?? items.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
   const couponDiscount = order.couponDiscount ?? 0;
@@ -272,6 +275,7 @@ export function printCustomerStatement(
   customer: { name?: string; phone?: string },
   rows: Array<{ orderNo: string; outstanding: number; ageDays: number; total?: number; paid?: number; completedAt?: string | null }>,
 ) {
+  _currency = info.currency || 'QAR';
   const total = rows.reduce((s, r) => s + (r.outstanding || 0), 0);
   const lines = rows
     .map(
@@ -301,6 +305,7 @@ export function printCustomerStatement(
   printDoc(`Statement ${customer.name ?? ''}`, body);
 }
 export function printSessionReport(rep: any, info: BusinessInfo = {}) {
+  _currency = info.currency || 'QAR';
   const s = rep.session ?? {};
   const methods = Object.entries(rep.paymentsByMethod ?? {}) as [string, number][];
   const methodRows = methods
