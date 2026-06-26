@@ -183,6 +183,9 @@ export function printReceipt(order: OrderLike, info: BusinessInfo = {}) {
       ${itemDiscountTotal > 0 ? `<div class="row" style="color:#059669"><span>Item Discounts</span><span>-${money(itemDiscountTotal)}</span></div>` : ''}
       ${couponDiscount > 0 ? `<div class="row" style="color:#059669"><span>Coupon${order.couponCode ? ` (${esc(order.couponCode)})` : ''}</span><span>-${money(couponDiscount)}</span></div>` : ''}
       ${discountTotal > 0 ? `<div class="row b"><span>Total Discount</span><span>-${money(discountTotal)}</span></div>` : ''}
+      ${(order as any).taxTotal > 0 ? `<div class="row"><span>Tax</span><span>${money((order as any).taxTotal)}</span></div>` : ''}
+      ${(order as any).serviceCharge > 0 ? `<div class="row"><span>Service Charge</span><span>${money((order as any).serviceCharge)}</span></div>` : ''}
+      ${(order as any).tip > 0 ? `<div class="row"><span>Tip</span><span>${money((order as any).tip)}</span></div>` : ''}
       <div class="row b lg"><span>TOTAL</span><span>${money(total)}</span></div>
       <div class="hr"></div>
       ${payRows}

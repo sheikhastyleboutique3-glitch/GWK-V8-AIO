@@ -1055,7 +1055,7 @@ export class SalesService {
       },
     });
     const paid = await this.prisma.payment.aggregate({
-      where: { orderId },
+      where: { orderId, isReversed: false },
       _sum: { amount: true },
     });
     await this.prisma.order.update({

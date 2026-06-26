@@ -17,6 +17,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -33,7 +34,7 @@ import { Transform } from 'class-transformer';
 
 export class OrderItemDto {
   @IsInt() productId: number;
-  @IsNumber() @Min(0.0001) quantity: number;
+  @IsNumber() @Min(0.0001) @Max(10000) quantity: number;
   @IsNumber() @Min(0) unitPrice: number;
   @IsOptional() @IsNumber() discount?: number;
   @IsOptional() @IsNumber() taxAmount?: number;

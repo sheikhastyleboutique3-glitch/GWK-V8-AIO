@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import { WastageReason, InventoryTxType } from '@prisma/client';
+import { WastageReason, InventoryTxType, FinanceEntryType } from '@prisma/client';
 import { InventoryService } from '../inventory/inventory.service';
+import { FinanceService } from '../finance/finance.service';
 
 @Injectable()
 export class WastageService {
@@ -10,6 +11,7 @@ export class WastageService {
     private prisma: PrismaService,
     private inventoryService: InventoryService,
     private audit: AuditService,
+    private finance: FinanceService,
   ) {}
 
   findAll(branchId?: number, filters?: { search?: string; reason?: string; productId?: number; from?: string; to?: string }) {
@@ -70,6 +72,23 @@ export class WastageService {
       entityId: String(record.id),
       newValues: { productId: dto.productId, quantity: dto.quantity, reason: dto.reason },
     }).catch(() => {});
+
+    // Post wastage cost to finance journal (cost = qty × product costPrice)
+    const product = await this.prisma.product.findUnique({ where: { id: dto.productId }, select: { costPrice: true, name: true } });
+    const wastageCost = dto.quantity * (product?.costPrice ?? 0);
+    if (wastageCost > 0) {
+      this.finance.create({
+        type: FinanceEntryType.WASTAGE,
+        amount: -wastageCost,
+        branchId: dto.branchId,
+        sourceType: 'wastage',
+        sourceId: record.id,
+        reference: `${product?.name ?? ''} x${dto.quantity}`,
+        notes: `Wastage: ${dto.reason}. ${dto.notes || ''}`,
+        createdById: userId,
+      }).catch(() => {});
+    }
+
     return record;
   }
 
