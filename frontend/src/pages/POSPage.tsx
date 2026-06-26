@@ -674,6 +674,7 @@ export default function POSPage() {
   const [splitPayMethod, setSplitPayMethod] = useState<'CASH' | 'CARD' | 'later'>('later');
   // ---- Numpad target: which line item is selected ----
   const [selectedLineIdx, setSelectedLineIdx] = useState<number>(-1);
+  const [numBuffer, setNumBuffer] = useState<string>('');
 
   // Open a table from the floor plan → switch to order view
   const openTableOrder = async (table: any) => {
@@ -1648,53 +1649,74 @@ export default function POSPage() {
                   Selected: {lines[selectedLineIdx].name} (×{lines[selectedLineIdx].quantity})
                 </div>
               )}
+              {/* Numpad buffer display */}
+              {numBuffer && (
+                <div className="text-right text-lg font-mono font-bold text-gray-800 dark:text-gray-100 mb-1 px-1">
+                  {numBuffer}
+                </div>
+              )}
               <div className="grid grid-cols-4 gap-1 text-xs">
-                {[7,8,9,'Qty',4,5,6,'%Disc',1,2,3,'Price','+/-',0,'.',''
+                {[7,8,9,'Qty',4,5,6,'%Disc',1,2,3,'Price','+/-',0,'.','C'
                 ].map((key, idx) => {
-                  if (key === '') return <div key={idx} />;
-                  const isAction = typeof key === 'string' && isNaN(Number(key)) && key !== '.' && key !== '+/-';
+                  const isAction = typeof key === 'string' && ['Qty','%Disc','Price'].includes(key as string);
+                  const isClear = key === 'C';
                   return (
                     <button key={idx}
-                      className={`py-2 rounded ${isAction ? 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-blue-400 font-medium' : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-600'} text-center text-sm`}
+                      className={`py-2 rounded ${isAction ? 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-blue-400 font-medium' : isClear ? 'bg-red-50 dark:bg-red-500/10 text-red-600 font-medium' : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-600'} text-center text-sm`}
                       onClick={async () => {
+                        // Clear button
+                        if (isClear) { setNumBuffer(''); return; }
+
+                        // Number/decimal/sign keys → accumulate in buffer
+                        if (!isAction) {
+                          if (key === '+/-') {
+                            setNumBuffer(b => b.startsWith('-') ? b.slice(1) : '-' + b);
+                          } else {
+                            setNumBuffer(b => b + String(key));
+                          }
+                          return;
+                        }
+
+                        // Action keys: apply buffered value (or prompt if buffer empty)
                         const targetIdx = selectedLineIdx >= 0 && selectedLineIdx < lines.length ? selectedLineIdx : lines.length - 1;
                         const line = lines[targetIdx];
-                        if (!line) return;
+                        if (!line) { toast.error('Select an item first'); return; }
 
                         if (key === 'Qty') {
-                          const q = window.prompt(`Quantity for "${line.name}":`, String(line.quantity));
-                          if (!q || parseInt(q, 10) <= 0) return;
-                          const newQty = parseInt(q, 10);
+                          const val = numBuffer ? parseInt(numBuffer, 10) : 0;
+                          if (!val || val <= 0) { toast.error('Enter quantity on numpad first'); setNumBuffer(''); return; }
+                          setNumBuffer('');
                           if (mode === 'new') {
-                            setQtyAt(targetIdx, newQty);
+                            setQtyAt(targetIdx, val);
+                            toast.success(`Qty → ${val}`);
                           } else if (line.itemId) {
                             try {
-                              // Reset firedAt when qty changes so Kitchen button will re-fire this item
-                              await api.patch(`/sales/orders/${loadedOrderId}/items/${line.itemId}`, { quantity: newQty });
+                              await api.patch(`/sales/orders/${loadedOrderId}/items/${line.itemId}`, { quantity: val });
                               qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
-                              toast.success(`Qty → ${newQty}`);
+                              toast.success(`Qty → ${val}`);
                             } catch (e: any) { toast.error(e.response?.data?.message || 'Failed'); }
                           }
                         } else if (key === '%Disc') {
-                          const pct = window.prompt(`Discount % for "${line.name}":`, '10');
-                          if (!pct || parseFloat(pct) <= 0) return;
-                          const percent = parseFloat(pct);
+                          const percent = numBuffer ? parseFloat(numBuffer) : 0;
+                          if (!percent || percent <= 0) { toast.error('Enter discount % on numpad first'); setNumBuffer(''); return; }
+                          setNumBuffer('');
                           const discAmt = Math.round(line.unitPrice * line.quantity * percent) / 100;
                           if (mode === 'existing' && line.itemId) {
                             try {
                               await api.patch(`/sales/orders/${loadedOrderId}/items/${line.itemId}`, { discount: discAmt });
                               qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
-                              toast.success(`-${discAmt.toFixed(2)} (${percent}%) discount applied`);
+                              toast.success(`-${discAmt.toFixed(2)} (${percent}%) discount`);
                             } catch (e: any) { toast.error(e.response?.data?.message || 'Failed'); }
                           } else {
                             toast.success(`-${discAmt.toFixed(2)} (${percent}%) discount`);
                           }
                         } else if (key === 'Price') {
-                          const p = window.prompt(`New price for "${line.name}":`, String(line.unitPrice));
-                          if (!p) return;
-                          const newPrice = parseFloat(p);
+                          const newPrice = numBuffer ? parseFloat(numBuffer) : 0;
+                          if (!newPrice && newPrice !== 0) { toast.error('Enter price on numpad first'); setNumBuffer(''); return; }
+                          setNumBuffer('');
                           if (mode === 'new') {
-                            setPriceAt(targetIdx, newPrice || 0);
+                            setPriceAt(targetIdx, newPrice);
+                            toast.success(`Price → ${newPrice.toFixed(2)}`);
                           } else {
                             toast('Price change requires manager override — use %Disc instead');
                           }
