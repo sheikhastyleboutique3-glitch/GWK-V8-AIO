@@ -527,7 +527,7 @@ export default function POSPage() {
         const { data: created } = await api.post('/sales/orders', {
           branchId,
           channel,
-          tableName: (channel === 'DINE_IN' && tableName) ? tableName : undefined,
+          tableName: (channel === 'DINE_IN' && tableName) ? tableName : (channel === 'DELIVERY' || channel === 'TAKEAWAY') ? (tableName || undefined) : undefined,
           customerId: customer?.id,
           couponCode: coupon?.code,
           presetId: presetId,
@@ -1243,7 +1243,7 @@ export default function POSPage() {
                       onClick={() => {
                         setPresetId(presetId === p.id ? undefined : p.id);
                         setChannel(p.channel);
-                        if (p.channel !== 'DINE_IN') setTableName(''); // Clear table for non-dine-in
+                        if (p.channel !== 'DINE_IN' && p.channel !== 'DELIVERY' && p.channel !== 'TAKEAWAY') setTableName(''); // Clear table for aggregator channels
                         if (isAggregatorChannel(p.channel)) setPayMethod('AGGREGATOR');
                       }}}
                       style={presetId === p.id && p.color ? { backgroundColor: p.color, color: '#fff' } : {}}
@@ -1262,7 +1262,7 @@ export default function POSPage() {
                     key={c}
                     onClick={() => {
                       setChannel(c);
-                      if (c !== 'DINE_IN') setTableName(''); // Clear table for non-dine-in
+                      if (c !== 'DINE_IN' && c !== 'DELIVERY' && c !== 'TAKEAWAY') setTableName(''); // Clear table for aggregator channels
                       // Aggregator channels are settled by the platform → default tender to AGGREGATOR.
                       if (isAggregatorChannel(c)) setPayMethod('AGGREGATOR');
                       // Auto-pick the matching configured platform if present.
@@ -1280,6 +1280,16 @@ export default function POSPage() {
                 <div className="mb-2 text-xs text-gray-500">
                   Table: <span className="font-semibold text-gray-800 dark:text-gray-200">{tableName}</span>
                   <button onClick={() => { setTableName(''); setPosView('floor'); }} className="ms-2 text-primary hover:underline">Change</button>
+                </div>
+              )}
+              {(channel === 'DELIVERY' || channel === 'TAKEAWAY') && (
+                <div className="mb-2">
+                  <input
+                    value={tableName}
+                    onChange={(e) => setTableName(e.target.value)}
+                    placeholder={channel === 'DELIVERY' ? 'Delivery address / customer name...' : 'Customer name / order reference...'}
+                    className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
+                  />
                 </div>
               )}
               {isAggregatorChannel(channel) && (
@@ -1539,7 +1549,7 @@ export default function POSPage() {
                       const { data: created } = await api.post('/sales/orders', {
                         branchId,
                         channel,
-                        tableName: (channel === 'DINE_IN' && tableName) ? tableName : undefined,
+                        tableName: (channel === 'DINE_IN' && tableName) ? tableName : (channel === 'DELIVERY' || channel === 'TAKEAWAY') ? (tableName || undefined) : undefined,
                         customerId: customer?.id,
                         presetId: presetId,
                         items: cart.map((l) => ({ productId: l.productId, quantity: l.quantity, unitPrice: l.unitPrice, modifiers: l.modifiers })),
