@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Body, Param, ParseIntPipe, NotFoundException, BadRequestException } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { SalesService } from '../sales/sales.service';
 import { Public } from '../../common/decorators/public.decorator';
@@ -31,6 +32,7 @@ export class SelfOrderPublicController {
   }
 
   @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @Post(':configId/order')
   async placeOrder(
     @Param('configId', ParseIntPipe) configId: number,

@@ -70,6 +70,7 @@ export class SalesService {
   // In-memory idempotency cache: key → { orderId, expiry }
   // Keys expire after 60 seconds to prevent indefinite memory growth.
   private idempotencyCache = new Map<string, { orderId: number; expiry: number }>();
+  private idempotencyInterval: NodeJS.Timeout;
 
   constructor(
     private prisma: PrismaService,
@@ -80,12 +81,16 @@ export class SalesService {
     private posSessions: PosSessionsService,
   ) {
     // Periodically purge expired idempotency keys (every 5 minutes)
-    setInterval(() => {
+    this.idempotencyInterval = setInterval(() => {
       const now = Date.now();
       for (const [key, val] of this.idempotencyCache) {
         if (val.expiry < now) this.idempotencyCache.delete(key);
       }
     }, 5 * 60_000);
+  }
+
+  onModuleDestroy() {
+    clearInterval(this.idempotencyInterval);
   }
 
   private orderInclude = {
@@ -109,8 +114,10 @@ export class SalesService {
 
   private async generateOrderNo(branchId: number): Promise<string> {
     const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const count = await this.prisma.order.count();
-    return `ORD-${stamp}-B${branchId}-${String(count + 1).padStart(5, '0')}`;
+    // Atomic: use DB sequence via raw query to avoid count() collision
+    const [{ nextval }] = await this.prisma.$queryRaw<[{ nextval: bigint }]>`
+      SELECT nextval(pg_get_serial_sequence('orders', 'id'))`;
+    return `ORD-${stamp}-B${branchId}-${String(Number(nextval)).padStart(5, '0')}`;
   }
 
   /** Recompute monetary roll-up fields from the current line items. */
@@ -1089,30 +1096,6 @@ export class SalesService {
       );
     }
 
-    // Oversell prevention: check stock availability before completing.
-    // Configurable via Setting 'pos.allowNegativeStock' (default: false = block).
-    // Also respects per-product `allowNegativeStock` field (product-level override).
-    const allowNegSetting = await this.prisma.setting.findUnique({ where: { key: 'pos.allowNegativeStock' } });
-    const globalAllowNeg = allowNegSetting?.value === 'true';
-    if (!globalAllowNeg) {
-      for (const item of pre.items) {
-        if (item.isVoided) continue;
-        // Check per-product override
-        const prod = await this.prisma.product.findUnique({ where: { id: item.productId }, select: { name: true, allowNegativeStock: true } });
-        if (prod?.allowNegativeStock) continue; // This product allows negative stock
-        const stock = await this.prisma.inventory.aggregate({
-          where: { productId: item.productId, branchId: pre.branchId },
-          _sum: { quantity: true },
-        });
-        const available = stock._sum.quantity ?? 0;
-        if (available < item.quantity) {
-          throw new BadRequestException(
-            `Insufficient stock for "${prod?.name ?? item.productId}": available ${available}, needed ${item.quantity}. Enable "pos.allowNegativeStock" in Settings or enable it per-product in Menu.`,
-          );
-        }
-      }
-    }
-
     // Stamp the open POS session (if any) for Z-report aggregation.
     const sessionId = await this.posSessions.currentSessionId(pre.branchId);
 
@@ -1130,6 +1113,29 @@ export class SalesService {
 
     const completed = await this.prisma.$transaction(
       async (tx) => {
+        // ── Oversell prevention (INSIDE transaction to prevent TOCTOU races) ──
+        // Configurable via Setting 'pos.allowNegativeStock' (default: false = block).
+        // Also respects per-product `allowNegativeStock` field (product-level override).
+        const allowNegSetting = await tx.setting.findUnique({ where: { key: 'pos.allowNegativeStock' } });
+        const globalAllowNeg = allowNegSetting?.value === 'true';
+        if (!globalAllowNeg) {
+          for (const item of pre.items) {
+            if (item.isVoided) continue;
+            const prod = await tx.product.findUnique({ where: { id: item.productId }, select: { name: true, allowNegativeStock: true } });
+            if (prod?.allowNegativeStock) continue;
+            const stock = await tx.inventory.aggregate({
+              where: { productId: item.productId, branchId: pre.branchId },
+              _sum: { quantity: true },
+            });
+            const available = stock._sum.quantity ?? 0;
+            if (available < item.quantity) {
+              throw new BadRequestException(
+                `Insufficient stock for "${prod?.name ?? item.productId}": available ${available}, needed ${item.quantity}. Enable "pos.allowNegativeStock" in Settings or enable it per-product in Menu.`,
+              );
+            }
+          }
+        }
+
         let orderFoodCost = 0;
 
         for (const item of pre.items) {

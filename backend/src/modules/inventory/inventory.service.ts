@@ -258,6 +258,7 @@ export class InventoryService {
   async applyAdjustment(
     tx: Prisma.TransactionClient,
     dto: AdjustInventoryDto,
+    options?: { allowNegative?: boolean },
   ): Promise<any> {
     const batchId = dto.batchId ?? null;
     // Row-lock the exact stock row (product + branch + batch). NULL-safe match so
@@ -276,7 +277,7 @@ export class InventoryService {
     const currentQty = existing?.quantity ?? 0;
     const isDeduct = DEDUCT_TYPES.includes(dto.type);
     const isAdd = ADD_TYPES.includes(dto.type);
-    if (isDeduct && currentQty < dto.quantity) {
+    if (isDeduct && currentQty < dto.quantity && !options?.allowNegative) {
       throw new ConflictException(
         `Insufficient stock: available ${currentQty}, requested ${dto.quantity}`,
       );
@@ -395,7 +396,7 @@ export class InventoryService {
           );
         }
       }
-      return this.applyAdjustment(tx, dto);
+      return this.applyAdjustment(tx, dto, options);
     }
 
     const isDeduct = DEDUCT_TYPES.includes(dto.type);
@@ -413,7 +414,7 @@ export class InventoryService {
         const results: any[] = [];
         for (const a of allocations) {
           results.push(
-            await this.applyAdjustment(tx, { ...dto, quantity: a.quantity, batchId: a.batchId }),
+            await this.applyAdjustment(tx, { ...dto, quantity: a.quantity, batchId: a.batchId }, options),
           );
         }
         const last = results[results.length - 1] ?? {};
@@ -421,7 +422,7 @@ export class InventoryService {
       } catch (e: any) {
         // If allowNegative, deduct from the aggregate row (go negative) instead of failing
         if (options?.allowNegative && e?.status === 409) {
-          return this.applyAdjustment(tx, { ...dto, batchId: null });
+          return this.applyAdjustment(tx, { ...dto, batchId: null }, options);
         }
         throw e;
       }

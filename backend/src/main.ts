@@ -45,6 +45,10 @@ async function bootstrap() {
   // Gzip responses (JSON payloads, reports, etc.)
   app.use(compression());
 
+  // Request body size limit — prevents DOS via large payloads
+  app.use(require('express').json({ limit: '2mb' }));
+  app.use(require('express').urlencoded({ limit: '2mb', extended: true }));
+
   const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? '')
     .split(',')
     .map((o) => o.trim())

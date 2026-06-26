@@ -28,8 +28,10 @@ export class PosSessionsService {
 
   private async genNo(branchId: number) {
     const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const count = await this.prisma.posSession.count();
-    return `POS-${stamp}-B${branchId}-${String(count + 1).padStart(4, '0')}`;
+    // Atomic: use DB sequence to avoid count() collision under concurrency
+    const [{ nextval }] = await this.prisma.$queryRaw<[{ nextval: bigint }]>`
+      SELECT nextval(pg_get_serial_sequence('pos_sessions', 'id'))`;
+    return `POS-${stamp}-B${branchId}-${String(Number(nextval)).padStart(4, '0')}`;
   }
 
   async open(branchId: number, openingFloat: number, userId?: number, denominations?: { denomination: number; count: number }[]) {
@@ -113,6 +115,7 @@ export class PosSessionsService {
       foodCost += o.foodCost;
       grossProfit += o.grossProfit;
       for (const p of o.payments) {
+        if (p.isReversed) continue; // Skip reversed payments from Z-Report totals
         byMethod[p.method] = (byMethod[p.method] ?? 0) + p.amount;
       }
     }
