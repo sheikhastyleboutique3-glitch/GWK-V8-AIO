@@ -135,7 +135,6 @@ export default function WaiterPage() {
     enabled: !!activeOrderId,
     refetchInterval: 5_000, // Sync KOT status: pick up fires made by POS or other waiters
   });
-  });
 
   const refreshTablesAndOrders = () => {
     qc.invalidateQueries({ queryKey: ['waiter-tables'] });
