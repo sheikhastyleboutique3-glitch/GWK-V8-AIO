@@ -1120,7 +1120,7 @@ async function main() {
       branchId: branches.doha.id,
       status: 'OPEN',
       openingFloat: 1500,
-      openedById: u.cashier.id,
+      openedById: u.cash.id,
     },
   });
 
@@ -1132,7 +1132,7 @@ async function main() {
       channel: 'DINE_IN',
       tableName: 'T1',
       sessionId: demoSession.id,
-      createdById: u.waiter.id,
+      createdById: u.wait.id,
       status: 'COMPLETED',
       completedAt: daysAgo(0),
       subtotal: 44,
@@ -1149,7 +1149,7 @@ async function main() {
       },
       payments: {
         create: [
-          { method: 'CASH', amount: 44, receivedById: u.cashier.id },
+          { method: 'CASH', amount: 44, receivedById: u.cash.id },
         ],
       },
     },
@@ -1163,7 +1163,7 @@ async function main() {
       channel: 'DINE_IN',
       tableName: 'T3',
       sessionId: demoSession.id,
-      createdById: u.waiter.id,
+      createdById: u.wait.id,
       status: 'COMPLETED',
       completedAt: daysAgo(0),
       subtotal: 60,
@@ -1180,7 +1180,7 @@ async function main() {
       },
       payments: {
         create: [
-          { method: 'CARD', amount: 60, receivedById: u.cashier.id },
+          { method: 'CARD', amount: 60, receivedById: u.cash.id },
         ],
       },
     },
@@ -1194,7 +1194,7 @@ async function main() {
       channel: 'DINE_IN',
       tableName: 'T5',
       sessionId: demoSession.id,
-      createdById: u.waiter.id,
+      createdById: u.wait.id,
       status: 'OPEN',
       subtotal: 37,
       total: 37,
