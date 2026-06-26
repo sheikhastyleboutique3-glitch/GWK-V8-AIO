@@ -527,7 +527,7 @@ export default function POSPage() {
         const { data: created } = await api.post('/sales/orders', {
           branchId,
           channel,
-          tableName: tableName || undefined,
+          tableName: (channel === 'DINE_IN' && tableName) ? tableName : undefined,
           customerId: customer?.id,
           couponCode: coupon?.code,
           presetId: presetId,
@@ -1108,6 +1108,19 @@ export default function POSPage() {
       )}
 
       {/* Pending bills (waiter handoff) */}
+      {posView === 'order' && (
+        <div className="flex items-center gap-2 mb-3">
+          <button
+            onClick={() => { closeBill(); setTableName(''); setChannel('DINE_IN'); setPresetId(undefined); setCoupon(null); setCouponCode(''); }}
+            className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium"
+          >
+            + New Order
+          </button>
+          {tableName && channel === 'DINE_IN' && (
+            <span className="text-xs text-gray-500">Table: <strong>{tableName}</strong></span>
+          )}
+        </div>
+      )}
       {(pendingBills?.length ?? 0) > 0 && (
         <div className="mb-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3">
           <div className="text-xs font-semibold text-gray-500 mb-2">{t('pos.pendingBills')}</div>
@@ -1230,8 +1243,9 @@ export default function POSPage() {
                       onClick={() => {
                         setPresetId(presetId === p.id ? undefined : p.id);
                         setChannel(p.channel);
+                        if (p.channel !== 'DINE_IN') setTableName(''); // Clear table for non-dine-in
                         if (isAggregatorChannel(p.channel)) setPayMethod('AGGREGATOR');
-                      }}
+                      }}}
                       style={presetId === p.id && p.color ? { backgroundColor: p.color, color: '#fff' } : {}}
                       className={`px-3 py-1.5 rounded-lg text-xs font-medium ${presetId === p.id ? 'text-white' : 'bg-gray-100 dark:bg-gray-800'}`}
                     >
@@ -1248,6 +1262,7 @@ export default function POSPage() {
                     key={c}
                     onClick={() => {
                       setChannel(c);
+                      if (c !== 'DINE_IN') setTableName(''); // Clear table for non-dine-in
                       // Aggregator channels are settled by the platform → default tender to AGGREGATOR.
                       if (isAggregatorChannel(c)) setPayMethod('AGGREGATOR');
                       // Auto-pick the matching configured platform if present.
@@ -1524,7 +1539,7 @@ export default function POSPage() {
                       const { data: created } = await api.post('/sales/orders', {
                         branchId,
                         channel,
-                        tableName: tableName || undefined,
+                        tableName: (channel === 'DINE_IN' && tableName) ? tableName : undefined,
                         customerId: customer?.id,
                         presetId: presetId,
                         items: cart.map((l) => ({ productId: l.productId, quantity: l.quantity, unitPrice: l.unitPrice, modifiers: l.modifiers })),
