@@ -223,11 +223,11 @@ async function main() {
   const cappucino = await menuItem('MENU-003', 'Cappuccino',         'كابتشينو',         catHot.id, 15, [{ id: p.cof2.id, qty: 0.018, unit: kg.id }, { id: p.dai1.id, qty: 0.15, unit: ltr.id }]);
   const vanLatte  = await menuItem('MENU-004', 'Vanilla Latte',      'لاتيه فانيليا',    catHot.id, 17, [{ id: p.cof2.id, qty: 0.018, unit: kg.id }, { id: p.dai1.id, qty: 0.20, unit: ltr.id }, { id: p.cof3.id, qty: 0.03, unit: ltr.id }]);
   const icedLatte = await menuItem('MENU-010', 'Iced Latte',         'لاتيه مثلج',       catCold.id, 17, [{ id: p.cof2.id, qty: 0.018, unit: kg.id }, { id: p.dai1.id, qty: 0.20, unit: ltr.id }]);
-  await menuItem('MENU-011', 'Fresh Lemon & Mint', 'ليمون ونعناع',     catCold.id, 14, [{ id: p.pro1.id, qty: 0.10, unit: kg.id }, { id: p.pro2.id, qty: 0.01, unit: kg.id }, { id: p.pas3.id, qty: 0.02, unit: kg.id }]);
+  const freshLemon = await menuItem('MENU-011', 'Fresh Lemon & Mint', 'ليمون ونعناع',     catCold.id, 14, [{ id: p.pro1.id, qty: 0.10, unit: kg.id }, { id: p.pro2.id, qty: 0.01, unit: kg.id }, { id: p.pas3.id, qty: 0.02, unit: kg.id }]);
   const croissant = await menuItem('MENU-020', 'Butter Croissant', 'كرواسون بالزبدة', catPastries.id, 9, [{ id: p.pas1.id, qty: 0.06, unit: kg.id }, { id: p.pas2.id, qty: 0.03, unit: kg.id }, { id: p.dai3.id, qty: 0.2, unit: pcs.id }]);
   await menuItem('MENU-030', 'Chocolate Cake',   'كيكة شوكولاتة',   catSweets.id,   18, [{ id: p.pas1.id, qty: 0.05, unit: kg.id }, { id: p.pas3.id, qty: 0.04, unit: kg.id }, { id: p.pas4.id, qty: 0.02, unit: kg.id }, { id: p.pas2.id, qty: 0.03, unit: kg.id }, { id: p.dai3.id, qty: 1, unit: pcs.id }]);
-  await menuItem('MENU-031', 'Cheesecake',       'تشيز كيك',        catSweets.id,   20, [{ id: p.dai2.id, qty: 0.08, unit: ltr.id }, { id: p.pas3.id, qty: 0.03, unit: kg.id }, { id: p.pas1.id, qty: 0.02, unit: kg.id }, { id: p.dai3.id, qty: 1, unit: pcs.id }]);
-  await menuItem('MENU-040', 'Club Sandwich',    'ساندويتش كلوب',   catBites.id,    22, [{ id: p.pas1.id, qty: 0.08, unit: kg.id }, { id: p.dai3.id, qty: 1, unit: pcs.id }]);
+  const cheesecake = await menuItem('MENU-031', 'Cheesecake',       'تشيز كيك',        catSweets.id,   20, [{ id: p.dai2.id, qty: 0.08, unit: ltr.id }, { id: p.pas3.id, qty: 0.03, unit: kg.id }, { id: p.pas1.id, qty: 0.02, unit: kg.id }, { id: p.dai3.id, qty: 1, unit: pcs.id }]);
+  const clubSandwich = await menuItem('MENU-040', 'Club Sandwich',    'ساندويتش كلوب',   catBites.id,    22, [{ id: p.pas1.id, qty: 0.08, unit: kg.id }, { id: p.dai3.id, qty: 1, unit: pcs.id }]);
   console.log('✅ Menu items + recipes (10)');
 
   // Modifier groups (some options deduct extra stock).
@@ -1142,9 +1142,9 @@ async function main() {
       grossProfit: 32,
       items: {
         create: [
-          { productId: p.espresso.id, quantity: 2, unitPrice: 10, lineTotal: 20, modifiers: [{ optionId: 1, name: 'Extra shot', priceDelta: 2 }, { optionId: 3, name: 'Small', priceDelta: 0 }], firedAt: daysAgo(0) },
-          { productId: p.butterCroissant.id, quantity: 1, unitPrice: 9, lineTotal: 9, firedAt: daysAgo(0) },
-          { productId: p.caffeLatte.id, quantity: 1, unitPrice: 15, lineTotal: 15, modifiers: [{ optionId: 5, name: 'MENU-002-L', priceDelta: 5 }], firedAt: daysAgo(0) },
+          { productId: espresso.id, quantity: 2, unitPrice: 10, lineTotal: 20, modifiers: [{ optionId: 1, name: 'Extra shot', priceDelta: 2 }, { optionId: 3, name: 'Small', priceDelta: 0 }], firedAt: daysAgo(0) },
+          { productId: croissant.id, quantity: 1, unitPrice: 9, lineTotal: 9, firedAt: daysAgo(0) },
+          { productId: latte.id, quantity: 1, unitPrice: 15, lineTotal: 15, modifiers: [{ optionId: 5, name: 'MENU-002-L', priceDelta: 5 }], firedAt: daysAgo(0) },
         ],
       },
       payments: {
@@ -1174,8 +1174,8 @@ async function main() {
       tip: 5,
       items: {
         create: [
-          { productId: p.clubSandwich.id, quantity: 2, unitPrice: 22, lineTotal: 44, firedAt: daysAgo(0) },
-          { productId: p.freshLemon.id, quantity: 1, unitPrice: 14, lineTotal: 14, firedAt: daysAgo(0) },
+          { productId: clubSandwich.id, quantity: 2, unitPrice: 22, lineTotal: 44, firedAt: daysAgo(0) },
+          { productId: freshLemon.id, quantity: 1, unitPrice: 14, lineTotal: 14, firedAt: daysAgo(0) },
         ],
       },
       payments: {
@@ -1200,8 +1200,8 @@ async function main() {
       total: 37,
       items: {
         create: [
-          { productId: p.cappuccino.id, quantity: 1, unitPrice: 17, lineTotal: 17, modifiers: [{ optionId: 1, name: 'Extra shot', priceDelta: 2 }, { optionId: 2, name: 'Whole milk', priceDelta: 0 }, { optionId: 3, name: 'Small', priceDelta: 0 }], firedAt: daysAgo(0) },
-          { productId: p.cheesecake.id, quantity: 1, unitPrice: 20, lineTotal: 20, firedAt: daysAgo(0) },
+          { productId: cappucino.id, quantity: 1, unitPrice: 17, lineTotal: 17, modifiers: [{ optionId: 1, name: 'Extra shot', priceDelta: 2 }, { optionId: 2, name: 'Whole milk', priceDelta: 0 }, { optionId: 3, name: 'Small', priceDelta: 0 }], firedAt: daysAgo(0) },
+          { productId: cheesecake.id, quantity: 1, unitPrice: 20, lineTotal: 20, firedAt: daysAgo(0) },
         ],
       },
     },
