@@ -451,8 +451,7 @@ export default function POSPage() {
     if (remaining <= 0) return toast.error('Payment already covers the total');
     const raw = tenderAmount.trim() ? parseFloat(tenderAmount) : remaining;
     if (!(raw > 0)) return toast.error('Enter a payment amount');
-    // Cash can overpay (change given back). Card/other caps to remaining.
-    const amt = payMethod === 'CASH' ? raw : Math.min(raw, remaining);
+    const amt = raw;
     if (payMethod === 'GIFT_CARD' && !giftCardCode.trim()) return toast.error('Enter a gift card code');
     if (payMethod === 'LOYALTY_CARD' && !giftCardCode.trim()) return toast.error('Enter a loyalty / eWallet card code');
     if (payMethod === 'TERMINAL' && !selectedTerminalId) return toast.error('Select a payment terminal');
@@ -1848,9 +1847,7 @@ export default function POSPage() {
                       const amt = payNumpad ? parseFloat(payNumpad) : remaining;
                       if (remaining <= 0) { toast.error('Already paid'); return; }
                       if (amt > 0) {
-                        // Cash can overpay (change). Card/other caps to remaining.
-                        const finalAmt = m === 'CASH' ? amt : Math.min(amt, remaining);
-                        setTenders((prev) => [...prev, { method: m as PayMethod, amount: +finalAmt.toFixed(2) }]);
+                        setTenders((prev) => [...prev, { method: m as PayMethod, amount: +amt.toFixed(2) }]);
                         setPayNumpad('');
                       }
                     }} className="w-full text-left px-4 py-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm font-medium transition">
