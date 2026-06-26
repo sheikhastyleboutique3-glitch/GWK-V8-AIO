@@ -221,3 +221,51 @@ button:active:not(:disabled),
 /* Keep range/checkbox/radio native theming sensible in dark. */
 .dark input[type='checkbox'],
 .dark input[type='radio'] { accent-color: var(--accent); }
+
+/* ── text-primary (navy #0f172a) becomes the bright accent in dark mode ──
+   Many pages use `text-primary` for prices, links, badges. In light mode it's
+   a readable dark navy; in dark mode it's invisible. Remap to the accent blue. */
+.dark .text-primary { color: var(--accent) !important; }
+.dark .bg-primary { background-color: var(--accent) !important; }
+.dark .bg-primary\/10 { background-color: rgba(56, 189, 248, 0.1) !important; }
+.dark .bg-primary\/20 { background-color: rgba(56, 189, 248, 0.2) !important; }
+.dark .ring-primary { --tw-ring-color: var(--accent) !important; }
+.dark .border-primary { border-color: var(--accent) !important; }
+
+/* ── brand-* utilities (used by some pages for buttons/badges) ── */
+.dark .bg-brand-600 { background-color: var(--accent) !important; }
+.dark .bg-brand-700,
+.dark .hover\:bg-brand-700:hover { background-color: var(--accent-hover) !important; }
+.dark .bg-brand-50 { background-color: rgba(56, 189, 248, 0.1) !important; }
+.dark .text-brand-600,
+.dark .text-brand-700 { color: var(--accent) !important; }
+.dark .border-brand-300,
+.dark .border-brand-600 { border-color: var(--accent) !important; }
+
+/* ── Additional background/text missing from the original retrofit ── */
+.dark .bg-gray-200 { background-color: var(--surface-3) !important; }
+.dark .bg-gray-300 { background-color: #475569 !important; }
+.dark .border-gray-300 { border-color: var(--border-strong) !important; }
+.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: var(--border-strong) !important; }
+
+/* ── Stat cards, badges, and info text that use hard-coded light colors ── */
+.dark .text-gray-300 { color: #94a3b8 !important; }
+.dark .bg-red-50     { background-color: rgba(248, 113, 113, 0.1) !important; }
+.dark .bg-green-50   { background-color: rgba(52, 211, 153, 0.1) !important; }
+.dark .bg-blue-50    { background-color: rgba(56, 189, 248, 0.1) !important; }
+.dark .bg-amber-50   { background-color: rgba(251, 191, 36, 0.1) !important; }
+.dark .bg-orange-50  { background-color: rgba(251, 146, 60, 0.1) !important; }
+.dark .bg-purple-50  { background-color: rgba(168, 85, 247, 0.1) !important; }
+.dark .bg-indigo-50  { background-color: rgba(99, 102, 241, 0.1) !important; }
+.dark .bg-cyan-50    { background-color: rgba(6, 182, 212, 0.1) !important; }
+.dark .bg-teal-50    { background-color: rgba(20, 184, 166, 0.1) !important; }
+.dark .bg-pink-50    { background-color: rgba(236, 72, 153, 0.1) !important; }
+
+/* ── Ensure data-table header rows are legible in dark mode ── */
+.dark .bg-gray-50 th,
+.dark .bg-gray-50 td { color: var(--fg-muted) !important; }
+
+/* ── shadow utilities — soften in dark (borders do the job instead) ── */
+.dark .shadow-sm { box-shadow: 0 1px 2px rgba(0,0,0,0.4) !important; }
+.dark .shadow { box-shadow: 0 1px 3px rgba(0,0,0,0.5) !important; }
+.dark .border-gray-100 { border-color: var(--border) !important; }
