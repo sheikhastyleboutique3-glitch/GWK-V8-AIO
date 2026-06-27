@@ -36,12 +36,40 @@
 import net from 'node:net';
 
 const API_URL = (process.env.API_URL || 'http://localhost:3000').replace(/\/$/, '');
-const API_TOKEN = process.env.API_TOKEN || '';
+const API_EMAIL = process.env.API_EMAIL || 'admin@gwk.com';
+const API_PASSWORD = process.env.API_PASSWORD || 'Admin@1234';
 const BRANCH_ID = process.env.BRANCH_ID || '';
 const POLL_MS = parseInt(process.env.POLL_MS || '5000', 10);
 
-const printed = new Set(); // orderIds already printed this session
-let printers = []; // loaded from backend on startup
+let API_TOKEN = process.env.API_TOKEN || '';
+const printed = new Set();
+let printers = [];
+
+// ── Auto-login (get token automatically) ─────────────────────────────────────
+async function autoLogin() {
+  try {
+    const res = await fetch(`${API_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: API_EMAIL, password: API_PASSWORD }),
+    });
+    if (!res.ok) throw new Error(`Login failed: ${res.status}`);
+    const body = await res.json();
+    API_TOKEN = body?.data?.access_token || body?.access_token || '';
+    if (!API_TOKEN) throw new Error('No token in response');
+    console.log('🔑 Auto-login successful');
+    return true;
+  } catch (e) {
+    console.error('❌ Auto-login failed:', e.message);
+    return false;
+  }
+}
+
+// Re-login when token expires
+async function ensureAuth() {
+  if (!API_TOKEN) return autoLogin();
+  return true;
+}
 
 // ── ESC/POS encoding ─────────────────────────────────────────────────────────
 const ESC = 0x1b;
@@ -90,6 +118,17 @@ async function api(path) {
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${API_TOKEN}` },
   });
+  if (res.status === 401) {
+    // Token expired → auto-relogin
+    console.log('🔄 Token expired, re-authenticating...');
+    const ok = await autoLogin();
+    if (!ok) throw new Error('Re-authentication failed');
+    // Retry the request
+    const retry = await fetch(url, { headers: { Authorization: `Bearer ${API_TOKEN}` } });
+    if (!retry.ok) throw new Error(`${path} → ${retry.status}`);
+    const body = await retry.json();
+    return body?.data ?? body;
+  }
   if (!res.ok) throw new Error(`${path} → ${res.status} ${res.statusText}`);
   const body = await res.json();
   return body?.data ?? body;
@@ -170,26 +209,21 @@ console.log('╔═════════════════════�
 console.log('║   GWK V8 — Print Agent (ESC/POS over TCP/IP)    ║');
 console.log('╠═══════════════════════════════════════════════════╣');
 console.log(`║ API:      ${API_URL.padEnd(39)}║`);
+console.log(`║ User:     ${API_EMAIL.padEnd(39)}║`);
 console.log(`║ Branch:   ${(BRANCH_ID || 'ALL').padEnd(39)}║`);
 console.log(`║ Interval: ${(POLL_MS + 'ms').padEnd(39)}║`);
 console.log('╚═══════════════════════════════════════════════════╝');
 console.log('');
 
-if (!API_TOKEN) {
-  console.error('❌ API_TOKEN is required!');
-  console.error('');
-  console.error('How to get it:');
-  console.error('  1. Login to GWK POS in your browser');
-  console.error('  2. Open browser console (F12)');
-  console.error('  3. Type: localStorage.getItem("token")');
-  console.error('  4. Copy the token and set it:');
-  console.error('     set API_TOKEN=eyJhbGciOi...');
-  console.error('');
-  process.exit(1);
-}
-
-// Load printers from backend, then start polling
-loadPrinters().then(() => {
+// Auto-login, load printers, then start polling
+autoLogin().then(ok => {
+  if (!ok) {
+    console.error('Cannot start without authentication.');
+    console.error('Check API_URL, API_EMAIL, and API_PASSWORD.');
+    process.exit(1);
+  }
+  return loadPrinters();
+}).then(() => {
   console.log('');
   console.log('🔄 Polling for new KOT orders...');
   console.log('   (Press Ctrl+C to stop)');
