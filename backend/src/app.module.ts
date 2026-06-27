@@ -68,6 +68,7 @@ import { UserViewsModule } from './modules/user-views/user-views.module';
 import { HealthModule } from './modules/health/health.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { PosConfigsModule } from './modules/pos-configs/pos-configs.module';
+import { StaffPerformanceModule } from './modules/staff-performance/staff-performance.module';
 
 @Module({
   imports: [
@@ -146,6 +147,7 @@ import { PosConfigsModule } from './modules/pos-configs/pos-configs.module';
     HealthModule,
     RealtimeModule,
     PosConfigsModule,
+    StaffPerformanceModule,
   ],
   providers: [
     // Apply rate limiting globally.

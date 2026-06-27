@@ -1,123 +1,159 @@
-# GWK V8 AIO — Installation on Windows (local / dev)
+# GWK V8 AIO — Windows Local Development Setup
 
-A step-by-step guide to run GWK V8 AIO on a Windows 10/11 machine for development or an in-store till.
-
----
-
-## 1. Install prerequisites
-
-| Software | Version | Get it |
-|----------|---------|--------|
-| **Node.js** | 20 LTS | https://nodejs.org (LTS installer) |
-| **Git** | latest | https://git-scm.com/download/win |
-| **PostgreSQL** | 16 | https://www.postgresql.org/download/windows/ |
-| **VS Code** (optional) | latest | https://code.visualstudio.com |
-
-During PostgreSQL setup, remember the **password** you set for the `postgres` superuser and keep the default port **5432**.
-
-Verify in **PowerShell**:
-```powershell
-node -v   # v20.x
-npm -v
-git --version
-psql --version
-```
+> For running the application locally on Windows for development/testing.
 
 ---
 
-## 2. Get the code
+## Prerequisites
 
+1. **Node.js 18+** — Download from [nodejs.org](https://nodejs.org)
+2. **PostgreSQL 15+** — Download from [postgresql.org](https://www.postgresql.org/download/windows/)
+3. **Git** — Download from [git-scm.com](https://git-scm.com)
+
+---
+
+## Step 1: Clone the Repository
+
+Open PowerShell or Command Prompt:
 ```powershell
-cd C:\
+cd C:\Users\YourName\Desktop
 git clone https://github.com/sheikhastyleboutique3-glitch/GWK-V8-AIO.git
 cd GWK-V8-AIO
 ```
 
 ---
 
-## 3. Create the database
+## Step 2: Set Up PostgreSQL
 
-Open **SQL Shell (psql)** or run in PowerShell:
-```powershell
-psql -U postgres -c "CREATE DATABASE gwk_v8_aio;"
-psql -U postgres -c "CREATE USER gwk_user WITH PASSWORD 'gwk_password';"
-psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE gwk_v8_aio TO gwk_user;"
-psql -U postgres -d gwk_v8_aio -c "GRANT ALL ON SCHEMA public TO gwk_user;"
+1. During PostgreSQL installation, note your password (e.g., `postgres123`)
+2. Open **pgAdmin** or **psql** and create a database:
+```sql
+CREATE DATABASE gwk_v8_aio;
 ```
 
 ---
 
-## 4. Configure the backend
-
-Create `backend\.env` (PowerShell `notepad backend\.env`):
-```env
-DATABASE_URL="postgresql://gwk_user:gwk_password@localhost:5432/gwk_v8_aio?schema=public"
-JWT_SECRET="replace_with_a_32+_char_random_string"
-JWT_REFRESH_SECRET="replace_with_another_32+_char_string"
-JWT_EXPIRES_IN="15m"
-JWT_REFRESH_EXPIRES_IN="7d"
-ALLOWED_ORIGINS="http://localhost:5173"
-NODE_ENV="development"
-```
-Generate secrets:
-```powershell
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
----
-
-## 5. Install & initialize the backend
+## Step 3: Backend Setup
 
 ```powershell
 cd backend
 npm install
+
+# Create .env file
+copy .env.example .env
+```
+
+Edit `backend\.env`:
+```env
+DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/gwk_v8_aio
+JWT_SECRET=my-dev-secret-change-in-production
+JWT_EXPIRES_IN=8h
+JWT_REFRESH_SECRET=another-dev-secret
+NODE_ENV=development
+PORT=3000
+```
+
+Run migrations and seed:
+```powershell
+npx prisma migrate deploy
 npx prisma generate
-npx prisma migrate deploy     # creates all tables from the baseline
-npx prisma db seed            # loads the demo restaurant
-npm run start:dev             # API at http://localhost:3000  (Swagger: /api)
+npx prisma db seed
 ```
-Leave this window running.
+
+Start the backend:
+```powershell
+npm run start:dev
+```
+
+Leave this terminal open. Backend runs at `http://localhost:3000`.
 
 ---
 
-## 6. Run the frontend
+## Step 4: Frontend Setup
 
-Open a **second** PowerShell window:
+Open a **new** PowerShell terminal:
 ```powershell
-cd C:\GWK-V8-AIO\frontend
+cd C:\Users\YourName\Desktop\GWK-V8-AIO\frontend
 npm install
-npm run dev                   # UI at http://localhost:5173
+npm run dev
 ```
 
-Open **http://localhost:5173**, sign in with the seeded admin (password `Admin@1234`), and change the password.
+Frontend runs at `http://localhost:5173`.
 
 ---
 
-## 7. KOT printing (optional, in-store)
-Run the on-prem print agent on the till PC (same LAN as the printers):
+## Step 5: Access the Application
+
+Open your browser:
+```
+http://localhost:5173
+```
+
+Login: `admin@gwk.com` / `Admin@1234`
+
+---
+
+## Step 6: Print Agent (Optional)
+
+If you have a thermal printer on your network:
 ```powershell
-cd C:\GWK-V8-AIO\agent
-$env:API_URL="http://localhost:3000"; $env:API_TOKEN="<JWT of a POS user>"; $env:BRANCH_ID="2"
+cd C:\Users\YourName\Desktop\GWK-V8-AIO\agent
+npm install
+
+# Set environment variables
+$env:API_URL="http://localhost:3000"
 node print-agent.mjs
 ```
-Configure each printer's IP under **Configuration → Printers** and assign printers to menu categories.
 
 ---
 
-## 8. Production build on Windows (optional)
+## Building for Production
+
 ```powershell
-cd backend; npm run build          # dist\  -> run with: node dist\main
-cd ..\frontend; npm run build      # dist\  -> serve with any static host / IIS
+cd frontend
+npm run build
+# Output in frontend/dist/ — serve with any web server
+
+cd ..\backend
+npm run build
+# Start production:
+npm run start:prod
 ```
 
 ---
 
-## Troubleshooting
+## Common Issues
 
-| Symptom | Fix |
-|---------|-----|
-| `psql: command not found` | Add `C:\Program Files\PostgreSQL\16\bin` to PATH, reopen PowerShell |
-| `P1001 can't reach database` | Ensure the **postgresql-x64-16** service is running (services.msc); check `DATABASE_URL` |
-| `EADDRINUSE :3000 / :5173` | Another process uses the port — close it or change the port |
-| CORS error in browser | `ALLOWED_ORIGINS` must equal the UI origin exactly (no trailing slash) |
-| Prisma client errors after pulling updates | Re-run `npx prisma generate` |
+| Issue | Solution |
+|-------|----------|
+| `prisma: command not found` | Run `npx prisma` instead of `prisma` |
+| Port 5432 in use | Another PostgreSQL instance running — stop it or use port 5433 |
+| `EACCES` permission error | Run PowerShell as Administrator |
+| Frontend can't reach backend | Check backend is running on :3000, frontend proxies `/api` |
+| Build errors (TypeScript) | Delete `node_modules` and reinstall: `Remove-Item -Recurse node_modules; npm install` |
+| Vite cache issues | `Remove-Item -Recurse -Force node_modules\.vite` then `npm run dev` |
+
+---
+
+## Updating
+
+```powershell
+cd C:\Users\YourName\Desktop\GWK-V8-AIO
+git fetch origin
+git reset --hard origin/main
+cd backend && npm install && npx prisma migrate deploy && npm run build
+cd ..\frontend && npm install && npm run build
+```
+
+---
+
+## Docker Alternative (Windows)
+
+If you have Docker Desktop installed:
+```powershell
+cd C:\Users\YourName\Desktop\GWK-V8-AIO
+copy .env.example .env
+# Edit .env with your settings
+docker compose up -d --build
+# Open http://localhost
+```
