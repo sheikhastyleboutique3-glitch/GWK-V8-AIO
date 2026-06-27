@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from './contexts/AuthContext';
 import api from './lib/api';
 import { applyTheme, saveThemeLocal, themeFromSettings } from './lib/theme';
+import CommandPalette from './components/CommandPalette';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -29,6 +30,7 @@ import AuditLogPage from './pages/AuditLogPage';
 import NotificationsPage from './pages/NotificationsPage';
 import UnitsPage from './pages/UnitsPage';
 import PosDashboardPage from './pages/PosDashboardPage';
+import CustomerDisplayPage from './pages/CustomerDisplayPage';
 import POSPage from './pages/POSPage';
 import KDSPage from './pages/KDSPage';
 import SalesDashboardPage from './pages/SalesDashboardPage';
@@ -113,9 +115,12 @@ function useSyncTheme() {
 export default function App() {
   useSyncTheme();
   return (
+    <>
+    <CommandPalette />
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/kiosk/:configId" element={<KioskPage />} />
+      <Route path="/customer-display" element={<CustomerDisplayPage />} />
       {/* Full-screen POS & Waiter — no sidebar */}
       <Route
         path="/pos"
@@ -505,5 +510,6 @@ export default function App() {
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 }

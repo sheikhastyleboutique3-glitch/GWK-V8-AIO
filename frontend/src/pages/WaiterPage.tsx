@@ -12,6 +12,7 @@ import { useOnlineStatus } from '../lib/useOnlineStatus';
 import OfflineBanner from '../components/OfflineBanner';
 import { useSocket } from '../lib/useSocket';
 import PinSwitchModal from '../components/PinSwitchModal';
+import { playOrderSound } from '../lib/useOrderSound';
 
 interface TableRow { id: number; name: string; seats: number; status: string; branchId: number; isActive: boolean }
 interface OrderRow { id: number; orderNo: string; status: string; tableName?: string | null; total: number }
@@ -37,7 +38,9 @@ export default function WaiterPage() {
   const branchId = activeBranch?.id;
 
   // ─── Real-time sync: instant updates from POS/KDS/other waiters ───
-  useSocket();
+  useSocket({
+    onOrderChanged: (p) => { if (p.action === 'created' || p.action === 'fired') playOrderSound(); },
+  });
 
   const [showPinSwitch, setShowPinSwitch] = useState(false);
   const [selectedTable, setSelectedTable] = useState<TableRow | null>(null);

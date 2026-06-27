@@ -14,6 +14,7 @@ import { useOnlineStatus } from '../lib/useOnlineStatus';
 import OfflineBanner from '../components/OfflineBanner';
 import { usePrompt } from '../lib/usePrompt';
 import { useSocket } from '../lib/useSocket';
+import { usePosHotkeys } from '../lib/usePosHotkeys';
 import PinSwitchModal from '../components/PinSwitchModal';
 
 interface CartLine {
@@ -733,6 +734,40 @@ export default function POSPage() {
     }
   };
 
+  // ─── Keyboard Shortcuts (Odoo POS style) ───
+  usePosHotkeys({
+    onPay: () => {
+      if (showPayment) return; // Already in payment
+      if (lines.length > 0 || comboCart.length > 0) setShowPayment(true);
+    },
+    onBack: () => {
+      if (showPayment) { setShowPayment(false); return; }
+      if (posView === 'order') { setPosView('floor'); return; }
+    },
+    onFloor: () => setPosView('floor'),
+    onOrders: () => setPosView('orders'),
+    onDelete: () => {
+      if (selectedLineIdx >= 0 && selectedLineIdx < lines.length) {
+        setQtyAt(selectedLineIdx, 0);
+      }
+    },
+    onQtyUp: () => {
+      if (selectedLineIdx >= 0 && selectedLineIdx < lines.length) {
+        setQtyAt(selectedLineIdx, lines[selectedLineIdx].quantity + 1);
+      }
+    },
+    onQtyDown: () => {
+      if (selectedLineIdx >= 0 && selectedLineIdx < lines.length) {
+        setQtyAt(selectedLineIdx, lines[selectedLineIdx].quantity - 1);
+      }
+    },
+    onSearch: () => {
+      const el = document.querySelector<HTMLInputElement>('[data-pos-search]');
+      el?.focus();
+    },
+    enabled: !showPinSwitch,
+  });
+
   return (
     <div className="h-[100dvh] flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-950 p-3 md:p-4">
       {/* Offline status banner */}
@@ -744,15 +779,15 @@ export default function POSPage() {
         <div className="flex gap-1 ms-4">
           <button onClick={() => setPosView('floor')}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${posView === 'floor' ? 'bg-primary text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}>
-            🏠 Floor Plan
+            🏠 Floor {(pendingBills?.length ?? 0) > 0 ? <span className="ms-1 px-1.5 py-0.5 rounded-full bg-white/20 text-[10px] font-bold">{pendingBills.length}</span> : ''}
           </button>
           <button onClick={() => setPosView('order')}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${posView === 'order' ? 'bg-primary text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}>
-            🛒 Order
+            🛒 Order {lines.length > 0 ? <span className="ms-1 px-1.5 py-0.5 rounded-full bg-white/20 text-[10px] font-bold">{lines.length}</span> : ''}
           </button>
           <button onClick={() => setPosView('orders')}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${posView === 'orders' ? 'bg-primary text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}>
-            📋 Orders {pendingBills?.length ? `(${pendingBills.length})` : ''}
+            📋 Orders {(pendingBills?.length ?? 0) > 0 ? <span className="ms-1 px-1.5 py-0.5 rounded-full bg-white/20 text-[10px] font-bold">{pendingBills.length}</span> : ''}
           </button>
         </div>
         <div className="ms-auto flex items-center gap-2 text-xs text-gray-400">
@@ -1185,6 +1220,7 @@ export default function POSPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search products…"
+              data-pos-search
               className="flex-1 min-w-[160px] rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
             />
             <button
@@ -1216,13 +1252,29 @@ export default function POSPage() {
                 <button
                   key={p.id}
                   onClick={() => onProduct(p)}
-                  className="text-left rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden hover:border-primary hover:shadow-sm active:scale-[0.96] transition-all duration-150 min-h-[120px]"
+                  className="group text-left rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden hover:border-primary hover:shadow-sm active:scale-[0.96] transition-all duration-150 min-h-[120px]"
                 >
-                  <div className="h-20 bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden">
+                  <div className="h-20 bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden relative">
                     {p.imageUrl ? (
                       <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
                     ) : (
                       <span className="text-3xl">{p.category?.icon || '🍽️'}</span>
+                    )}
+                    {/* 86 SOLD OUT toggle (manager only) */}
+                    {canEditFloor && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          api.patch(`/products/${p.id}/availability`, { isAvailable: false }).then(() => {
+                            toast.success(`${p.name} marked SOLD OUT`);
+                            qc.invalidateQueries({ queryKey: ['pos-products'] });
+                          }).catch(() => toast.error('Failed'));
+                        }}
+                        className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-600/80 hover:bg-red-600 text-white text-[9px] font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Mark as SOLD OUT (86)"
+                      >
+                        86
+                      </button>
                     )}
                   </div>
                   <div className="p-2">
