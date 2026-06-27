@@ -58,11 +58,11 @@ export function usePrompt(): [(opts: PromptOptions) => Promise<string | null>, (
     setState(null);
   };
 
-  const Dialog = useCallback(() => {
+  const Dialog = () => {
     if (!state) return null;
     return (
-      <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" onClick={handleCancel}>
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-5 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+      <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) handleCancel(); }}>
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-5 animate-fade-in" onMouseDown={(e) => e.stopPropagation()}>
           <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 mb-1">{state.title}</h3>
           {state.description && <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 whitespace-pre-line">{state.description}</p>}
 
@@ -85,6 +85,7 @@ export function usePrompt(): [(opts: PromptOptions) => Promise<string | null>, (
               onKeyDown={(e) => { if (e.key === 'Enter') handleConfirm(); if (e.key === 'Escape') handleCancel(); }}
               placeholder={state.placeholder}
               step={state.type === 'number' ? 'any' : undefined}
+              autoFocus
               className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
             />
           )}
@@ -100,7 +101,7 @@ export function usePrompt(): [(opts: PromptOptions) => Promise<string | null>, (
         </div>
       </div>
     );
-  }, [state, value]);
+  };
 
   return [prompt, Dialog];
 }
