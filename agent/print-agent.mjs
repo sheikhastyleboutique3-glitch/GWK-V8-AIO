@@ -158,8 +158,8 @@ async function loadPrinters() {
 async function tick() {
   try {
     // ── KOT: print fired items from OPEN orders ──
-    const params = BRANCH_ID ? `?branchId=${BRANCH_ID}` : '';
-    const orders = await api(`/sales/orders${params}&status=OPEN`);
+    const params = BRANCH_ID ? `?branchId=${BRANCH_ID}&status=OPEN` : '?status=OPEN';
+    const orders = await api(`/sales/orders${params}`);
 
     for (const order of orders || []) {
       if (printed.has(order.id)) continue;
@@ -186,7 +186,8 @@ async function tick() {
     }
 
     // ── RECEIPT: print completed orders ──
-    const completed = await api(`/sales/orders${params}&status=COMPLETED`);
+    const completedParams = BRANCH_ID ? `?branchId=${BRANCH_ID}&status=COMPLETED` : '?status=COMPLETED';
+    const completed = await api(`/sales/orders${completedParams}`);
     for (const order of (completed || []).slice(0, 20)) { // only check recent 20
       if (receiptPrinted.has(order.id)) continue;
 
