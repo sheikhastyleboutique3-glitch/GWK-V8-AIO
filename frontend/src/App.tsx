@@ -116,6 +116,15 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/kiosk/:configId" element={<KioskPage />} />
+      {/* Full-screen POS & Waiter — no sidebar */}
+      <Route
+        path="/waiter"
+        element={
+          <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'WAITER']}>
+            <WaiterPage />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/"
         element={
@@ -187,14 +196,6 @@ export default function App() {
           element={
             <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'WAITER']}>
               <BookingsPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="waiter"
-          element={
-            <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'WAITER']}>
-              <WaiterPage />
             </ProtectedRoute>
           }
         />
