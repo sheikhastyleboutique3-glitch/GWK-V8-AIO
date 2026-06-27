@@ -101,10 +101,19 @@ export class PrintersService {
 
     const when = new Date(order.createdAt).toLocaleString();
     const tickets = [...groups.values()].map((tk) => {
+      const channelLabel = order.channel === 'DINE_IN'
+        ? (order.tableName ? `DINE IN ${order.tableName}` : 'DINE IN')
+        : order.channel === 'TAKEAWAY'
+        ? `*** TAKEAWAY ***${order.tableName ? `\nCustomer: ${order.tableName}` : ''}`
+        : order.channel === 'DELIVERY'
+        ? `*** DELIVERY ***${order.tableName ? `\nDeliver to: ${order.tableName}` : ''}`
+        : order.channel
+        ? `*** ${order.channel.replace('_', ' ')} ***${order.tableName ? `\nRef: ${order.tableName}` : ''}`
+        : '';
       const header = [
         `*** ${tk.station} ***`,
         `Order: ${order.orderNo}`,
-        order.tableName ? `Table: ${order.tableName}` : `Channel: ${order.channel}`,
+        channelLabel,
         when,
         '--------------------------------',
       ];
@@ -157,9 +166,17 @@ export class PrintersService {
     lines.push(new Date(order.completedAt || order.createdAt).toLocaleString());
     lines.push('================================');
     lines.push(`Order: ${order.orderNo}`);
-    if (order.tableName) lines.push(`Table: ${order.tableName}`);
     lines.push(`Type: ${order.channel?.replace('_', ' ')}`);
-    if (order.customer) lines.push(`Customer: ${order.customer.name}`);
+    if (order.channel === 'DINE_IN' && order.tableName) {
+      lines.push(`Table: ${order.tableName}`);
+    } else if (order.channel === 'TAKEAWAY') {
+      if (order.tableName) lines.push(`Customer: ${order.tableName}`);
+    } else if (order.channel === 'DELIVERY') {
+      if (order.tableName) lines.push(`Deliver to: ${order.tableName}`);
+    } else if (order.tableName) {
+      lines.push(`Ref: ${order.tableName}`);
+    }
+    if (order.customer) lines.push(`Customer: ${order.customer.name}${order.customer.phone ? ` (${order.customer.phone})` : ''}`);
     lines.push('--------------------------------');
 
     for (const it of order.items) {
