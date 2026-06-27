@@ -120,4 +120,79 @@ export class PrintersService {
 
     return { orderNo: order.orderNo, tickets };
   }
+
+  /** Build a plain-text receipt for a completed order (ESC/POS friendly). */
+  async buildReceipt(orderId: number): Promise<{ orderNo: string; text: string; printer: any }> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        items: { include: { product: { select: { name: true, nameAr: true } } } },
+        payments: true,
+        customer: { select: { name: true, phone: true } },
+        branch: { select: { name: true, nameAr: true } },
+      },
+    });
+    if (!order) throw new NotFoundException(`Order ${orderId} not found`);
+
+    // Find receipt printer (first printer without a category assignment = receipt printer)
+    const allPrinters = await this.prisma.printer.findMany({ where: { isActive: true } });
+    const categoryPrinterIds = new Set(
+      (await this.prisma.category.findMany({ where: { printerId: { not: null } }, select: { printerId: true } }))
+        .map(c => c.printerId)
+    );
+    // Receipt printer = any active printer NOT assigned to a category (or first one if all are assigned)
+    const receiptPrinter = allPrinters.find(p => p.ipAddress && !categoryPrinterIds.has(p.id)) || allPrinters.find(p => p.ipAddress);
+
+    const settings = await this.prisma.setting.findMany({ where: { key: { in: ['company_name', 'company_phone', 'company_address', 'company_tax_id', 'default_currency'] } } });
+    const s: Record<string, string> = {};
+    settings.forEach(st => { s[st.key] = st.value; });
+    const currency = s.default_currency || 'QAR';
+
+    const lines: string[] = [];
+    lines.push(s.company_name || 'GWK Restaurant');
+    lines.push(order.branch?.name || '');
+    if (s.company_address) lines.push(s.company_address);
+    if (s.company_phone) lines.push(s.company_phone);
+    if (s.company_tax_id) lines.push(`Tax ID: ${s.company_tax_id}`);
+    lines.push(new Date(order.completedAt || order.createdAt).toLocaleString());
+    lines.push('================================');
+    lines.push(`Order: ${order.orderNo}`);
+    if (order.tableName) lines.push(`Table: ${order.tableName}`);
+    lines.push(`Type: ${order.channel?.replace('_', ' ')}`);
+    if (order.customer) lines.push(`Customer: ${order.customer.name}`);
+    lines.push('--------------------------------');
+
+    for (const it of order.items) {
+      const lineTotal = it.unitPrice * it.quantity;
+      const disc = it.discount ?? 0;
+      lines.push(`${it.quantity} x ${it.product?.name || '#' + it.productId}  ${currency} ${lineTotal.toFixed(2)}`);
+      if (disc > 0) lines.push(`   Disc: -${currency} ${disc.toFixed(2)}`);
+    }
+
+    lines.push('--------------------------------');
+    lines.push(`Subtotal:       ${currency} ${order.subtotal.toFixed(2)}`);
+    if (order.discountTotal > 0) lines.push(`Discount:      -${currency} ${order.discountTotal.toFixed(2)}`);
+    if (order.taxTotal > 0) lines.push(`Tax:            ${currency} ${order.taxTotal.toFixed(2)}`);
+    if (order.serviceCharge > 0) lines.push(`Service:        ${currency} ${order.serviceCharge.toFixed(2)}`);
+    if (order.tip > 0) lines.push(`Tip:            ${currency} ${order.tip.toFixed(2)}`);
+    lines.push('================================');
+    lines.push(`TOTAL:          ${currency} ${order.total.toFixed(2)}`);
+    lines.push('================================');
+
+    for (const p of (order.payments || []).filter((p: any) => !p.isReversed)) {
+      lines.push(`${p.method.replace('_', ' ')}:  ${currency} ${p.amount.toFixed(2)}`);
+    }
+    const paid = (order.payments || []).filter((p: any) => !p.isReversed).reduce((sum: number, p: any) => sum + p.amount, 0);
+    const change = Math.max(0, paid - order.total);
+    if (change > 0) lines.push(`Change:         ${currency} ${change.toFixed(2)}`);
+
+    lines.push('');
+    lines.push('    Thank you & see you again!');
+
+    return {
+      orderNo: order.orderNo,
+      text: lines.join('\n'),
+      printer: receiptPrinter ? { ipAddress: receiptPrinter.ipAddress, port: receiptPrinter.port || 9100, widthMm: receiptPrinter.widthMm } : null,
+    };
+  }
 }

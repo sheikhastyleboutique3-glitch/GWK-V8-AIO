@@ -66,6 +66,12 @@ export class PrintersController {
     return this.svc.buildKot(orderId);
   }
 
+  // Receipt/bill text for a completed order (for the print agent).
+  @Get('receipt/:orderId') @Roles(...POS_ROLES)
+  buildReceipt(@Param('orderId', ParseIntPipe) orderId: number) {
+    return this.svc.buildReceipt(orderId);
+  }
+
   @Post() @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
   create(@Body() dto: CreatePrinterDto) {
     return this.svc.create(dto);

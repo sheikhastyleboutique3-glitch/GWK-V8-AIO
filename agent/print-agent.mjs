@@ -43,6 +43,7 @@ const POLL_MS = parseInt(process.env.POLL_MS || '5000', 10);
 
 let API_TOKEN = process.env.API_TOKEN || '';
 const printed = new Set();
+const receiptPrinted = new Set(); // completed orders already receipt-printed
 let printers = [];
 
 // ── Auto-login (get token automatically) ─────────────────────────────────────
@@ -156,47 +157,59 @@ async function loadPrinters() {
 // ── Main poll loop ───────────────────────────────────────────────────────────
 async function tick() {
   try {
-    // Get KOT tickets for orders that have fired items
+    // ── KOT: print fired items from OPEN orders ──
     const params = BRANCH_ID ? `?branchId=${BRANCH_ID}` : '';
     const orders = await api(`/sales/orders${params}&status=OPEN`);
 
     for (const order of orders || []) {
-      // Skip if already printed or no fired items
       if (printed.has(order.id)) continue;
       const hasFired = (order.items || []).some(it => it.firedAt && !it.isVoided);
       if (!hasFired) continue;
 
       try {
-        // Fetch KOT tickets (station-grouped, with printer assignments)
         const kotData = await api(`/printers/kot/${order.id}`);
         const tickets = kotData?.tickets || kotData || [];
-
         if (!tickets.length) { printed.add(order.id); continue; }
 
         for (const tk of tickets) {
-          // Find printer: from ticket's assigned printer, or fallback to first available
           const printerIp = tk.printer?.ipAddress || printers[0]?.ipAddress;
           const printerPort = tk.printer?.port || printers[0]?.port || 9100;
-
-          if (!printerIp) {
-            console.warn(`  ⚠ ${order.orderNo} [${tk.station}]: no printer IP configured`);
-            continue;
-          }
-
+          if (!printerIp) { console.warn(`  ⚠ ${order.orderNo} [${tk.station}]: no printer IP`); continue; }
           const buf = escpos(tk.text, tk.printer?.widthMm || 80);
           const ok = await sendToPrinter(printerIp, printerPort, buf);
-          if (ok) {
-            console.log(`  ✅ ${order.orderNo} → ${tk.station} @ ${printerIp}:${printerPort}`);
-          }
+          if (ok) console.log(`  🍳 KOT ${order.orderNo} → ${tk.station} @ ${printerIp}:${printerPort}`);
         }
         printed.add(order.id);
       } catch (e) {
-        console.error(`  ❌ KOT for ${order.orderNo}: ${e.message}`);
+        console.error(`  ❌ KOT ${order.orderNo}: ${e.message}`);
+      }
+    }
+
+    // ── RECEIPT: print completed orders ──
+    const completed = await api(`/sales/orders${params}&status=COMPLETED`);
+    for (const order of (completed || []).slice(0, 20)) { // only check recent 20
+      if (receiptPrinted.has(order.id)) continue;
+
+      try {
+        const receiptData = await api(`/printers/receipt/${order.id}`);
+        if (!receiptData?.text) { receiptPrinted.add(order.id); continue; }
+
+        const printerIp = receiptData.printer?.ipAddress || printers[0]?.ipAddress;
+        const printerPort = receiptData.printer?.port || printers[0]?.port || 9100;
+        if (!printerIp) { receiptPrinted.add(order.id); continue; }
+
+        const buf = escpos(receiptData.text, receiptData.printer?.widthMm || 80);
+        const ok = await sendToPrinter(printerIp, printerPort, buf);
+        if (ok) console.log(`  🧾 RECEIPT ${order.orderNo} @ ${printerIp}:${printerPort}`);
+        receiptPrinted.add(order.id);
+      } catch (e) {
+        receiptPrinted.add(order.id); // don't retry failed receipts
       }
     }
   } catch (e) {
     if (e.message.includes('401')) {
-      console.error('❌ Authentication failed. Token expired? Get a new one from the browser.');
+      console.error('❌ Auth failed — re-logging in...');
+      await autoLogin();
     } else {
       console.error('Poll error:', e.message);
     }
