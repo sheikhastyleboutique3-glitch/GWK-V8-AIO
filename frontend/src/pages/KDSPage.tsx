@@ -6,6 +6,7 @@ import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../lib/useSocket';
 import { stationForItem } from '../lib/thermalPrint';
+import { playKitchenBell } from '../lib/useOrderSound';
 import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 
@@ -52,7 +53,10 @@ export default function KDSPage() {
   };
 
   // ─── Real-time sync: instant ticket arrival from POS/Waiter fires ───
-  useSocket();
+  useSocket({
+    onKdsUpdate: () => playKitchenBell(),
+    onOrderChanged: (p) => { if (p.action === 'fired') playKitchenBell(); },
+  });
 
   const { data: board, isLoading } = useQuery({
     queryKey: ['kds-board', activeBranch?.id ?? 'all'],
