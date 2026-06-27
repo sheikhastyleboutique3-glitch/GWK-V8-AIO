@@ -14,6 +14,7 @@ import { useOnlineStatus } from '../lib/useOnlineStatus';
 import OfflineBanner from '../components/OfflineBanner';
 import { usePrompt } from '../lib/usePrompt';
 import { useSocket } from '../lib/useSocket';
+import PinSwitchModal from '../components/PinSwitchModal';
 
 interface CartLine {
   itemId?: number; // present when the line lives on a persisted (loaded) order
@@ -49,6 +50,9 @@ export default function POSPage() {
   // ─── Real-time sync: instant updates from Waiter/KDS/other POS terminals ───
   useSocket();
   const canEditFloor = user?.role === 'SUPER_ADMIN' || user?.role === 'BRANCH_MANAGER' || user?.role === 'CASHIER';
+
+  // ─── PIN-based cashier switch (Odoo-style) ───
+  const [showPinSwitch, setShowPinSwitch] = useState(false);
 
   // ─── TOP-LEVEL VIEW SWITCH (Odoo-style: Floor Plan / Order / Orders) ───
   const [posView, setPosView] = useState<'floor' | 'order' | 'orders'>('floor');
@@ -758,6 +762,20 @@ export default function POSPage() {
       {/* Session bar — always fully visible below the nav, never clipped */}
       <div className="-mx-4 mb-4 no-print">
         <PosSessionBar branchId={branchId} businessInfo={businessInfo} />
+      </div>
+      {/* Quick cashier info + PIN switch */}
+      <div className="flex items-center justify-between mb-3 no-print">
+        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+          <span>👤</span>
+          <span className="font-medium text-gray-700 dark:text-gray-200">{user?.firstName} {user?.lastName}</span>
+          <span className="text-gray-400">({user?.role?.replace('_', ' ')})</span>
+        </div>
+        <button
+          onClick={() => setShowPinSwitch(true)}
+          className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300 transition-colors"
+        >
+          🔄 Switch Cashier
+        </button>
       </div>
 
       {/* ─── FLOOR PLAN VIEW ─── */}
@@ -1881,8 +1899,19 @@ export default function POSPage() {
               <div className="p-4 flex-1">
                 <div className="text-xs font-semibold text-gray-400 uppercase mb-3">Payment Method</div>
                 <div className="space-y-2">
-                  {['CASH', 'CARD', 'QR', 'GIFT_CARD', 'ON_ACCOUNT'].map((m) => (
+                  {['CASH', 'CARD', 'TERMINAL', 'QR', 'GIFT_CARD', 'ON_ACCOUNT'].map((m) => (
                     <button key={m} onClick={() => {
+                      if (m === 'TERMINAL') {
+                        // Terminal payment: add tender and show waiting state
+                        const amt = payNumpad ? parseFloat(payNumpad) : remaining;
+                        if (remaining <= 0) { toast.error('Already paid'); return; }
+                        if (amt > 0) {
+                          setTenders((prev) => [...prev, { method: m as PayMethod, amount: +amt.toFixed(2), terminalId: selectedTerminalId }]);
+                          setPayNumpad('');
+                          toast.success('Terminal payment recorded — confirm on device');
+                        }
+                        return;
+                      }
                       const amt = payNumpad ? parseFloat(payNumpad) : remaining;
                       if (remaining <= 0) { toast.error('Already paid'); return; }
                       if (amt > 0) {
@@ -1890,9 +1919,22 @@ export default function POSPage() {
                         setPayNumpad('');
                       }
                     }} className="w-full text-left px-4 py-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm font-medium transition">
-                      {m === 'CASH' ? '💵 Cash' : m === 'CARD' ? '💳 Card' : m === 'QR' ? '📱 QR Pay' : m === 'GIFT_CARD' ? '🎁 Gift Card' : m === 'ON_ACCOUNT' ? '📋 Customer Account' : m}
+                      {m === 'CASH' ? '💵 Cash' : m === 'CARD' ? '💳 Card' : m === 'TERMINAL' ? '🖥️ Payment Terminal' : m === 'QR' ? '📱 QR Pay' : m === 'GIFT_CARD' ? '🎁 Gift Card' : m === 'ON_ACCOUNT' ? '📋 Customer Account' : m}
                     </button>
                   ))}
+                  {/* Terminal selector (if terminals are configured) */}
+                  {(terminals?.length ?? 0) > 0 && (
+                    <select
+                      value={selectedTerminalId ?? ''}
+                      onChange={(e) => setSelectedTerminalId(e.target.value ? parseInt(e.target.value, 10) : undefined)}
+                      className="w-full mt-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2"
+                    >
+                      <option value="">Select terminal...</option>
+                      {(terminals || []).map((term: any) => (
+                        <option key={term.id} value={term.id}>{term.name} ({term.provider})</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               </div>
 
@@ -2025,6 +2067,12 @@ export default function POSPage() {
       )}
 
       <PromptDialog />
+      <PinSwitchModal
+        open={showPinSwitch}
+        onClose={() => setShowPinSwitch(false)}
+        branchId={branchId}
+        onSwitched={() => window.location.reload()}
+      />
     </div>
   );
 }

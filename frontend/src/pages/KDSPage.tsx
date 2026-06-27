@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import api from '../lib/api';
@@ -27,6 +27,29 @@ export default function KDSPage() {
   const { activeBranch } = useAuth();
   const qc = useQueryClient();
   const [station, setStation] = useState<string | null>(null); // null = ALL stations
+
+  // Time threshold for alerts (10 minutes default)
+  const ALERT_THRESHOLD_MS = 10 * 60 * 1000;
+  // Force re-render every 30s to update elapsed times
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Elapsed time helper
+  const elapsedStr = (firedAt: string | null | undefined): string => {
+    if (!firedAt) return '';
+    const ms = Date.now() - new Date(firedAt).getTime();
+    const mins = Math.floor(ms / 60000);
+    if (mins < 1) return '<1m';
+    if (mins < 60) return `${mins}m`;
+    return `${Math.floor(mins / 60)}h${mins % 60}m`;
+  };
+  const isOverdue = (firedAt: string | null | undefined): boolean => {
+    if (!firedAt) return false;
+    return Date.now() - new Date(firedAt).getTime() > ALERT_THRESHOLD_MS;
+  };
 
   // ─── Real-time sync: instant ticket arrival from POS/Waiter fires ───
   useSocket();
@@ -118,11 +141,26 @@ export default function KDSPage() {
                   <span className="text-gray-400">{orders.length} order{orders.length !== 1 ? 's' : ''} · {items.length} item{items.length !== 1 ? 's' : ''}</span>
                 </h3>
                 <div className="space-y-3">
-                  {orders.map((order) => (
-                    <div key={order.orderNo} className="rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-3">
+                  {orders.map((order) => {
+                    // Earliest firedAt determines when order hit the kitchen
+                    const earliestFired = order.items.reduce((min: string | null, it: any) => {
+                      if (!it.firedAt) return min;
+                      if (!min) return it.firedAt;
+                      return it.firedAt < min ? it.firedAt : min;
+                    }, null as string | null);
+                    const overdue = isOverdue(earliestFired);
+                    return (
+                    <div key={order.orderNo} className={`rounded-lg bg-white dark:bg-gray-900 border ${overdue ? 'border-red-500 ring-2 ring-red-500/30 animate-pulse' : 'border-gray-200 dark:border-gray-800'} p-3`}>
                       {/* Order header */}
                       <div className="flex justify-between items-center mb-2 pb-2 border-b border-gray-100 dark:border-gray-800">
-                        <div className="font-bold text-sm text-gray-900 dark:text-gray-100">{order.orderNo}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="font-bold text-sm text-gray-900 dark:text-gray-100">{order.orderNo}</div>
+                          {earliestFired && (
+                            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${overdue ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400 font-bold' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
+                              {overdue ? '⚠️ ' : '⏱ '}{elapsedStr(earliestFired)}
+                            </span>
+                          )}
+                        </div>
                         <div className="flex items-center gap-1.5 text-xs">
                           {order.channel === 'DELIVERY' && <span className="px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 font-bold">🚗 DELIVERY</span>}
                           {order.channel === 'TAKEAWAY' && <span className="px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 font-bold">🥡 TAKEAWAY</span>}
@@ -173,7 +211,7 @@ export default function KDSPage() {
                         </button>
                       )}
                     </div>
-                  ))}
+                  ); })}
                   {!orders.length && <p className="text-xs text-gray-400 text-center py-6">Empty</p>}
                 </div>
               </div>
