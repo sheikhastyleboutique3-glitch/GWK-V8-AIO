@@ -10,6 +10,7 @@ import ModifierModal, { ModGroup, ChosenModifier } from '../components/ModifierM
 import { printKot } from '../lib/thermalPrint';
 import { useOnlineStatus } from '../lib/useOnlineStatus';
 import OfflineBanner from '../components/OfflineBanner';
+import { useSocket } from '../lib/useSocket';
 
 interface TableRow { id: number; name: string; seats: number; status: string; branchId: number; isActive: boolean }
 interface OrderRow { id: number; orderNo: string; status: string; tableName?: string | null; total: number }
@@ -34,6 +35,9 @@ export default function WaiterPage() {
   const qc = useQueryClient();
   const branchId = activeBranch?.id;
 
+  // ─── Real-time sync: instant updates from POS/KDS/other waiters ───
+  useSocket();
+
   const [selectedTable, setSelectedTable] = useState<TableRow | null>(null);
   const [activeOrderId, setActiveOrderId] = useState<number | null>(null);
   const [categoryId, setCategoryId] = useState<number | undefined>(undefined);
@@ -54,13 +58,15 @@ export default function WaiterPage() {
     queryKey: ['waiter-floors', branchId],
     queryFn: () => api.get('/floors', { params: { branchId } }).then((r) => r.data.data),
     enabled: !!branchId,
-    refetchInterval: 15_000,
+    staleTime: 60_000,
+    refetchInterval: 120_000, // Fallback — WebSocket gives instant sync
   });
   const { data: tables, isLoading: tablesLoading } = useQuery({
     queryKey: ['waiter-tables', branchId],
     queryFn: () => api.get('/tables', { params: { branchId } }).then((r) => r.data.data),
     enabled: !!branchId,
-    refetchInterval: 15_000,
+    staleTime: 60_000,
+    refetchInterval: 120_000, // Fallback — WebSocket gives instant sync
   });
   const [activeFloorId, setActiveFloorId] = useState<number | null>(null);
   // Filter tables by active floor (if selected)
@@ -79,7 +85,7 @@ export default function WaiterPage() {
       return [...(open || []), ...(held || [])] as OrderRow[];
     },
     enabled: !!branchId,
-    refetchInterval: 15_000,
+    refetchInterval: 60_000, // Fallback — WebSocket gives instant sync
   });
 
   const orderForTable = (name: string): OrderRow | undefined =>
@@ -144,7 +150,7 @@ export default function WaiterPage() {
     queryKey: ['waiter-order', activeOrderId],
     queryFn: () => api.get(`/sales/orders/${activeOrderId}`).then((r) => r.data.data),
     enabled: !!activeOrderId,
-    refetchInterval: 5_000, // Sync KOT status: pick up fires made by POS or other waiters
+    refetchInterval: 30_000, // Fallback — WebSocket gives instant KOT sync
   });
 
   const refreshTablesAndOrders = () => {
