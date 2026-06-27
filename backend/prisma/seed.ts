@@ -1127,6 +1127,11 @@ async function main() {
   });
 
   // Demo Order 1: Table T1, dine-in with modifiers
+  // Delete any existing demo orders first (safe re-seed)
+  await prisma.orderItem.deleteMany({ where: { order: { orderNo: { startsWith: 'ORD-DEMO-' } } } });
+  await prisma.payment.deleteMany({ where: { order: { orderNo: { startsWith: 'ORD-DEMO-' } } } });
+  await prisma.order.deleteMany({ where: { orderNo: { startsWith: 'ORD-DEMO-' } } });
+
   const demoOrder1 = await prisma.order.create({
     data: {
       orderNo: 'ORD-DEMO-001',
