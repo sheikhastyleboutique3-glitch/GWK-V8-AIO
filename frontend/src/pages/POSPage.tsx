@@ -912,8 +912,9 @@ export default function POSPage() {
                 <tr>
                   <th className="text-left px-3 py-2">Date</th>
                   <th className="text-left px-3 py-2">Receipt #</th>
+                  <th className="text-left px-3 py-2">Type</th>
+                  <th className="text-left px-3 py-2">Table / Ref</th>
                   <th className="text-left px-3 py-2">Customer</th>
-                  <th className="text-left px-3 py-2">Table</th>
                   <th className="text-right px-3 py-2">Total</th>
                   <th className="text-left px-3 py-2">Status</th>
                   <th className="text-center px-3 py-2"></th>
@@ -925,8 +926,14 @@ export default function POSPage() {
                     onClick={() => { loadBill(o); setPosView('order'); }}>
                     <td className="px-3 py-2 text-xs">{new Date(o.createdAt).toLocaleString()}</td>
                     <td className="px-3 py-2 font-mono text-xs">{o.orderNo}</td>
+                    <td className="px-3 py-2">
+                      {o.channel === 'DELIVERY' && <span className="px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 text-[10px] font-bold">🚗 DELIVERY</span>}
+                      {o.channel === 'TAKEAWAY' && <span className="px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 text-[10px] font-bold">🥡 TAKEAWAY</span>}
+                      {o.channel === 'DINE_IN' && <span className="text-[10px] text-gray-500">🍽️ DINE IN</span>}
+                      {o.channel && !['DINE_IN','DELIVERY','TAKEAWAY'].includes(o.channel) && <span className="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-[10px] font-bold">{o.channel}</span>}
+                    </td>
+                    <td className="px-3 py-2 text-xs">{o.tableName || '—'}</td>
                     <td className="px-3 py-2">{o.customer?.name || '—'}</td>
-                    <td className="px-3 py-2">{o.tableName || '—'}</td>
                     <td className="px-3 py-2 text-right font-semibold">{Number(o.total).toFixed(2)}</td>
                     <td className="px-3 py-2">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
