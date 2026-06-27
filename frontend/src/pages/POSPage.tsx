@@ -777,16 +777,28 @@ export default function POSPage() {
                     });
                   }
                 }} className="px-3 py-2 rounded-lg border-2 border-dashed border-gray-300 text-xs text-gray-500">+ Area</button>
-                <button onClick={() => {
-                  const name = window.prompt('New table name:', `T${(activeFloor?.tables?.length || 0) + 1}`);
+                <button onClick={async () => {
+                  const name = await prompt({ title: 'New table name', defaultValue: `T${(activeFloor?.tables?.length || 0) + 1}` });
                   if (name?.trim() && activeFloor) {
-                    const seats = parseInt(window.prompt('Seats:', '4') || '4', 10);
+                    const seatsStr = await prompt({ title: 'Seats', defaultValue: '4', type: 'number' });
+                    const seats = parseInt(seatsStr || '4', 10);
                     api.post('/tables', {
                       branchId, floorId: activeFloor.id, name: name.trim(), seats,
                       shape: 'SQUARE', posX: 50 + Math.random() * 300, posY: 50 + Math.random() * 200, width: 90, height: 90,
                     }).then(() => { toast.success('Table added'); qc.invalidateQueries({ queryKey: ['pos-floors'] }); });
                   }
                 }} className="px-3 py-2 rounded-lg bg-primary text-white text-xs font-medium">+ Table</button>
+                <input
+                  type="color"
+                  value={activeFloor?.background || '#e9d5ff'}
+                  onChange={(e) => {
+                    if (activeFloor) {
+                      api.patch(`/floors/${activeFloor.id}`, { background: e.target.value }).then(() => qc.invalidateQueries({ queryKey: ['pos-floors'] }));
+                    }
+                  }}
+                  title="Floor background color"
+                  className="w-9 h-9 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer"
+                />
               </>
             )}
             {canEditFloor && (
@@ -820,12 +832,14 @@ export default function POSPage() {
                     onMouseDown={floorEditMode ? (e) => { e.preventDefault(); setFloorDragging({ id: table.id, startX: e.clientX, startY: e.clientY, origX: pos.posX, origY: pos.posY }); } : undefined}
                     onTouchStart={floorEditMode ? (e) => { const t = e.touches[0]; setFloorDragging({ id: table.id, startX: t.clientX, startY: t.clientY, origX: pos.posX, origY: pos.posY }); } : undefined}
                     onClick={!floorEditMode ? () => openTableOrder(table) : undefined}
-                    onDoubleClick={floorEditMode ? () => {
-                      const name = window.prompt('Table name:', table.name);
+                    onDoubleClick={floorEditMode ? async () => {
+                      const name = await prompt({ title: 'Table name', defaultValue: table.name });
                       if (name === null) return;
-                      const seats = parseInt(window.prompt('Seats:', String(table.seats)) || String(table.seats), 10);
-                      const shapes = ['SQUARE', 'ROUND', 'RECTANGLE'];
-                      const shape = window.prompt(`Shape (${shapes.join('/')})`, table.shape) || table.shape;
+                      const seatsStr = await prompt({ title: 'Seats', defaultValue: String(table.seats), type: 'number' });
+                      if (seatsStr === null) return;
+                      const seats = parseInt(seatsStr, 10) || table.seats;
+                      const shape = await prompt({ title: 'Shape', defaultValue: table.shape || 'SQUARE', type: 'select', options: [{ value: 'SQUARE', label: 'Square' }, { value: 'ROUND', label: 'Round' }, { value: 'RECTANGLE', label: 'Rectangle' }] });
+                      if (shape === null) return;
                       api.patch(`/tables/${table.id}`, { name: name || table.name, seats, shape }).then(() => qc.invalidateQueries({ queryKey: ['pos-floors'] }));
                     } : undefined}
                     className={`absolute flex flex-col items-center justify-center text-white font-bold shadow-lg transition-transform ${!floorEditMode ? 'cursor-pointer hover:scale-105' : 'cursor-grab active:cursor-grabbing'} ${bgColor} ${isRound ? 'rounded-full' : 'rounded-xl'}`}
@@ -1077,7 +1091,7 @@ export default function POSPage() {
                         .map(([id]) => Number(id));
                       if (!itemIds.length) return;
                       try {
-                        const res = await api.post(`/sales/orders/${loadedOrderId}/split`, { itemIds });
+                        const res = await api.post(`/sales/orders/${loadedOrderId}/split`, { itemIds, quantities: splitSelected });
                         const newOrder = res.data?.data?.newOrder;
                         // If user chose to pay now, complete the split order immediately
                         if (splitPayMethod !== 'later' && newOrder) {

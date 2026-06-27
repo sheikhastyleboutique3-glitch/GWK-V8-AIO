@@ -97,6 +97,7 @@ export class MergeOrderDto {
 }
 export class SplitOrderDto {
   @IsArray() @IsInt({ each: true }) itemIds: number[];
+  @IsOptional() quantities?: Record<number, number>; // itemId → qty to split (for partial qty split)
 }
 
 const POS_ROLES: Role[] = [
@@ -206,7 +207,7 @@ export class SalesController {
 
   @Post(':id/split') @Roles(...POS_ROLES)
   split(@Param('id', ParseIntPipe) id: number, @Body() dto: SplitOrderDto) {
-    return this.svc.split(id, dto.itemIds);
+    return this.svc.split(id, dto.itemIds, dto.quantities);
   }
 
   @Post(':id/split-by-seat') @Roles(...POS_ROLES)

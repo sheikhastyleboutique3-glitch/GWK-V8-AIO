@@ -274,7 +274,9 @@ export default function WaiterPage() {
       const itemIds = Object.entries(splitQty)
         .filter(([, qty]) => qty > 0)
         .map(([id]) => Number(id));
-      return api.post(`/sales/orders/${activeOrderId}/split`, { itemIds });
+      const quantities: Record<number, number> = {};
+      Object.entries(splitQty).forEach(([id, qty]) => { if (qty > 0) quantities[Number(id)] = qty; });
+      return api.post(`/sales/orders/${activeOrderId}/split`, { itemIds, quantities });
     },
     onSuccess: () => {
       toast.success(t('waiter.splitDone'));

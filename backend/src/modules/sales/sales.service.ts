@@ -673,14 +673,12 @@ export class SalesService {
     return this.findOne(targetId);
   }
 
-  /** Split selected line items off into a new ticket (split bill by item). */
-  async split(orderId: number, itemIds: number[]) {
+  /** Split selected line items off into a new ticket (split bill by item or by quantity). */
+  async split(orderId: number, itemIds: number[], quantities?: Record<number, number>) {
     const order = await this.assertOpen(orderId);
     if (!itemIds?.length) throw new BadRequestException('Select at least one item to split.');
     const items = await this.prisma.orderItem.findMany({ where: { id: { in: itemIds }, orderId } });
     if (!items.length) throw new BadRequestException('No matching items on this order.');
-    const total = await this.prisma.orderItem.count({ where: { orderId } });
-    if (items.length >= total) throw new BadRequestException('Cannot split off every item — nothing would remain.');
 
     const newOrder = await this.prisma.order.create({
       data: {
@@ -691,8 +689,41 @@ export class SalesService {
         createdById: order.createdById,
       },
     });
-    await this.prisma.orderItem.updateMany({ where: { id: { in: items.map((i) => i.id) } }, data: { orderId: newOrder.id } });
-    await this.recompute(orderId);
+
+    for (const item of items) {
+      const splitQty = quantities?.[item.id] ?? item.quantity;
+      if (splitQty >= item.quantity) {
+        // Move the entire item to the new order
+        await this.prisma.orderItem.update({ where: { id: item.id }, data: { orderId: newOrder.id } });
+      } else if (splitQty > 0) {
+        // Partial split: reduce original quantity and create a new item with split qty
+        await this.prisma.orderItem.update({ where: { id: item.id }, data: { quantity: item.quantity - splitQty, lineTotal: (item.quantity - splitQty) * item.unitPrice - (item.discount ?? 0) * ((item.quantity - splitQty) / item.quantity) } });
+        await this.prisma.orderItem.create({
+          data: {
+            orderId: newOrder.id,
+            productId: item.productId,
+            quantity: splitQty,
+            unitPrice: item.unitPrice,
+            discount: (item.discount ?? 0) * (splitQty / item.quantity),
+            taxAmount: (item.taxAmount ?? 0) * (splitQty / item.quantity),
+            lineTotal: splitQty * item.unitPrice,
+            modifiers: item.modifiers ?? undefined,
+            notes: item.notes,
+            courseNo: item.courseNo,
+            firedAt: item.firedAt,
+          },
+        });
+      }
+    }
+
+    // Verify original order still has items
+    const remaining = await this.prisma.orderItem.count({ where: { orderId } });
+    if (remaining === 0) {
+      // All items moved — void the original (shouldn't happen with qty split, but safety)
+      await this.prisma.order.update({ where: { id: orderId }, data: { status: OrderStatus.VOIDED } });
+    } else {
+      await this.recompute(orderId);
+    }
     await this.recompute(newOrder.id);
     return { original: await this.findOne(orderId), newOrder: await this.findOne(newOrder.id) };
   }
