@@ -1,0 +1,16 @@
+{
+  "name": "gwk-print-agent",
+  "version": "2.0.0",
+  "description": "GWK V8 — Real-time ESC/POS Print Agent (KOT + Receipt)",
+  "type": "module",
+  "main": "print-agent.mjs",
+  "scripts": {
+    "start": "node print-agent.mjs"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.8.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
