@@ -734,11 +734,12 @@ export default function POSPage() {
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-[100dvh] flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-950 p-3 md:p-4">
       {/* Offline status banner */}
       <OfflineBanner />
       {/* ─── ODOO-STYLE TOP NAV BAR ─── */}
-      <div className="bg-gray-900 text-white px-3 md:px-4 py-2 flex items-center gap-2 md:gap-4 rounded-t-xl -mx-4 -mt-4 mb-0 no-print flex-shrink-0">
+      <div className="bg-gray-900 text-white px-3 md:px-4 py-2 flex items-center gap-2 md:gap-4 rounded-xl mb-2 no-print flex-shrink-0">
+        <button onClick={() => window.location.href = '/pos-dashboard'} className="text-xs text-gray-400 hover:text-white transition">← Back</button>
         <span className="font-bold text-sm whitespace-nowrap">{activeBranch?.name || 'POS'}</span>
         <div className="flex gap-1 ms-4">
           <button onClick={() => setPosView('floor')}
@@ -759,12 +760,12 @@ export default function POSPage() {
           {isSyncing && <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold">SYNCING...</span>}
         </div>
       </div>
-      {/* Session bar — always fully visible below the nav, never clipped */}
-      <div className="-mx-4 mb-4 no-print">
+      {/* Session bar */}
+      <div className="mb-2 no-print flex-shrink-0">
         <PosSessionBar branchId={branchId} businessInfo={businessInfo} />
       </div>
       {/* Quick cashier info + PIN switch */}
-      <div className="flex items-center justify-between mb-3 no-print">
+      <div className="flex items-center justify-between mb-2 no-print flex-shrink-0">
         <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
           <span>👤</span>
           <span className="font-medium text-gray-700 dark:text-gray-200">{user?.firstName} {user?.lastName}</span>
@@ -1176,10 +1177,10 @@ export default function POSPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0 overflow-hidden">
         {/* Catalog */}
-        <div className="lg:col-span-2">
-          <div className="flex flex-wrap gap-2 mb-3">
+        <div className="lg:col-span-2 flex flex-col min-h-0 overflow-hidden">
+          <div className="flex flex-wrap gap-2 mb-3 flex-shrink-0">
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -1210,7 +1211,7 @@ export default function POSPage() {
           {isLoading ? (
             <LoadingSpinner />
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 overflow-y-auto flex-1 min-h-0 pb-2">
               {(products || []).map((p: any) => (
                 <button
                   key={p.id}
@@ -1239,7 +1240,7 @@ export default function POSPage() {
         </div>
 
         {/* Cart / bill */}
-        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 flex flex-col">
+        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 flex flex-col min-h-0 overflow-hidden">
           {mode === 'existing' ? (
             <div className="mb-3">
               <div className="flex items-center justify-between rounded-lg bg-primary/10 px-3 py-2">
