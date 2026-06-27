@@ -165,13 +165,14 @@ export default function Layout() {
   const [showThemePanel, setShowThemePanel] = useState(false);
 
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const isBranchManager = user?.role === 'BRANCH_MANAGER';
   const { data: allBranchesList } = useQuery({
     queryKey: ['branches-switcher'],
     queryFn: () => api.get('/branches').then(r => r.data.data),
-    enabled: isSuperAdmin,
-    
+    enabled: isSuperAdmin || isBranchManager,
+    staleTime: 5 * 60_000, // branches rarely change — cache for 5min
   });
-  const switcherBranches = isSuperAdmin ? (allBranchesList || []) : (user?.assignedBranches || []);
+  const switcherBranches = (isSuperAdmin || isBranchManager) ? (allBranchesList || user?.assignedBranches || []) : (user?.assignedBranches || []);
 
   const { data: alertsData } = useQuery({
     queryKey: ['alerts-count', activeBranch?.id ?? 'all'],

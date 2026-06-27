@@ -57,8 +57,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (scope === 'all') { setIsAllBranches(true); setActiveBranch(null); }
         else {
           const ab = localStorage.getItem('activeBranch');
-          if (ab) setActiveBranch(JSON.parse(ab));
-          else if (u.branch) setActiveBranch(u.branch);
+          if (ab) {
+            try { setActiveBranch(JSON.parse(ab)); } catch { /* corrupted — fallback below */ }
+          }
+          // Fallback: if no valid activeBranch in localStorage, derive from user data
+          if (!ab || !(() => { try { return JSON.parse(ab); } catch { return null; } })()) {
+            const fallback = u.branch || (u.assignedBranches?.[0] ? { id: u.assignedBranches[0].id, name: u.assignedBranches[0].name, nameAr: u.assignedBranches[0].nameAr } : null);
+            if (fallback) { setActiveBranch(fallback); localStorage.setItem('activeBranch', JSON.stringify(fallback)); }
+          }
         }
       } catch { clearAuth(); }
     }
