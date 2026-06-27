@@ -537,6 +537,23 @@ export class SalesService {
   }
 
   /**
+   * Tip After Payment — allows setting/updating tip on a COMPLETED order.
+   * Odoo-style: receipt prints "Tip: ___", customer writes amount, cashier enters it later.
+   * Updates the order total to include the tip.
+   */
+  async setTipAfterPayment(orderId: number, tipAmount: number) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException(`Order ${orderId} not found`);
+    // Allow tip on both OPEN (before payment) and COMPLETED (after payment) orders
+    const newTotal = order.subtotal - order.discountTotal + order.taxTotal + order.serviceCharge + tipAmount;
+    await this.prisma.order.update({
+      where: { id: orderId },
+      data: { tip: tipAmount, total: newTotal },
+    });
+    return this.findOne(orderId);
+  }
+
+  /**
    * Apply (or clear) a coupon on an existing OPEN/HELD order — used when a
    * cashier picks up a waiter's bill and applies a discount before payment.
    * Pass an empty/undefined code to remove a previously applied coupon.

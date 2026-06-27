@@ -199,6 +199,7 @@ export function printReceipt(order: OrderLike, info: BusinessInfo = {}) {
       ${payRows}
       ${change > 0 ? `<div class="row"><span>Change</span><span>${money(change)}</span></div>` : ''}
       <div class="hr"></div>
+      ${order.notes ? `<div class="c sm" style="margin:4px 0;font-style:italic;">📝 ${esc(order.notes)}</div>` : ''}
       <div class="c sm">Thank you & see you again!</div>
     </div>`;
   printDoc(`Receipt ${order.orderNo}`, body);

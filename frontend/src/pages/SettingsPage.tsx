@@ -27,6 +27,7 @@ export default function SettingsPage() {
     { group: 'finance', label: '\ud83d\udcb0 Finance & Currency', keys: ['default_currency', 'supported_currencies'] },
     { group: 'inventory', label: '\ud83d\udce6 Inventory', keys: ['expiry_warning_days', 'low_stock_alert'] },
     { group: 'localization', label: '\ud83c\udf0d Localization', keys: ['default_language'] },
+    { group: 'review', label: '\u2b50 Customer Reviews', keys: ['review_url'] },
   ];
   return (
     <div className="max-w-2xl">
