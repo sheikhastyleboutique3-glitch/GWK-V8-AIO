@@ -213,6 +213,9 @@ async function connectWebSocket() {
     console.log('⚡ WebSocket connected — printing is INSTANT');
     if (BRANCH_ID) {
       socket.emit('join', { branchId: parseInt(BRANCH_ID, 10) });
+    } else {
+      // No branch filter → join ALL branches (global room)
+      socket.emit('join', { branchId: null });
     }
   });
 
@@ -226,6 +229,8 @@ async function connectWebSocket() {
     console.log('⚡ WebSocket reconnected — instant printing restored');
     if (BRANCH_ID) {
       socket.emit('join', { branchId: parseInt(BRANCH_ID, 10) });
+    } else {
+      socket.emit('join', { branchId: null });
     }
   });
 

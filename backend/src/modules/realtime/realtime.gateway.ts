@@ -54,13 +54,15 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @SubscribeMessage('join')
-  handleJoin(@ConnectedSocket() client: Socket, @MessageBody() data: { branchId: number }) {
+  handleJoin(@ConnectedSocket() client: Socket, @MessageBody() data: { branchId: number | null }) {
     if (data?.branchId != null) {
+      // Branch-specific: join only that branch room
       client.join(`branch_${data.branchId}`);
+    } else {
+      // All branches: join the global room (receives events from ALL branches)
+      client.join('global');
     }
-    // Also join a global room for cross-branch events (e.g. transfers)
-    client.join('global');
-    return { ok: true, branch: data?.branchId };
+    return { ok: true, branch: data?.branchId ?? 'ALL' };
   }
 
   @SubscribeMessage('ping')
@@ -88,13 +90,15 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   @OnEvent(ORDER_COMPLETED)
   onOrderCompleted(evt: OrderCompletedEvent) {
     if (!this.server || !evt?.branchId) return;
-    this.server.to(`branch_${evt.branchId}`).emit('order:changed', {
+    const payload = {
       orderId: evt.orderId,
       orderNo: evt.orderNo,
       branchId: evt.branchId,
       action: 'completed',
       at: Date.now(),
-    });
+    };
+    this.server.to(`branch_${evt.branchId}`).emit('order:changed', payload);
+    this.server.to('global').emit('order:changed', payload);
   }
 
   @OnEvent(ORDER_VOIDED)
@@ -105,15 +109,14 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   @OnEvent(KDS_CHANGED)
   onKdsChanged(evt: KdsChangedEvent) {
     if (!this.server || evt?.branchId == null) return;
-    this.server.to(`branch_${evt.branchId}`).emit('kds:update', {
-      branchId: evt.branchId,
-      at: Date.now(),
-    });
+    const payload = { branchId: evt.branchId, at: Date.now() };
+    this.server.to(`branch_${evt.branchId}`).emit('kds:update', payload);
+    this.server.to('global').emit('kds:update', payload);
   }
 
   private broadcast(evt: OrderChangedEvent) {
     if (!this.server || !evt?.branchId) return;
-    this.server.to(`branch_${evt.branchId}`).emit('order:changed', {
+    const payload = {
       orderId: evt.orderId,
       orderNo: evt.orderNo,
       branchId: evt.branchId,
@@ -121,6 +124,9 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       tableName: evt.tableName,
       channel: evt.channel,
       at: Date.now(),
-    });
+    };
+    // Emit to branch-specific room AND global room (for all-branch listeners like print agents)
+    this.server.to(`branch_${evt.branchId}`).emit('order:changed', payload);
+    this.server.to('global').emit('order:changed', payload);
   }
 }
