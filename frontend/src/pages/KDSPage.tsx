@@ -88,11 +88,18 @@ export default function KDSPage() {
   const columns: KdsStatus[] = ['QUEUED', 'PREPARING', 'READY'];
 
   return (
-    <div>
-      <PageHeader title={t('nav.kds')} subtitle={activeBranch?.name} />
+    <div className="h-[100dvh] flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-950 p-3 md:p-4">
+      {/* Top bar */}
+      <div className="flex items-center justify-between mb-3 flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <button onClick={() => window.location.href = '/'} className="px-3 py-2 rounded-lg bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-sm font-medium transition-colors">← Back</button>
+          <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">{t('nav.kds')}</h1>
+          <span className="text-sm text-gray-500">{activeBranch?.name}</span>
+        </div>
+      </div>
 
       {/* Station tabs */}
-      <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+      <div className="flex gap-2 mb-3 overflow-x-auto pb-1 flex-shrink-0">
         <button onClick={() => setStation(null)} className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap ${!station ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200'}`}>
           🍽️ All Stations
         </button>
@@ -110,7 +117,7 @@ export default function KDSPage() {
       {isLoading ? (
         <LoadingSpinner />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1 min-h-0 overflow-hidden">
           {columns.map((col) => {
             const rawItems = board?.[col] ?? [];
             // Filter by station if one is selected
@@ -135,12 +142,12 @@ export default function KDSPage() {
             const orders = Array.from(orderMap.values());
 
             return (
-              <div key={col} className={`rounded-xl border-t-4 ${COLUMN_STYLE[col]} bg-gray-50 dark:bg-gray-900/50 p-3`}>
-                <h3 className="font-semibold text-sm mb-3 flex justify-between">
+              <div key={col} className={`rounded-xl border-t-4 ${COLUMN_STYLE[col]} bg-gray-50 dark:bg-gray-900/50 p-3 flex flex-col min-h-0 overflow-hidden`}>
+                <h3 className="font-semibold text-sm mb-3 flex justify-between flex-shrink-0">
                   <span>{col}</span>
                   <span className="text-gray-400">{orders.length} order{orders.length !== 1 ? 's' : ''} · {items.length} item{items.length !== 1 ? 's' : ''}</span>
                 </h3>
-                <div className="space-y-3">
+                <div className="space-y-3 overflow-y-auto flex-1 min-h-0">
                   {orders.map((order) => {
                     // Earliest firedAt determines when order hit the kitchen
                     const earliestFired = order.items.reduce((min: string | null, it: any) => {

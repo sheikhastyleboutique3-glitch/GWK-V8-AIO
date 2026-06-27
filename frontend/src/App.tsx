@@ -118,10 +118,26 @@ export default function App() {
       <Route path="/kiosk/:configId" element={<KioskPage />} />
       {/* Full-screen POS & Waiter — no sidebar */}
       <Route
+        path="/pos"
+        element={
+          <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER']}>
+            <POSPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/waiter"
         element={
           <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'WAITER']}>
             <WaiterPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/kds"
+        element={
+          <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'KITCHEN', 'PASTRY', 'BARISTA']}>
+            <KDSPage />
           </ProtectedRoute>
         }
       />
@@ -148,22 +164,6 @@ export default function App() {
           element={
             <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER']}>
               <PosDashboardPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="pos"
-          element={
-            <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER']}>
-              <POSPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="kds"
-          element={
-            <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'KITCHEN', 'PASTRY', 'BARISTA']}>
-              <KDSPage />
             </ProtectedRoute>
           }
         />

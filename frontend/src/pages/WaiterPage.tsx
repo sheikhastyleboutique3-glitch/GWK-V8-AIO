@@ -367,7 +367,7 @@ export default function WaiterPage() {
   // ============ FLOOR PLAN ============
   if (!selectedTable) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-4">
+      <div className="h-[100dvh] flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-950 p-3 md:p-4">
         <OfflineBanner />
         {/* Minimal top bar (full-screen — no sidebar) */}
         <div className="flex items-center justify-between mb-4">
