@@ -13,6 +13,7 @@ import { printReceipt, printKot } from '../lib/thermalPrint';
 import { useOnlineStatus } from '../lib/useOnlineStatus';
 import OfflineBanner from '../components/OfflineBanner';
 import { usePrompt } from '../lib/usePrompt';
+import { useSocket } from '../lib/useSocket';
 
 interface CartLine {
   itemId?: number; // present when the line lives on a persisted (loaded) order
@@ -44,6 +45,9 @@ export default function POSPage() {
   const { isOnline, isSyncing, pendingCount } = useOnlineStatus();
   const [prompt, PromptDialog] = usePrompt();
   const canRefund = user?.role === 'SUPER_ADMIN' || user?.role === 'BRANCH_MANAGER';
+
+  // ─── Real-time sync: instant updates from Waiter/KDS/other POS terminals ───
+  useSocket();
   const canEditFloor = user?.role === 'SUPER_ADMIN' || user?.role === 'BRANCH_MANAGER' || user?.role === 'CASHIER';
 
   // ─── TOP-LEVEL VIEW SWITCH (Odoo-style: Floor Plan / Order / Orders) ───
@@ -121,32 +125,33 @@ export default function POSPage() {
   const { data: categories } = useQuery({
     queryKey: ['pos-categories'],
     queryFn: () => api.get('/categories', { params: { posVisible: true } }).then((r) => r.data.data),
-    
+    staleTime: 5 * 60_000, // Categories rarely change mid-shift
   });
   const { data: deliveryPlatforms } = useQuery({
     queryKey: ['delivery-platforms'],
     queryFn: () => api.get('/delivery-platforms').then((r) => r.data.data),
-    
+    staleTime: 5 * 60_000,
   });
   const { data: discountRules } = useQuery({
     queryKey: ['discount-rules-active'],
     queryFn: () => api.get('/discount-rules', { params: { activeOnly: true } }).then((r) => r.data.data),
-    
+    staleTime: 5 * 60_000,
   });
   const { data: presets } = useQuery({
     queryKey: ['order-presets-active'],
     queryFn: () => api.get('/order-presets', { params: { activeOnly: true } }).then((r) => r.data.data),
+    staleTime: 5 * 60_000,
     
   });
   const { data: combos } = useQuery({
     queryKey: ['combos'],
     queryFn: () => api.get('/combos').then((r) => r.data.data),
-    
+    staleTime: 5 * 60_000,
   });
   const { data: terminals } = useQuery({
     queryKey: ['payment-terminals'],
     queryFn: () => api.get('/payment-terminals').then((r) => r.data.data),
-    
+    staleTime: 5 * 60_000,
   });
   const { data: products, isLoading } = useQuery({
     queryKey: ['pos-products', categoryId, search],
@@ -154,14 +159,14 @@ export default function POSPage() {
       api
         .get('/products', { params: { sellable: true, available: true, productType: 'MENU', ...(categoryId && { categoryId }), ...(search && { search }) } })
         .then((r) => r.data.data),
-    
+    staleTime: 2 * 60_000, // Products cached 2min — menu rarely changes mid-shift
   });
 
   // Branding / business info for receipts (company name, logo, address…).
   const { data: settings } = useQuery({
     queryKey: ['settings-receipt'],
     queryFn: () => api.get('/settings').then((r) => r.data.data),
-    
+    staleTime: 10 * 60_000, // Settings almost never change
   });
   const businessInfo = useMemo(() => {
     const map: Record<string, string> = {};
@@ -185,7 +190,7 @@ export default function POSPage() {
     queryKey: ['pos-session-current', branchId],
     queryFn: () => api.get('/pos-sessions/current', { params: { branchId } }).then((r) => r.data.data),
     enabled: !!branchId,
-    refetchInterval: 30_000,
+    refetchInterval: 120_000, // Fallback only — WebSocket pushes instant updates
   });
 
   // Customer search (for loyalty / store-credit redemption).
@@ -206,14 +211,14 @@ export default function POSPage() {
       return [...(open || []), ...(held || [])];
     },
     enabled: !!branchId,
-    refetchInterval: 15_000,
+    refetchInterval: 60_000, // Fallback — WebSocket gives instant sync
   });
 
   const { data: loadedOrder } = useQuery({
     queryKey: ['pos-loaded', loadedOrderId],
     queryFn: () => api.get(`/sales/orders/${loadedOrderId}`).then((r) => r.data.data),
     enabled: !!loadedOrderId,
-    refetchInterval: 5_000, // Sync KOT status: pick up fires made by Waiter
+    refetchInterval: 30_000, // Fallback — WebSocket gives instant KOT sync
   });
 
   const refetchLoaded = () => {
@@ -617,8 +622,8 @@ export default function POSPage() {
     queryKey: ['pos-floors', branchId],
     queryFn: () => api.get('/floors', { params: { branchId } }).then((r) => r.data.data),
     enabled: !!branchId,
-    
-    refetchInterval: 15_000,
+    staleTime: 60_000, // Floors rarely change
+    refetchInterval: 120_000,
   });
   const [activeFloorIdx, setActiveFloorIdx] = useState(0);
   const activeFloor = (floors || [])[activeFloorIdx] || null;
@@ -638,7 +643,7 @@ export default function POSPage() {
     queryKey: ['pos-all-orders', branchId, orderStatusFilter],
     queryFn: () => api.get('/sales/orders', { params: { branchId, ...(orderStatusFilter !== 'all' ? { status: orderStatusFilter } : {}) } }).then((r) => r.data.data),
     enabled: posView === 'orders' && !!branchId,
-    refetchInterval: 15_000,
+    refetchInterval: 60_000, // Fallback — WebSocket pushes instant updates
   });
 
   const filteredOrders = useMemo(() => {

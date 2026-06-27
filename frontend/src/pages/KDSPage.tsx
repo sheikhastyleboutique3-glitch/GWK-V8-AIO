@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
-import { connectKds } from '../lib/kdsSocket';
+import { useSocket } from '../lib/useSocket';
 import { stationForItem } from '../lib/thermalPrint';
 import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -28,13 +28,16 @@ export default function KDSPage() {
   const qc = useQueryClient();
   const [station, setStation] = useState<string | null>(null); // null = ALL stations
 
+  // ─── Real-time sync: instant ticket arrival from POS/Waiter fires ───
+  useSocket();
+
   const { data: board, isLoading } = useQuery({
     queryKey: ['kds-board', activeBranch?.id ?? 'all'],
     queryFn: () =>
       api
         .get('/kds/board', { params: activeBranch?.id ? { branchId: activeBranch.id } : {} })
         .then((r) => r.data.data),
-    refetchInterval: 20_000,
+    refetchInterval: 60_000, // Fallback — WebSocket gives instant updates
   });
 
   // Floor data for table→floor lookup
@@ -42,6 +45,7 @@ export default function KDSPage() {
     queryKey: ['kds-floors', activeBranch?.id],
     queryFn: () => api.get('/floors', { params: { branchId: activeBranch?.id } }).then((r) => r.data.data),
     enabled: !!activeBranch?.id,
+    staleTime: 120_000,
   });
   const floorForTable = (tableName: string): string | null => {
     if (!floors || !tableName) return null;
@@ -50,14 +54,6 @@ export default function KDSPage() {
     }
     return null;
   };
-
-  // Real-time push: refresh the board instantly on kitchen changes (polling is the fallback).
-  useEffect(() => {
-    const disconnect = connectKds(activeBranch?.id, () =>
-      qc.invalidateQueries({ queryKey: ['kds-board'] }),
-    );
-    return disconnect;
-  }, [activeBranch?.id, qc]);
 
   const advance = useMutation({
     mutationFn: ({ id, status }: { id: number; status: KdsStatus }) =>
