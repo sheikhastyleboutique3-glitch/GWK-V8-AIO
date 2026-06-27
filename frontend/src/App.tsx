@@ -28,6 +28,7 @@ import PricingPage from './pages/PricingPage';
 import AuditLogPage from './pages/AuditLogPage';
 import NotificationsPage from './pages/NotificationsPage';
 import UnitsPage from './pages/UnitsPage';
+import PosDashboardPage from './pages/PosDashboardPage';
 import POSPage from './pages/POSPage';
 import KDSPage from './pages/KDSPage';
 import SalesDashboardPage from './pages/SalesDashboardPage';
@@ -133,6 +134,14 @@ export default function App() {
         <Route path="alerts" element={<AlertsPage />} />
 
         {/* Restaurant POS / Kitchen / Sales — front-of-house */}
+        <Route
+          path="pos-dashboard"
+          element={
+            <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER']}>
+              <PosDashboardPage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="pos"
           element={

@@ -48,6 +48,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'pos',
     items: [
+      { key: 'posDashboard', path: '/pos-dashboard', icon: BuildingStorefrontIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER'] },
       { key: 'pos',    path: '/pos',    icon: BuildingStorefrontIcon,    roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER'] },
       { key: 'waiter', path: '/waiter', icon: UserGroupIcon,             roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'WAITER'] },
       { key: 'bookings', path: '/bookings', icon: CalendarDaysIcon,       roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'WAITER'] },
