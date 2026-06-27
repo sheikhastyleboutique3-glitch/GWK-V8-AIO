@@ -1,64 +1,127 @@
-# GWK V8 AIO — On-prem KOT Print Agent
+# GWK V8 — Real-Time Print Agent
 
-A tiny, zero-dependency Node service that prints kitchen order tickets (KOT) to
-**network ESC/POS thermal printers** on the store LAN. The cloud/backend stays
-out of the printing path — it only exposes the routed ticket payloads; this
-agent does the raw byte push locally.
+Instant ESC/POS printing for KOT (Kitchen Order Tickets) and customer receipts.
 
-## How it works
-1. Polls `GET /sales/orders?status=OPEN&branchId=<id>` for new tickets.
-2. For each new order, calls `GET /printers/kot/:orderId` which returns
-   **station-grouped tickets** (Hot Kitchen / Barista / Pastry) with a ready
-   `text` body and the target `printer.ipAddress:port`.
-3. Wraps each ticket in ESC/POS (init + emphasized text + partial cut) and
-   sends it over TCP to the printer.
+## How It Works
 
-Each order is printed once per agent run (tracked in memory).
+```
+POS/Waiter fires order → Backend → WebSocket push → Agent → Printer (< 100ms)
+```
 
-## Requirements
-- Node.js 18+ (uses global `fetch`)
-- Network thermal printers reachable by IP (configure each printer's IP in the
-  app under **Configuration → Printers**, and assign printers to categories).
+The agent connects to the backend via **WebSocket** and prints **instantly** when:
+- **KOT**: Items are fired to the kitchen (from POS or Waiter)
+- **Receipt**: An order is marked as completed/paid
 
-## Run
+If WebSocket is unavailable (proxy issue, etc.), it falls back to polling.
+
+## Setup
+
+### 1. Install (one time)
 ```bash
-API_URL=http://192.168.1.10:3000 \
-API_TOKEN=<JWT of a POS user> \
-BRANCH_ID=2 \
-POLL_MS=5000 \
+cd agent
+npm install
+```
+
+### 2. Configure Printers in App
+- Go to **Printers** page in the GWK app
+- Add your printer(s) with their **IP address** and **port** (default: 9100)
+- Go to **Categories** page and assign each category to a printer (station routing)
+
+### 3. Run the Agent
+
+**Linux / Mac / Raspberry Pi:**
+```bash
+API_URL=http://your-vps-ip BRANCH_ID=2 node print-agent.mjs
+```
+
+**Windows (CMD):**
+```cmd
+set API_URL=http://your-vps-ip
+set BRANCH_ID=2
 node print-agent.mjs
 ```
 
-| Env | Default | Purpose |
-|-----|---------|---------|
-| `API_URL` | `http://localhost:3000` | Backend base URL |
-| `API_TOKEN` | — | Bearer JWT for a POS-capable user |
-| `BRANCH_ID` | (all) | Branch to print for |
-| `POLL_MS` | `5000` | Poll interval |
-| `DEFAULT_PRINTER_IP` | — | Fallback IP if a ticket's category has no printer |
-| `DEFAULT_PRINTER_PORT` | `9100` | Raw ESC/POS port |
+**Windows (PowerShell):**
+```powershell
+$env:API_URL="http://your-vps-ip"
+$env:BRANCH_ID="2"
+node print-agent.mjs
+```
 
-## Deploy as a service (systemd)
-```ini
-# /etc/systemd/system/gwk-print-agent.service
+### 4. Run as Service (auto-start on boot)
+
+**Raspberry Pi / Linux (systemd):**
+```bash
+sudo tee /etc/systemd/system/gwk-print.service << 'EOF'
 [Unit]
-Description=GWK KOT Print Agent
+Description=GWK Print Agent
 After=network.target
 
 [Service]
-Environment=API_URL=http://192.168.1.10:3000
-Environment=API_TOKEN=__JWT__
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/GWK-V8-AIO/agent
+Environment=API_URL=http://your-vps-ip
 Environment=BRANCH_ID=2
-ExecStart=/usr/bin/node /opt/gwk/agent/print-agent.mjs
+ExecStart=/usr/bin/node print-agent.mjs
 Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
-```
-```bash
-sudo systemctl enable --now gwk-print-agent
+EOF
+
+sudo systemctl enable gwk-print
+sudo systemctl start gwk-print
 ```
 
-> Note: this is on-prem hardware glue — it cannot run inside the cloud sandbox
-> (no LAN printers there). Deploy it on a store device on the same network as
-> the printers.
+**Windows (Task Scheduler):**
+- Create a task that runs `node C:\path\to\agent\print-agent.mjs`
+- Set environment variables in the task action
+- Trigger: At startup
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `API_URL` | `http://localhost:3000` | Backend URL (your VPS IP) |
+| `API_EMAIL` | `admin@gwk.com` | Login email |
+| `API_PASSWORD` | `Admin@1234` | Login password |
+| `BRANCH_ID` | _(all branches)_ | Filter to specific branch |
+| `POLL_MS` | `30000` | Fallback poll interval (only used when WebSocket is down) |
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    VPS (Cloud)                           │
+│  ┌─────────┐      ┌──────────────────────────────────┐  │
+│  │ Frontend │◄────►│ Backend (NestJS + Socket.IO)     │  │
+│  └─────────┘      └──────────┬───────────────────────┘  │
+│                              │ WebSocket (/realtime)      │
+└──────────────────────────────┼───────────────────────────┘
+                               │
+                   ┌───────────▼──────────┐
+                   │  Print Agent (LAN)    │
+                   │  - Receives: order:changed
+                   │  - Action: fired → KOT print
+                   │  - Action: completed → receipt print
+                   └───────────┬──────────┘
+                               │ TCP/IP (port 9100)
+          ┌────────────────────┼────────────────────┐
+          │                    │                    │
+   ┌──────▼──────┐    ┌───────▼───────┐   ┌───────▼───────┐
+   │ Hot Kitchen  │    │ Pastry/Bakery │   │ Receipt       │
+   │ Printer      │    │ Printer       │   │ Printer       │
+   └──────────────┘    └───────────────┘   └───────────────┘
+```
+
+## Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| `socket.io-client not installed` | Run `npm install` in the agent folder |
+| `Auto-login failed` | Check API_URL, API_EMAIL, API_PASSWORD |
+| `No active printers` | Add printers with IP in the Printers page |
+| `print failed: timeout` | Check printer is on same LAN, IP is correct |
+| `WebSocket disconnected` | Normal — agent auto-reconnects and uses polling meanwhile |
