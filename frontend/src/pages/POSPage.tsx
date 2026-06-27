@@ -1247,7 +1247,7 @@ export default function POSPage() {
                         setChannel(p.channel);
                         if (p.channel !== 'DINE_IN' && p.channel !== 'DELIVERY' && p.channel !== 'TAKEAWAY') setTableName(''); // Clear table for aggregator channels
                         if (isAggregatorChannel(p.channel)) setPayMethod('AGGREGATOR');
-                      }}}
+                      }}
                       style={presetId === p.id && p.color ? { backgroundColor: p.color, color: '#fff' } : {}}
                       className={`px-3 py-1.5 rounded-lg text-xs font-medium ${presetId === p.id ? 'text-white' : 'bg-gray-100 dark:bg-gray-800'}`}
                     >
