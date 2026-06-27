@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { connectKds } from '../lib/kdsSocket';
+import { stationForItem } from '../lib/thermalPrint';
 import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 
@@ -25,6 +26,7 @@ export default function KDSPage() {
   const { t } = useTranslation();
   const { activeBranch } = useAuth();
   const qc = useQueryClient();
+  const [station, setStation] = useState<string | null>(null); // null = ALL stations
 
   const { data: board, isLoading } = useQuery({
     queryKey: ['kds-board', activeBranch?.id ?? 'all'],
@@ -69,12 +71,33 @@ export default function KDSPage() {
   return (
     <div>
       <PageHeader title={t('nav.kds')} subtitle={activeBranch?.name} />
+
+      {/* Station tabs */}
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+        <button onClick={() => setStation(null)} className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap ${!station ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200'}`}>
+          🍽️ All Stations
+        </button>
+        <button onClick={() => setStation('HOT KITCHEN')} className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap ${station === 'HOT KITCHEN' ? 'bg-red-600 text-white' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200'}`}>
+          🔥 Hot Kitchen
+        </button>
+        <button onClick={() => setStation('PASTRY / BAKERY')} className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap ${station === 'PASTRY / BAKERY' ? 'bg-pink-600 text-white' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200'}`}>
+          🧁 Pastry
+        </button>
+        <button onClick={() => setStation('BAR / DRINKS')} className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap ${station === 'BAR / DRINKS' ? 'bg-amber-600 text-white' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200'}`}>
+          ☕ Bar / Drinks
+        </button>
+      </div>
+
       {isLoading ? (
         <LoadingSpinner />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {columns.map((col) => {
-            const items = board?.[col] ?? [];
+            const rawItems = board?.[col] ?? [];
+            // Filter by station if one is selected
+            const items = station
+              ? rawItems.filter((it: any) => stationForItem(it) === station)
+              : rawItems;
             // Group items by order (one card per order, all items inside)
             const orderMap = new Map<string, { orderNo: string; tableName: string; channel: string; orderId: number; items: any[] }>();
             for (const it of items) {
