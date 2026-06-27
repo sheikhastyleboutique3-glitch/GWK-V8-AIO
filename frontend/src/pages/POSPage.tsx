@@ -831,17 +831,17 @@ export default function POSPage() {
                     key={table.id}
                     onMouseDown={floorEditMode ? (e) => { e.preventDefault(); setFloorDragging({ id: table.id, startX: e.clientX, startY: e.clientY, origX: pos.posX, origY: pos.posY }); } : undefined}
                     onTouchStart={floorEditMode ? (e) => { const t = e.touches[0]; setFloorDragging({ id: table.id, startX: t.clientX, startY: t.clientY, origX: pos.posX, origY: pos.posY }); } : undefined}
-                    onClick={!floorEditMode ? () => openTableOrder(table) : undefined}
-                    onDoubleClick={floorEditMode ? async () => {
-                      const name = await prompt({ title: 'Table name', defaultValue: table.name });
+                    onClick={!floorEditMode ? () => openTableOrder(table) : async () => {
+                      // In edit mode: single click opens the table editor
+                      const name = await prompt({ title: 'Edit Table', defaultValue: table.name, placeholder: 'Table name' });
                       if (name === null) return;
                       const seatsStr = await prompt({ title: 'Seats', defaultValue: String(table.seats), type: 'number' });
                       if (seatsStr === null) return;
                       const seats = parseInt(seatsStr, 10) || table.seats;
                       const shape = await prompt({ title: 'Shape', defaultValue: table.shape || 'SQUARE', type: 'select', options: [{ value: 'SQUARE', label: 'Square' }, { value: 'ROUND', label: 'Round' }, { value: 'RECTANGLE', label: 'Rectangle' }] });
                       if (shape === null) return;
-                      api.patch(`/tables/${table.id}`, { name: name || table.name, seats, shape }).then(() => qc.invalidateQueries({ queryKey: ['pos-floors'] }));
-                    } : undefined}
+                      api.patch(`/tables/${table.id}`, { name: name || table.name, seats, shape }).then(() => { toast.success('Table updated'); qc.invalidateQueries({ queryKey: ['pos-floors'] }); });
+                    }}
                     className={`absolute flex flex-col items-center justify-center text-white font-bold shadow-lg transition-transform ${!floorEditMode ? 'cursor-pointer hover:scale-105' : 'cursor-grab active:cursor-grabbing'} ${bgColor} ${isRound ? 'rounded-full' : 'rounded-xl'}`}
                     style={{ left: pos.posX, top: pos.posY, width: pos.width, height: pos.height }}
                   >
