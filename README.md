@@ -3,7 +3,7 @@
 # GWK V8 AIO
 ### All-In-One Restaurant ERP & Point of Sale
 
-**Odoo 19.0 POS + ERP parity (~95%)** · Multi-branch · Bilingual (EN / AR) · Touch-first PWA
+**Odoo 19.0 POS + ERP parity (~95%)** · Multi-branch · Bilingual (EN / AR) · Touch-first PWA · Offline-capable
 
 [![Stack](https://img.shields.io/badge/backend-NestJS%2010-e0234e)](#)
 [![ORM](https://img.shields.io/badge/ORM-Prisma%205-2d3748)](#)
@@ -209,19 +209,24 @@ GWK-V8-AIO/
 
 1. **Login** as `admin@gwk.com` / `Admin@1234`
 2. **Open session:** Sessions → Open (float: 1500)
-3. **POS:** Floor Plan → tap T3 → add Cappuccino (select modifiers) → add Cheesecake
-4. **Kitchen:** Click Kitchen button → KOT prints with modifiers
-5. **KDS:** Open Kitchen Display → see items in QUEUED → click Start → Ready
-6. **Payment:** Back in POS → Payment → Cash → Complete
-7. **Z-Report:** Sessions → expand session → Print or Download PDF
-8. **Waiter:** Login as `waiter@gwk.com` → tap table → add items → Send to Kitchen
-9. **Reports:** POS Reports → Product Sales / Staff Performance / Tips
-10. **Split:** Open order → Split → select items → Pay now (Card)
-11. **Theme:** Click 🎨 in sidebar → pick Deep Slate → Compact density → Schedule ON
-12. **Filter:** Inventory → DataToolbar → Add filter → status = LOW → Apply → Group by Category
-13. **Export:** Click Export CSV → downloads filtered data matching on-screen state
-14. **Saved View:** Apply filters → ⭐ Views → Save current → set as default
-15. **Offline:** Disconnect network → see red banner → add items → reconnect → auto-syncs
+3. **Dine-in:** POS → Floor Plan → tap T3 → add Cappuccino (modifiers) → add Cheesecake
+4. **Numpad:** Tap Cheesecake → tap Qty → type 3 → qty updates to 3 instantly
+5. **Discount:** Tap %Disc → type 10 → 10% discount applied (shown on item + receipt)
+6. **Kitchen:** Click Kitchen → KOT prints "DINE IN T3" with items + modifiers
+7. **KDS:** Open Kitchen Display → 🔥 Hot Kitchen tab → see items → Start → Ready
+8. **Payment:** Back in POS → Payment → Cash 50 → Complete (change: 5.00)
+9. **Receipt:** Auto-prints with QAR currency, tax, company phone/email
+10. **Takeaway:** + New Order → select Takeaway → type customer name → add items → Kitchen → Pay
+11. **KOT shows:** *** TAKEAWAY *** banner prominently
+12. **Waiter:** Login as `waiter@gwk.com` → floor tabs → tap table → add items → Send to Kitchen
+13. **Split:** Waiter → Split → select qty per item → Create separate bill
+14. **Z-Report:** Sessions → Close (must settle all orders first!) → denomination count → PDF
+15. **Theme:** Click 🎨 → pick Emerald preset → Compact density → Schedule dark at 18:00
+16. **Reports:** POS Reports → Product Sales / Staff Performance / Tips
+17. **Filter:** Inventory → DataToolbar → Add filter → Group By Category → Export CSV
+18. **Offline:** Disconnect network → red banner → add items → reconnect → auto-syncs
+19. **Table edit:** Floor Plan → ✏️ → click table → change shape to Round → Save Layout
+20. **Menu:** Menu page → Edit item → check "Allow negative stock" → Save
 
 ---
 

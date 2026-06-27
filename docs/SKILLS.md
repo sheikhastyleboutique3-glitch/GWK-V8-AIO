@@ -7,225 +7,188 @@ Repeatable how-tos for operating and extending the system.
 ## POS Operations
 
 ### Open a trading day
-1. Login as Cashier or Manager → **Sessions / Cash** → Click "Open Session"
-2. Enter the **opening cash float** (e.g., 1500.00) and optionally count denominations
-3. Session is now OPEN — orders can be created by POS and Waiter
+1. Login → **Sessions** → "Open Session"
+2. Enter opening cash float (denomination count)
+3. Session is OPEN — orders can be created
 
-### Take an order (POS)
-1. Go to **POS** → Floor Plan → tap a table (or "+ New Order (no table)")
-2. Tap products to add them. Products with modifiers show a selection modal.
-3. Use the **numpad** (Qty / %Disc / Price) — tap an item first to select it (blue highlight)
-4. Click **Kitchen** to fire to KOT (prints only new unfired items)
-5. Click **Payment** → select tender (Cash/Card/etc.) → complete sale
+### Take a dine-in order
+1. **POS** → Floor Plan → tap a table
+2. System creates an order for that table (or opens existing)
+3. Tap products → modifiers modal if applicable
+4. Use numpad: tap **Qty** → type digits → quantity updates LIVE
+5. Click **Kitchen** → KOT prints only new items
+6. Click **Payment** → add tender → Complete
 
-### Take an order (Waiter)
-1. Go to **Waiter** → tap a table on the floor plan
-2. Tap products (modifier modal appears for items with options)
-3. Use **+/−** buttons on each item to adjust quantity
-4. Click **Send to Kitchen** → prints KOT for newly added items only
-5. Click **Hold** or **Request Bill** → cashier picks it up in POS
+### Take a takeaway/delivery order
+1. **POS** → Order tab → select **Takeaway** or **Delivery** preset
+2. Type customer name/address in the input field
+3. Add items → Kitchen → Payment → Complete
+4. KOT prints with prominent ***** TAKEAWAY ***** or ***** DELIVERY ***** banner
+
+### Numpad (no popups)
+- Tap an item in the order list (green highlight)
+- Tap **Qty** → type `5` → quantity changes to 5 immediately
+- Tap **%Disc** → type `15` → 15% discount applies instantly
+- Tap **Price** → type `12` → price changes to 12.00
+- Tap **C** → clears the numpad buffer
+- All works via mode-based input — no browser popups
 
 ### Split a bill
-1. In POS, open an existing order → click **Split** in the action grid
-2. Select items and quantities to move to a new ticket
-3. Choose: **Cash** / **Card** (pays + completes the split immediately) or **Pay later** (creates a separate open order)
+1. In POS or Waiter → click **Split**
+2. Use **- 0 +** quantity picker per item
+3. Select how many of each item to split off
+4. Click "Create separate bill" → new order created
+5. Works even with a single item (e.g., split 3 of 6 cheesecakes)
 
-### Fire to kitchen (KOT behavior)
-- **New items only:** Kitchen button only prints items not yet fired (`firedAt: null`)
-- **Qty change:** Changing quantity via numpad resets `firedAt` → re-fires with new qty
-- **Station split:** KOT splits into separate pages per station (BAR/DRINKS, HOT KITCHEN, PASTRY)
-- **Modifier display:** Options/variants show as `→ Extra shot, Large` below item name
+### Fire to kitchen (KOT)
+- **New items only:** Kitchen button prints items not yet fired
+- **Qty change:** Changing quantity resets `firedAt` → re-fires
+- **Station split:** KOT splits into BAR/DRINKS, HOT KITCHEN, PASTRY
+- **Channel display:** DINE IN T5 / *** DELIVERY *** / *** TAKEAWAY ***
+- **Sync:** Both POS and Waiter see 🔥 indicator within 5 seconds
+
+### KDS (Kitchen Display)
+- Station tabs: 🍽️ All / 🔥 Hot Kitchen / 🧁 Pastry / ☕ Bar
+- Orders grouped by order number (not split per item)
+- Shows: DINE IN Main Hall → T5 / 🚗 DELIVERY / 🥡 TAKEAWAY
+- Per-item "Start"/"Ready" buttons + "Start All" for batch
+- Real-time via Socket.IO (instant updates)
 
 ### Close & reconcile
-1. **Sessions / Cash** → expand session → "Close Session"
-2. Enter counted denominations → system shows expected vs counted + variance
-3. Print or download Z-Report PDF
-4. Variance posted to finance journal automatically
+1. **Sessions** → "Close Session" (blocked if OPEN orders exist!)
+2. Void or complete all pending orders first
+3. Enter denomination count → expected vs counted → variance
+4. Z-Report prints automatically
 
-### Correct a payment method (post-sale)
-1. Go to **Sales History** → expand a COMPLETED order
-2. Click **"Correct payment"** → select the correct method + enter reason
-3. Original payment soft-reversed, new one created, audit trail logged
+### Void an order
+- Click **❌ Void All** in the action grid
+- Single prompt for cancellation reason (no double popup)
+- Order marked VOIDED in the system
 
-### Offline POS mode
-- If network drops, a **red banner** appears: "Offline mode — orders will sync when connection returns"
-- Orders are queued in IndexedDB (up to 5 retries with exponential backoff)
-- On reconnect, a **blue banner** shows: "Syncing X pending transactions…"
-- Auto-sync uses Background Sync API when available
+### Correct a payment method
+1. **Sales History** → expand a COMPLETED order
+2. Click "Correct payment" → select the tender to fix
+3. Choose new method + enter reason
+4. Original soft-reversed, new payment created, audit logged
 
 ---
 
-## Waiter-specific
+## Floor Plan
 
-### Multi-order tables
-- If a table has 2+ open orders, a picker modal shows all orders
-- Click one to open it, or "+ New order for this table"
+### Edit tables (shape, name, seats)
+1. Click **✏️** button (top-right) to enter edit mode
+2. **Single click** any table → edit dialog:
+   - Table name
+   - Seats (number)
+   - Shape: Square / Round / Rectangle (dropdown)
+3. **Drag** tables to reposition
+4. **Resize** (drag corner handle)
+5. Click "Save Layout" when done
+
+### Add new area/floor
+- In edit mode → click "+ Area" → name it
+- Click "+ Table" → name + seats
+- Pick floor background color (color picker button)
+
+---
+
+## Waiter
+
+### Floor tabs
+- Waiter now shows floor/area tabs (All / Main Hall / Terrace / etc.)
+- New areas created in POS appear immediately
 
 ### Send to kitchen
-- Only **newly added items** print on KOT (tracked via `sentItemIds`)
-- The "Print KOT" button (printer icon) reprints the FULL order
+- Only **unfired items** send (tracked via `firedAt` from DB)
+- Shows "✓ All items sent to kitchen" when nothing new to fire
+- KOT sync: if POS fires, Waiter sees 🔥 within 5 seconds
+
+### Split bill (waiter)
+- Quantity picker per item (not checkboxes)
+- No payment step — cashier handles payment later
 
 ---
 
-## Search, Filter & Export (Odoo-style)
+## Settings
 
-### Using the DataToolbar (available on all 17 list pages)
-1. **Add filter rule:** Click "+ Add filter" → pick field → pick operator → enter value
-2. **AND/OR toggle:** Click the AND/OR badge between rules to toggle logic connector
-3. **Apply:** Click "Apply" — table refreshes with filtered data
-4. **Group By:** Click "Group by" dropdown → check one or more grouping fields → data groups into collapsible sections
-5. **Export:** Click "Export" → CSV downloads matching the exact on-screen filter state
-6. **Save preset:** After applying filters, click "Save" → name it → reuse later from dropdown
-7. **Saved Views:** Click ⭐ Views → Save current → set as default (auto-loads on page visit)
+### Company Info
+- Company Name, Name (AR), Tax ID, Address, **Phone**, **Email**
+- All shown on receipts/invoices/Z-reports
 
-### Export with column picker
-1. On pages with ExportColumnsModal: click Export → select/deselect columns
-2. Choose format: **CSV** or **Excel (.xls)**
-3. Save as template for reuse
+### POS & Sales
+- `pos.requireOpenSession` — toggle (orders blocked without session)
+- `pos.allowNegativeStock` — toggle (global override for stock check)
 
-### Backend CSV export types (17 total)
-`sales-orders` · `customers` · `tax-report` · `requisitions` · `inventory` · `expiry-alerts` · `low-stock` · `purchase-orders` · `wastage` · `sessions` · `transfers` · `deliveries` · `receivables` · `payables` · `users` · `production` · `loyalty`
+### Per-product negative stock
+- Menu page → each product card → toggle "Allow negative stock"
+- Also in Edit modal (checkbox)
+- Inventory page shows `∞ neg OK` badge
 
----
-
-## Theme & Display
-
-### Change theme
-1. Click **🎨** icon in the sidebar (or Settings → Theme section)
-2. Pick from 4 visual theme cards: Corporate Light ☀️ / Deep Slate 🌙 / AMOLED POS 🚨 / Accessibility 👁️
-3. Theme applies instantly (no page reload)
-
-### Change density
-1. In the ThemePanel, pick Compact / Default / Spacious
-2. Or enable **"Auto-detect device"** — touch devices → Spacious, desktop → Default
-
-### Schedule auto-switch
-1. In ThemePanel → Automation → "Time-based schedule" → toggle ON
-2. Set light start time (e.g., 06:00) and dark start time (e.g., 18:00)
-3. System auto-switches every minute
-
-### OS Sync
-- Toggle "Sync with OS" → follows system dark/light preference
+### Currency
+- `default_currency` → shown on all receipts (default: QAR)
 
 ---
 
-## Reports
+## Theme & Display (sidebar 🎨 icon)
 
-### PDF Exports
-- **Sessions page:** "Download PDF" button → Z/X-Report PDF
-- **Sales History:** "Daily Sales PDF" button → full day summary with top products
-- **Per-order:** "PDF" button → professional receipt/invoice PDF
+### Appearance tab
+- Light / Dark mode toggle
+- 9 color presets (Swiss Pro, Ocean Blue, Emerald, Amber, Rose, Violet, Teal, Graphite, Crimson)
+- Manual color picker with full ramp generation
+- Font selector (Inter / Cairo / System)
+- Live preview
 
-### POS Reports page (`/pos-reports`)
-- **Product Sales:** quantities + revenue per product, category breakdown
-- **Staff Performance:** orders, revenue, avg ticket per user
-- **Tip Report:** total tips, by-staff, by-session
-- **Cash Reconciliation:** all closed sessions with variances
-- **End-of-Day Email:** manual trigger or automatic at 23:55
+### Density tab
+- Compact / Default / Spacious
+- Auto-detect device (touch → Spacious)
 
-### CSV Exports (all pages)
-- Every data-list page has an **Export CSV** button via the DataToolbar
-- Exports match the exact on-screen filter state
-- Sales orders export includes parent/child rows (each item gets its own CSV line)
+### Automation tab
+- OS sync (follows system dark/light)
+- Time-based schedule
+- Save to server (cross-device)
 
 ---
 
-## Dev skills
+## Reports & Export
 
-### Add a new backend module
-1. Create `backend/src/modules/<name>/<name>.{service,controller,module}.ts`
-2. Service: Prisma CRUD. Controller: `@UseGuards(JwtAuthGuard, RolesGuard)`, `@Roles(...)`
-3. Register in `backend/src/app.module.ts`
-4. Build: `cd backend && npm run build`
+### CSV Export (17 types)
+sales-orders, customers, tax-report, requisitions, inventory, expiry-alerts, low-stock, purchase-orders, wastage, sessions, transfers, deliveries, receivables, payables, users, production, loyalty
 
-### Add a frontend page
-1. Create `frontend/src/pages/<Name>Page.tsx`
-2. Add route in `App.tsx` with `<ProtectedRoute roles={[...]}>` wrapper
-3. Add nav entry in `components/Layout.tsx` (NAV_SECTIONS)
-4. Add i18n keys in `locales/en.json` + `locales/ar.json`
-5. **Import `DataToolbar`** for search/filter/group/export capabilities
-6. Build: `cd frontend && npm run build`
-
-### Add DataToolbar to a page (Odoo parity)
-```tsx
-import DataToolbar from '../components/DataToolbar';
-
-<DataToolbar
-  pageId="my-page"
-  filterFields={[
-    { key: 'search', label: 'Search', type: 'text' },
-    { key: 'status', label: 'Status', type: 'select', options: [...] },
-    { key: 'createdAt', label: 'Date', type: 'date' },
-  ]}
-  groupByFields={[
-    { key: 'status', label: 'Status' },
-  ]}
-  onFilterApply={(params) => setFilters(params)}
-  groupByValue={groupBy}
-  onGroupByChange={setGroupBy}
-  onExport={() => downloadCsv(...)}
-  className="mb-4"
-/>
-```
-
-### Change the schema
-1. Edit `backend/prisma/schema.prisma`
-2. `npx prisma db push` (dev) or add a migration
-3. `npx prisma generate` → `npm run build`
-
-### Add a new CSV export type
-1. Add a `case 'my-type':` in `backend/src/modules/reports/reports.service.ts` → `exportCsv()`
-2. Add `'my-type'` to `validTypes` array in `reports.controller.ts`
-3. Frontend: call `downloadCsv('/reports/export/my-type/csv?...')`
-
-### Add a modifier/option to a product
-1. **Modifiers** page → create a group (e.g., "Size") with options (S/M/L)
-2. Link the group to products via the product modifier assignment
-3. POS + Waiter will automatically show the selection modal
-
-### Important: modifiers DTO
-The `OrderItemDto.modifiers` field MUST be `@IsOptional() modifiers?: any` (NOT `@IsArray()`).
-`class-transformer` with `enableImplicitConversion: true` strips nested objects if typed as array.
+### DataToolbar (on all 17+ list pages)
+- Advanced filter (AND/OR logic, field picker, operators)
+- Group By (multi-layer collapsible)
+- Export button
+- Saved Views (⭐ set as default)
 
 ---
 
 ## Deployment
 
-### Fresh install
-```bash
-git clone <repo>
-cd backend && npm install && npx prisma db push && npx prisma db seed && npm run build
-cd ../frontend && npm install && npm run build
-cd ../backend && npm run start:prod
-```
-
-### Update (running system)
-```bash
-git pull
-cd backend && npm run build
-cd ../frontend && npm run build
-# Restart backend (pm2 restart / systemctl restart / re-run start:prod)
-```
-
-### Reset database
-```bash
-cd backend
-npx prisma db push --force-reset
+### Fresh install (Windows)
+```powershell
+git clone https://github.com/sheikhastyleboutique3-glitch/GWK-V8-AIO.git
+cd GWK-V8-AIO/backend
+copy .env.example .env  # Edit DATABASE_URL + JWT_SECRET
+npm install
+npx prisma db push
 npx prisma db seed
+npm run build
+cd ..\frontend
+npm install
+npm run build
+cd ..\backend
+npm run start:prod
 ```
 
-### Environment variables (backend `.env`)
-```env
-DATABASE_URL=postgresql://user:pass@localhost:5432/gwk_v8_aio
-JWT_SECRET=your-secret-key
-PORT=3000
+### Update
+```powershell
+git fetch origin && git reset --hard origin/main
+cd backend && npm install && npx prisma db push && npm run build
+cd ..\frontend && npm install && npm run build
+cd ..\backend && npm run start:prod
+```
 
-# Optional: End-of-day email
-EOD_EMAIL_ENABLED=true
-EOD_EMAIL_RECIPIENTS=manager@company.qa
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=email@gmail.com
-SMTP_PASS=app-password
-SMTP_FROM=noreply@company.qa
+### Backup (daily cron)
+```bash
+bash scripts/backup.sh
 ```
