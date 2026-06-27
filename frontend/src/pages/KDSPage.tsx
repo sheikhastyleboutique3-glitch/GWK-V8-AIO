@@ -107,7 +107,7 @@ export default function KDSPage() {
                         <div className="flex items-center gap-1.5 text-xs">
                           {order.channel === 'DELIVERY' && <span className="px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 font-bold">🚗 DELIVERY</span>}
                           {order.channel === 'TAKEAWAY' && <span className="px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 font-bold">🥡 TAKEAWAY</span>}
-                          {order.channel === 'DINE_IN' && order.tableName && <span className="font-medium text-gray-600 dark:text-gray-400">{floorForTable(order.tableName) ? `${floorForTable(order.tableName)} → ` : ''}{order.tableName}</span>}
+                          {order.channel === 'DINE_IN' && order.tableName && <span className="font-medium text-gray-600 dark:text-gray-400">DINE IN {floorForTable(order.tableName) ? `${floorForTable(order.tableName)} → ` : ''}{order.tableName}</span>}
                           {order.channel === 'DINE_IN' && !order.tableName && <span className="text-gray-400">DINE IN</span>}
                           {order.channel !== 'DINE_IN' && order.channel !== 'DELIVERY' && order.channel !== 'TAKEAWAY' && <span className="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-bold">{order.channel?.replace('_', ' ')}</span>}
                         </div>

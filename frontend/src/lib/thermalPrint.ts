@@ -231,7 +231,7 @@ function kotSection(order: OrderLike, items: OrderItemLike[], opts: { station?: 
       <div class="c b xl">KITCHEN ORDER</div>
       ${opts.station ? `<div class="c b lg">${esc(opts.station)}</div>` : ''}
       ${order.channel && order.channel !== 'DINE_IN' ? `<div class="c b lg" style="border:2px solid #000;padding:4px;margin:4px 0;">*** ${esc(order.channel.replace('_', ' '))} ***</div>` : ''}
-      ${order.tableName ? `<div class="c b lg">Table ${esc(order.tableName)}</div>` : ''}
+      ${order.channel === 'DINE_IN' && order.tableName ? `<div class="c b lg">DINE IN ${esc(order.tableName)}</div>` : order.tableName ? `<div class="c b lg">Table ${esc(order.tableName)}</div>` : ''}
       <div class="c sm">${esc(order.orderNo)} &middot; ${esc(when)}</div>
       ${opts.waiter ? `<div class="c sm">Waiter: ${esc(opts.waiter)}</div>` : ''}
       ${order.notes ? `<div class="c sm b" style="margin-top:4px;border:1px dashed #000;padding:2px 4px;">📝 ${esc(order.notes)}</div>` : ''}
