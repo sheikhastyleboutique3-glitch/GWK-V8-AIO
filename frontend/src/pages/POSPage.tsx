@@ -1675,8 +1675,6 @@ export default function POSPage() {
               <button
                 onClick={async () => {
                   if (mode === 'existing' && loadedOrderId && loadedOrder) {
-                    const reason = window.prompt(`Cancel "${loadedOrder.orderNo}"?\nReason:`);
-                    if (reason === null) return;
                     cancelOrderWithNote(loadedOrderId, loadedOrder.orderNo);
                   } else {
                     toast('Load an existing order to cancel');

@@ -147,6 +147,16 @@ export class PosSessionsService {
     if (!session) throw new NotFoundException(`Session ${sessionId} not found`);
     if (session.status !== PosSessionStatus.OPEN) throw new BadRequestException('Session is already closed.');
 
+    // Block closing if there are OPEN/HELD orders on this branch in this session
+    const openOrders = await this.prisma.order.count({
+      where: { sessionId, status: { in: [OrderStatus.OPEN, OrderStatus.HELD] } },
+    });
+    if (openOrders > 0) {
+      throw new BadRequestException(
+        `Cannot close session: ${openOrders} order${openOrders > 1 ? 's' : ''} still open. Complete or void all orders first.`,
+      );
+    }
+
     // Compute expected cash from sales within this session.
     const orders = await this.prisma.order.findMany({
       where: { sessionId, status: OrderStatus.COMPLETED },
