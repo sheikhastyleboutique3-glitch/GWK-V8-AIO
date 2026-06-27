@@ -30,10 +30,14 @@ initSyncManager();
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
-      staleTime: 0,
+      retry: 3,
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
+      staleTime: 30_000, // 30s — don't refetch if data is fresh
+      gcTime: 10 * 60_000, // 10min — keep in cache even if unused
       refetchOnWindowFocus: true,
       refetchOnReconnect: true,
+      // Keep previous data visible while refetching — prevents "flash of empty"
+      placeholderData: (prev: any) => prev,
     },
   },
 });
