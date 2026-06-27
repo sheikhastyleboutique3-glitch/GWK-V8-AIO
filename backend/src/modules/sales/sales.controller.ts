@@ -170,6 +170,11 @@ export class SalesController {
     return this.svc.updateOrder(id, dto);
   }
 
+  @Patch(':id/tip') @Roles(...POS_ROLES)
+  setTip(@Param('id', ParseIntPipe) id: number, @Body() dto: { tip: number }) {
+    return this.svc.setTipAfterPayment(id, dto.tip ?? 0);
+  }
+
   @Patch(':id/resume') @Roles(...POS_ROLES)
   resume(@Param('id', ParseIntPipe) id: number) {
     return this.svc.setStatus(id, OrderStatus.OPEN);

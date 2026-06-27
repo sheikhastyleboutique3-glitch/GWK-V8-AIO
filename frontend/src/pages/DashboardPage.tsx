@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
 import StatsCard from '../components/StatsCard';
+import DashboardWidgets from '../components/DashboardWidgets';
 import StatusBadge from '../components/StatusBadge';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { format } from 'date-fns';
@@ -112,6 +113,8 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* Role-based KPI Widgets */}
+      <DashboardWidgets />
       {/* Welcome banner */}
       <div className="bg-gradient-to-r from-brand-800 to-brand-600 rounded-2xl p-6 text-white">
         <div className="flex items-start justify-between gap-4">

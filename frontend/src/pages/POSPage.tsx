@@ -16,6 +16,7 @@ import { usePrompt } from '../lib/usePrompt';
 import { useSocket } from '../lib/useSocket';
 import { usePosHotkeys } from '../lib/usePosHotkeys';
 import PinSwitchModal from '../components/PinSwitchModal';
+import QrReview from '../components/QrReview';
 
 interface CartLine {
   itemId?: number; // present when the line lives on a persisted (loaded) order
@@ -54,6 +55,7 @@ export default function POSPage() {
 
   // ─── PIN-based cashier switch (Odoo-style) ───
   const [showPinSwitch, setShowPinSwitch] = useState(false);
+  const [showQrReview, setShowQrReview] = useState(false);
 
   // ─── TOP-LEVEL VIEW SWITCH (Odoo-style: Floor Plan / Order / Orders) ───
   const [posView, setPosView] = useState<'floor' | 'order' | 'orders'>('floor');
@@ -589,6 +591,9 @@ export default function POSPage() {
       setLastReceipt(order);
       // Auto-print the customer receipt right after payment.
       printReceipt(order, businessInfo);
+      // Show QR review prompt (if configured)
+      const reviewUrl = (settings || []).find((s: any) => s.key === 'review_url')?.value;
+      if (reviewUrl) setTimeout(() => setShowQrReview(true), 1500);
       setCart([]);
       setComboCart([]);
       setTableName('');
@@ -1541,6 +1546,26 @@ export default function POSPage() {
                     ))}
                   </div>
                 )}
+                {/* Quick-Create: no results found → offer to create inline */}
+                {customerSearch.trim().length >= 2 && (customerResults?.length ?? 0) === 0 && (
+                  <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-2">
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await api.post('/customers', { name: customerSearch.trim() });
+                          const created = res.data?.data;
+                          setCustomer(created);
+                          setCustomerSearch('');
+                          toast.success(`Customer "${created.name}" created`);
+                          qc.invalidateQueries({ queryKey: ['pos-customers'] });
+                        } catch (e: any) { toast.error(e.response?.data?.message || 'Failed to create'); }
+                      }}
+                      className="w-full text-start px-3 py-2 text-sm rounded-lg bg-primary/10 hover:bg-primary/20 text-primary font-medium"
+                    >
+                      + Create "{customerSearch.trim()}"
+                    </button>
+                  </div>
+                )}
               </div>
             ) : null}
           </div>
@@ -1929,6 +1954,24 @@ export default function POSPage() {
                   {t('pos.refund')}
                 </button>
               )}
+              {lastReceipt.status === 'COMPLETED' && (
+                <button
+                  onClick={async () => {
+                    const tipStr = await prompt({ title: 'Add Tip', placeholder: 'Tip amount', type: 'number', defaultValue: String(lastReceipt.tip || '') });
+                    if (tipStr === null) return;
+                    const tipAmt = parseFloat(tipStr) || 0;
+                    if (tipAmt >= 0) {
+                      api.patch(`/sales/orders/${lastReceipt.id}/tip`, { tip: tipAmt }).then(() => {
+                        toast.success(`Tip of ${tipAmt.toFixed(2)} added`);
+                        setLastReceipt({ ...lastReceipt, tip: tipAmt });
+                      }).catch(() => toast.error('Failed to add tip'));
+                    }
+                  }}
+                  className="w-full mt-2 py-2 rounded-xl border border-amber-300 text-amber-700 dark:text-amber-400 text-sm font-medium"
+                >
+                  💰 {lastReceipt.tip > 0 ? `Tip: ${Number(lastReceipt.tip).toFixed(2)} (change)` : 'Add Tip'}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -2125,6 +2168,12 @@ export default function POSPage() {
         onClose={() => setShowPinSwitch(false)}
         branchId={branchId}
         onSwitched={() => window.location.reload()}
+      />
+      <QrReview
+        show={showQrReview}
+        onClose={() => setShowQrReview(false)}
+        url={(settings || []).find((s: any) => s.key === 'review_url')?.value}
+        businessName={businessInfo.businessName}
       />
     </div>
   );
