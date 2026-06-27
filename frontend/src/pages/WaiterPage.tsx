@@ -50,12 +50,23 @@ export default function WaiterPage() {
   const waiterName = user ? `${user.firstName} ${user.lastName}` : undefined;
 
   // ---- Floor-plan data ----
+  const { data: floors } = useQuery({
+    queryKey: ['waiter-floors', branchId],
+    queryFn: () => api.get('/floors', { params: { branchId } }).then((r) => r.data.data),
+    enabled: !!branchId,
+    refetchInterval: 15_000,
+  });
   const { data: tables, isLoading: tablesLoading } = useQuery({
     queryKey: ['waiter-tables', branchId],
     queryFn: () => api.get('/tables', { params: { branchId } }).then((r) => r.data.data),
     enabled: !!branchId,
     refetchInterval: 15_000,
   });
+  const [activeFloorId, setActiveFloorId] = useState<number | null>(null);
+  // Filter tables by active floor (if selected)
+  const visibleTables = activeFloorId
+    ? (tables || []).filter((t: any) => t.floorId === activeFloorId)
+    : (tables || []);
 
   // Open + held orders, so we can show which table is busy and resume bills.
   const { data: activeOrders } = useQuery({
@@ -357,12 +368,25 @@ export default function WaiterPage() {
             </span>
           ))}
         </div>
+        {/* Floor/Area tabs */}
+        {(floors?.length ?? 0) > 0 && (
+          <div className="flex gap-2 mb-3">
+            <button onClick={() => setActiveFloorId(null)} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${!activeFloorId ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800'}`}>
+              All
+            </button>
+            {(floors || []).map((f: any) => (
+              <button key={f.id} onClick={() => setActiveFloorId(f.id)} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${activeFloorId === f.id ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800'}`}>
+                {f.name}
+              </button>
+            ))}
+          </div>
+        )}
         {tablesLoading ? (
           <LoadingSpinner />
         ) : (
           <div className="relative rounded-2xl overflow-hidden border-2 border-gray-200 dark:border-gray-700 w-full"
             style={{ maxWidth: 900, height: 'clamp(300px, 60vw, 500px)', background: '#f0fdf4' }}>
-            {(tables || []).filter((tb: TableRow) => tb.isActive).map((table: TableRow) => {
+            {(visibleTables || []).filter((tb: TableRow) => tb.isActive).map((table: TableRow) => {
               const tableOrders = ordersForTable(table.name);
               const ord = tableOrders[0];
               const isOccupied = table.status === 'OCCUPIED' || tableOrders.length > 0;
@@ -389,7 +413,7 @@ export default function WaiterPage() {
                 </button>
               );
             })}
-            {!tables?.length && <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">{t('waiter.noTables')}</div>}
+            {!visibleTables?.length && <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">{t('waiter.noTables')}</div>}
           </div>
         )}
 
