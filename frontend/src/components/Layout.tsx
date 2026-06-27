@@ -93,6 +93,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'team',
     items: [
       { key: 'staffTasks', path: '/staff-tasks', icon: ClipboardDocumentCheckIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CLEANER', 'WAREHOUSE'] },
+      { key: 'staffPerformance', path: '/staff-performance', icon: ChartBarIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
       { key: 'users',      path: '/users',       icon: UsersIcon,                  roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
       { key: 'permissions', path: '/permissions', icon: ShieldCheckIcon,            roles: ['SUPER_ADMIN'] },
     ],

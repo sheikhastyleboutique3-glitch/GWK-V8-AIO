@@ -41,6 +41,7 @@ import PromotionsPage from './pages/PromotionsPage';
 import RecipesPage from './pages/RecipesPage';
 import ModifiersPage from './pages/ModifiersPage';
 import StaffTasksPage from './pages/StaffTasksPage';
+import StaffPerformancePage from './pages/StaffPerformancePage';
 import WaiterPage from './pages/WaiterPage';
 import DeliveriesPage from './pages/DeliveriesPage';
 import SalesOrdersPage from './pages/SalesOrdersPage';
@@ -363,6 +364,14 @@ export default function App() {
           element={
             <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'CLEANER', 'WAREHOUSE']}>
               <StaffTasksPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="staff-performance"
+          element={
+            <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER']}>
+              <StaffPerformancePage />
             </ProtectedRoute>
           }
         />

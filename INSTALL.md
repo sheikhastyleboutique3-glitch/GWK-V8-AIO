@@ -1,169 +1,161 @@
-# GWK V8 AIO — Installation & Operations Guide
+# GWK V8 AIO — Installation Guide (General Linux/Mac)
 
-This guide covers local development, Docker, database migration/seeding, and production deployment.
+## Prerequisites
 
----
-
-## 1. Prerequisites
-
-| Tool | Version |
-|------|---------|
-| Node.js | 18 LTS or 20 LTS |
-| npm | 9+ |
-| PostgreSQL | 14+ (16 recommended) |
-| Docker + Docker Compose | optional, for containerized run |
+- **Node.js** 18+ (recommended: 20 LTS)
+- **PostgreSQL** 15+
+- **npm** or **yarn**
+- **Git**
 
 ---
 
-## 2. Environment variables
-
-Copy the template and fill in real values:
+## Option A: Docker (Recommended — Single Command)
 
 ```bash
+# 1. Clone
+git clone https://github.com/sheikhastyleboutique3-glitch/GWK-V8-AIO.git
+cd GWK-V8-AIO
+
+# 2. Configure
 cp .env.example .env
+nano .env   # Set DATABASE_URL, JWT_SECRET, SMTP settings
+
+# 3. Start everything
+docker compose up -d --build
+
+# 4. Wait for healthy status
+docker compose ps   # all 3 services should be "healthy" or "running"
+
+# 5. Access
+# Frontend: http://localhost
+# Backend API: http://localhost/api
+# Swagger Docs: http://localhost/api/docs (dev mode only)
 ```
 
-| Variable | Purpose |
-|----------|---------|
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Postgres credentials (used by Docker + `DATABASE_URL`). |
-| `DATABASE_URL` | Backend connection string, e.g. `postgresql://gwk_user:gwk_password@localhost:5432/gwk_v8_aio?schema=public` |
-| `JWT_SECRET` / `JWT_REFRESH_SECRET` | Auth secrets — generate with `openssl rand -hex 32`. |
-| `JWT_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` | Token lifetimes (e.g. `15m` / `7d`). |
-| `ALLOWED_ORIGINS` | Exact browser origin(s), comma-separated, no trailing slash. |
-| `NODE_ENV` | `development` or `production`. |
-
-Create `backend/.env` with at least:
-
-```env
-DATABASE_URL="postgresql://gwk_user:gwk_password@localhost:5432/gwk_v8_aio?schema=public"
-JWT_SECRET="<openssl rand -hex 32>"
-JWT_REFRESH_SECRET="<openssl rand -hex 32>"
-JWT_EXPIRES_IN="15m"
-JWT_REFRESH_EXPIRES_IN="7d"
-ALLOWED_ORIGINS="http://localhost:5173"
-```
+**Default ports:**
+- Frontend (Nginx): 80
+- Backend (NestJS): 3000 (internal, proxied through frontend Nginx)
+- PostgreSQL: 5432 (internal)
 
 ---
 
-## 3. Local development (without Docker)
+## Option B: Manual Setup (Development)
 
-### 3.1 Start PostgreSQL
-Use a local Postgres or just the DB container:
+### 1. Database
 
 ```bash
-docker compose up -d db
+# Install PostgreSQL (Ubuntu/Debian)
+sudo apt install postgresql postgresql-client
+
+# Create database
+sudo -u postgres createuser gwk_user -P   # Enter password when prompted
+sudo -u postgres createdb gwk_v8_aio -O gwk_user
 ```
 
-### 3.2 Backend (NestJS + Prisma)
+### 2. Backend
 
 ```bash
 cd backend
+
+# Install dependencies
 npm install
-npx prisma generate          # generate the typed client
-npx prisma migrate deploy    # apply the clean baseline migration
-npx prisma db seed           # load the demo restaurant
-npm run start:dev            # API on http://localhost:3000  (Swagger: /api)
+
+# Configure environment
+cp .env.example .env
+# Edit .env:
+#   DATABASE_URL=postgresql://gwk_user:YOUR_PASSWORD@localhost:5432/gwk_v8_aio
+#   JWT_SECRET=your-random-secret-here
+#   JWT_EXPIRES_IN=8h
+
+# Run migrations + generate Prisma client
+npx prisma migrate deploy
+npx prisma generate
+
+# Seed demo data
+npx prisma db seed
+
+# Start development server
+npm run start:dev
 ```
 
-### 3.3 Frontend (React + Vite)
+### 3. Frontend
 
 ```bash
 cd frontend
+
+# Install dependencies
 npm install
-npm run dev                  # UI on http://localhost:5173
+
+# Start development server
+npm run dev
+# Opens at http://localhost:5173
+```
+
+### 4. Print Agent (Optional — for thermal printers)
+
+```bash
+cd agent
+npm install
+
+# Run (on a PC/Raspberry Pi on the same LAN as printers)
+API_URL=http://localhost:3000 node print-agent.mjs
 ```
 
 ---
 
-## 4. Database: migration & seeding
+## Post-Installation Setup
 
-This repo ships a **single clean baseline migration** (`backend/prisma/migrations/00000000000000_init`) generated from the full schema — no legacy migration chain to repair.
+### First Login
+1. Open the app in your browser
+2. Login: `admin@gwk.com` / `Admin@1234`
+3. Go to **Settings** → set company name, logo, currency, address
 
-```bash
-cd backend
+### Configure Branch
+1. Go to **Branches** → edit or create your branch
+2. Set address, phone, cash float
 
-# First-time / CI / production: apply migrations idempotently
-npx prisma migrate deploy
+### Add Printers
+1. Go to **Printers** → Add Printer
+2. Enter name, IP address, port (default 9100)
+3. Go to **Categories** → assign each category to a printer (station routing)
 
-# Load demo data (branches, menu + recipes, floor plan, printers, payment methods)
-npx prisma db seed
+### Set Up Users
+1. Go to **Users** → create accounts for staff
+2. Set role (Cashier, Waiter, Kitchen, etc.)
+3. Set a 4-digit POS PIN for quick switching
+4. Assign to branch(es)
 
-# Inspect data
-npx prisma studio
-```
-
-> **Resetting a dev database** (DESTROYS DATA):
-> ```bash
-> npx prisma migrate reset
-> ```
-
-The backend container entrypoint runs `prisma migrate deploy` automatically before boot (see `backend/Dockerfile` → `npm run start:migrate`).
+### Enable Staff Performance
+1. Go to **Settings** → Staff Performance → set to "true"
+2. Report generates nightly at 00:30 (or click "Refresh" to generate now)
 
 ---
 
-## 5. Run everything with Docker Compose
+## Production Checklist
+
+- [ ] Set `NODE_ENV=production` in .env
+- [ ] Set strong `JWT_SECRET` (random 64-char string)
+- [ ] Set `ALLOWED_ORIGINS` to your domain
+- [ ] Configure SMTP for EOD email reports
+- [ ] Set up SSL (Let's Encrypt / Cloudflare)
+- [ ] Configure firewall (only ports 80/443 open)
+- [ ] Set up daily PostgreSQL backups
+- [ ] Run Print Agent as a systemd service (see agent/README.md)
+
+---
+
+## Updating
 
 ```bash
-cp .env.example .env          # edit secrets
+cd GWK-V8-AIO
+git fetch origin && git reset --hard origin/main
 docker compose up -d --build
 ```
 
-Services:
-- **db** — PostgreSQL (persisted volume)
-- **backend** — runs `prisma migrate deploy` then boots the API
-- **frontend** — built static UI served over HTTP
-
-After the stack is healthy, seed the demo once:
-
+Or without Docker:
 ```bash
-docker compose exec backend npx prisma db seed
+git fetch origin && git reset --hard origin/main
+cd backend && npm install && npx prisma migrate deploy && npm run build
+cd ../frontend && npm install && npm run build
+# Restart your process manager (pm2 restart all)
 ```
-
----
-
-## 6. Build for production
-
-```bash
-# Backend
-cd backend && npm run build && node dist/main      # or: npm run start:migrate
-
-# Frontend
-cd frontend && npm run build                        # outputs dist/ (serve via nginx/CDN)
-```
-
----
-
-## 7. First-run checklist (operations)
-
-1. **Log in** as the seeded admin (`Admin@1234`) and change the password.
-2. **Approve staff** — new users land as `PENDING` until a manager approves them.
-3. **Configure the register** — verify the `PosConfig` (terminal), floors, and tables.
-4. **Open a POS session** — perform the **opening cash count** before taking orders.
-5. **Map printers** — set each menu category's KOT printer (Kitchen / Barista / Pastry) and run the on-prem print agent on the LAN.
-6. **At end of shift** — run the **closing control**: count the drawer; the system posts the expected-vs-counted discrepancy to the finance journal.
-
----
-
-## 8. Troubleshooting
-
-| Symptom | Fix |
-|---------|-----|
-| `P1001 can't reach database` | Check `DATABASE_URL` host/port and that Postgres is up (`docker compose ps`). |
-| `P3009 failed migration` | This baseline is clean; on a fresh DB run `prisma migrate reset` (dev) or ensure the DB is empty before `migrate deploy`. |
-| CORS error in browser | Set `ALLOWED_ORIGINS` to the exact UI origin (no trailing slash). |
-| KOT not printing | Printer routing is config only; the ESC/POS byte-push requires the on-prem print agent on the same LAN as the printer IPs. |
-| Orders not appearing on KDS | Confirm the order's category has a `station`/`printerId` and the KDS WebSocket is connected. |
-
----
-
-## 9. Useful scripts
-
-| Location | Command | Purpose |
-|----------|---------|---------|
-| backend | `npm run start:dev` | Dev API with hot reload |
-| backend | `npm run build` | Compile to `dist/` |
-| backend | `npm run start:migrate` | `prisma migrate deploy` + boot (prod entrypoint) |
-| backend | `npx prisma studio` | Browse/edit data |
-| backend | `npx prisma db seed` | Load demo data |
-| frontend | `npm run dev` | Dev UI |
-| frontend | `npm run build` | Production build |

@@ -28,6 +28,7 @@ export default function SettingsPage() {
     { group: 'inventory', label: '\ud83d\udce6 Inventory', keys: ['expiry_warning_days', 'low_stock_alert'] },
     { group: 'localization', label: '\ud83c\udf0d Localization', keys: ['default_language'] },
     { group: 'review', label: '\u2b50 Customer Reviews', keys: ['review_url'] },
+    { group: 'staff_perf', label: '\ud83d\udcca Staff Performance', keys: ['staff_performance_enabled'] },
   ];
   return (
     <div className="max-w-2xl">
