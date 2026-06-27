@@ -1132,31 +1132,17 @@ export default function POSPage() {
           >
             + New Order
           </button>
-          {tableName && channel === 'DINE_IN' && (
-            <span className="text-xs text-gray-500">Table: <strong>{tableName}</strong></span>
+          {channel === 'DINE_IN' && !tableName && (
+            <button onClick={() => setPosView('floor')} className="px-3 py-1.5 rounded-lg border border-amber-300 text-amber-700 dark:text-amber-400 text-xs font-medium">
+              🪑 Select Table
+            </button>
           )}
-        </div>
-      )}
-      {(pendingBills?.length ?? 0) > 0 && (
-        <div className="mb-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3">
-          <div className="text-xs font-semibold text-gray-500 mb-2">{t('pos.pendingBills')}</div>
-          <div className="flex flex-wrap gap-2">
-            {(pendingBills || []).map((o: any) => (
-              <button
-                key={o.id}
-                onClick={() => loadBill(o)}
-                className={`px-3 py-2 rounded-lg text-sm border ${
-                  loadedOrderId === o.id
-                    ? 'bg-primary text-white border-primary'
-                    : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700'
-                }`}
-              >
-                {o.tableName ? `${t('pos.table')} ${o.tableName}` : o.orderNo.slice(-6)}
-                <span className="ms-2 opacity-80">{Number(o.total).toFixed(2)}</span>
-                {o.status === 'HELD' && <span className="ms-1">⏸</span>}
-              </button>
-            ))}
-          </div>
+          {tableName && channel === 'DINE_IN' && (
+            <span className="text-xs text-gray-500">
+              Table: <strong>{tableName}</strong>
+              <button onClick={() => setPosView('floor')} className="ms-2 text-primary hover:underline">Change</button>
+            </span>
+          )}
         </div>
       )}
 
