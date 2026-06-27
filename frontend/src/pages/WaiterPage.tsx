@@ -11,6 +11,7 @@ import { printKot } from '../lib/thermalPrint';
 import { useOnlineStatus } from '../lib/useOnlineStatus';
 import OfflineBanner from '../components/OfflineBanner';
 import { useSocket } from '../lib/useSocket';
+import PinSwitchModal from '../components/PinSwitchModal';
 
 interface TableRow { id: number; name: string; seats: number; status: string; branchId: number; isActive: boolean }
 interface OrderRow { id: number; orderNo: string; status: string; tableName?: string | null; total: number }
@@ -38,6 +39,7 @@ export default function WaiterPage() {
   // ─── Real-time sync: instant updates from POS/KDS/other waiters ───
   useSocket();
 
+  const [showPinSwitch, setShowPinSwitch] = useState(false);
   const [selectedTable, setSelectedTable] = useState<TableRow | null>(null);
   const [activeOrderId, setActiveOrderId] = useState<number | null>(null);
   const [categoryId, setCategoryId] = useState<number | undefined>(undefined);
@@ -368,6 +370,19 @@ export default function WaiterPage() {
       <div>
         <OfflineBanner />
         <PageHeader title={t('nav.waiter')} subtitle={activeBranch?.name} />
+        {/* Waiter info + PIN switch */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+            <span>👤</span>
+            <span className="font-medium text-gray-700 dark:text-gray-200">{user?.firstName} {user?.lastName}</span>
+          </div>
+          <button
+            onClick={() => setShowPinSwitch(true)}
+            className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300 transition-colors"
+          >
+            🔄 Switch Waiter
+          </button>
+        </div>
         <div className="flex flex-wrap gap-3 mb-4 text-xs text-gray-500">
           {['AVAILABLE', 'OCCUPIED', 'BILL_REQUESTED', 'RESERVED'].map((s) => (
             <span key={s} className="inline-flex items-center gap-1.5">
@@ -468,6 +483,7 @@ export default function WaiterPage() {
             </div>
           </div>
         )}
+        <PinSwitchModal open={showPinSwitch} onClose={() => setShowPinSwitch(false)} branchId={branchId} onSwitched={() => window.location.reload()} />
       </div>
     );
   }
