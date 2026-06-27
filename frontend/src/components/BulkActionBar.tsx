@@ -71,9 +71,10 @@ export default function BulkActionBar({ selectedIds, totalCount, onClear, onSele
 /**
  * Hook: manage bulk selection state for a list of items.
  */
+import { useState as useStateBulk } from 'react';
+
 export function useBulkSelect<T extends { id: number }>(items: T[]) {
-  const { useState } = require('react');
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [selectedIds, setSelectedIds] = useStateBulk<number[]>([]);
 
   const toggle = (id: number) => {
     setSelectedIds((prev: number[]) =>
