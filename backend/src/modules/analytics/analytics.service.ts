@@ -485,14 +485,12 @@ export class AnalyticsService {
    */
   async peakHourHeatmap(opts: { branchId?: number; from?: string; to?: string }) {
     const { gte, lte } = this.range(undefined, opts.from, opts.to);
-    const branchFilter = opts.branchId ? `AND o."branchId" = ${opts.branchId}` : '';
-    const dateFilter = gte ? `AND o."completedAt" >= '${gte.toISOString()}'` : '';
-    const dateFilter2 = lte ? `AND o."completedAt" <= '${lte.toISOString()}'` : '';
 
-    // Raw SQL for hour/day extraction (PostgreSQL EXTRACT)
-    const rows = await this.prisma.$queryRawUnsafe<
+    // SECURITY FIX: Use parameterized $queryRaw (tagged template) instead of
+    // $queryRawUnsafe with string interpolation to prevent SQL injection.
+    const rows = await this.prisma.$queryRaw<
       Array<{ dow: number; hour: number; orders: bigint; revenue: number; avg_ticket: number }>
-    >(`
+    >`
       SELECT
         EXTRACT(DOW FROM o."completedAt") AS dow,
         EXTRACT(HOUR FROM o."completedAt") AS hour,
@@ -501,12 +499,12 @@ export class AnalyticsService {
         COALESCE(AVG(o.total), 0) AS avg_ticket
       FROM orders o
       WHERE o.status = 'COMPLETED'
-        ${branchFilter}
-        ${dateFilter}
-        ${dateFilter2}
+        AND (${opts.branchId ?? null}::int IS NULL OR o."branchId" = ${opts.branchId ?? 0})
+        AND (${gte?.toISOString() ?? null}::timestamptz IS NULL OR o."completedAt" >= ${gte?.toISOString() ?? '1970-01-01T00:00:00Z'}::timestamptz)
+        AND (${lte?.toISOString() ?? null}::timestamptz IS NULL OR o."completedAt" <= ${lte?.toISOString() ?? '2099-12-31T23:59:59Z'}::timestamptz)
       GROUP BY EXTRACT(DOW FROM o."completedAt"), EXTRACT(HOUR FROM o."completedAt")
       ORDER BY dow, hour
-    `);
+    `;
 
     // Build 7×24 matrix
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];

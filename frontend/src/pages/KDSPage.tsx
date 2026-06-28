@@ -6,6 +6,7 @@ import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { connectKds } from '../lib/kdsSocket';
 import { stationForItem } from '../lib/thermalPrint';
+import { useOnlineStatus } from '../lib/useOnlineStatus';
 import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 
@@ -39,6 +40,7 @@ export default function KDSPage() {
   const { activeBranch } = useAuth();
   const qc = useQueryClient();
   const [station, setStation] = useState<string | null>(null); // null = ALL stations
+  const { isOnline } = useOnlineStatus();
 
   // Force dark mode on KDS (kitchen visibility)
   useKdsDarkMode();
@@ -153,6 +155,17 @@ export default function KDSPage() {
   return (
     <div>
       <PageHeader title={t('nav.kds')} subtitle={activeBranch?.name} />
+
+      {/* ── Offline Warning Banner for Kitchen Staff ── */}
+      {!isOnline && (
+        <div className="mb-4 px-4 py-3 rounded-xl bg-red-600 text-white flex items-center gap-3 animate-pulse">
+          <span className="text-2xl">📡</span>
+          <div>
+            <div className="font-bold text-sm">OFFLINE — Data may be stale</div>
+            <div className="text-xs opacity-90">Kitchen display is not receiving live updates. Check network connection.</div>
+          </div>
+        </div>
+      )}
 
       {/* Station tabs + Sound toggle */}
       <div className="flex gap-2 mb-4 overflow-x-auto pb-1 items-center">

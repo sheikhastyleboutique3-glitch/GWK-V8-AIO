@@ -43,11 +43,24 @@ const BRANCH_ID = process.env.BRANCH_ID || '';
 const POLL_MS = parseInt(process.env.POLL_MS || '30000', 10); // Fallback only — WebSocket is primary
 
 let API_TOKEN = process.env.API_TOKEN || '';
-const printed = new Set();        // KOT: order IDs already printed
-const receiptPrinted = new Set(); // Receipt: completed order IDs already printed
+// TTL-based cache to prevent memory leak on long-running agent (Raspberry Pi).
+// Entries expire after 24 hours — safely covers any single shift.
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const printed = new Map();        // KOT: orderId → timestamp
+const receiptPrinted = new Map(); // Receipt: orderId → timestamp
 let printers = [];
 let wsConnected = false;
 let pollTimer = null;
+
+// Periodically purge expired cache entries (every hour)
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, ts] of printed) { if (now - ts > CACHE_TTL_MS) printed.delete(key); }
+  for (const [key, ts] of receiptPrinted) { if (now - ts > CACHE_TTL_MS) receiptPrinted.delete(key); }
+  if (printed.size > 0 || receiptPrinted.size > 0) {
+    console.log(`🧹 Cache: ${printed.size} KOT + ${receiptPrinted.size} receipt entries`);
+  }
+}, 60 * 60 * 1000);
 
 // ── Auto-login ───────────────────────────────────────────────────────────────
 async function autoLogin() {
@@ -148,7 +161,7 @@ async function printKot(orderId) {
   try {
     const kotData = await api(`/printers/kot/${orderId}`);
     const tickets = kotData?.tickets || kotData || [];
-    if (!tickets.length) { printed.add(orderId); return; }
+    if (!tickets.length) { printed.set(orderId, Date.now()); return; }
 
     for (const tk of tickets) {
       const printerIp = tk.printer?.ipAddress || printers[0]?.ipAddress;
@@ -158,7 +171,7 @@ async function printKot(orderId) {
       const ok = await sendToPrinter(printerIp, printerPort, buf);
       if (ok) console.log(`  🍳 KOT → ${tk.station} @ ${printerIp}:${printerPort}`);
     }
-    printed.add(orderId);
+    printed.set(orderId, Date.now());
   } catch (e) {
     console.error(`  ❌ KOT order ${orderId}: ${e.message}`);
   }
@@ -169,18 +182,18 @@ async function printReceipt(orderId) {
   if (receiptPrinted.has(orderId)) return;
   try {
     const receiptData = await api(`/printers/receipt/${orderId}`);
-    if (!receiptData?.text) { receiptPrinted.add(orderId); return; }
+    if (!receiptData?.text) { receiptPrinted.set(orderId, Date.now()); return; }
 
     const printerIp = receiptData.printer?.ipAddress || printers[0]?.ipAddress;
     const printerPort = receiptData.printer?.port || printers[0]?.port || 9100;
-    if (!printerIp) { receiptPrinted.add(orderId); return; }
+    if (!printerIp) { receiptPrinted.set(orderId, Date.now()); return; }
 
     const buf = escpos(receiptData.text, receiptData.printer?.widthMm || 80);
     const ok = await sendToPrinter(printerIp, printerPort, buf);
     if (ok) console.log(`  🧾 RECEIPT @ ${printerIp}:${printerPort}`);
-    receiptPrinted.add(orderId);
+    receiptPrinted.set(orderId, Date.now());
   } catch (e) {
-    receiptPrinted.add(orderId); // don't retry
+    receiptPrinted.set(orderId, Date.now()); // don't retry
   }
 }
 

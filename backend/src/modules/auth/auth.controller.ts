@@ -1,6 +1,7 @@
-import { Controller, Post, Get, Body, UseGuards, Patch } from '@nestjs/common';
+import { Controller, Post, Get, Body, UseGuards, Patch, Req } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import { Request } from 'express';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -22,8 +23,9 @@ export class AuthController {
   @Public()
   @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @Post('login')
-  login(@Body() body: LoginDto) {
-    return this.authService.login(body.email, body.password);
+  login(@Body() body: LoginDto, @Req() req: Request) {
+    const ip = req.ip || req.headers['x-forwarded-for']?.toString() || 'unknown';
+    return this.authService.login(body.email, body.password, ip);
   }
 
   // Max 10 refreshes per minute per IP.

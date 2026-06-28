@@ -29,6 +29,11 @@ export class AdminService {
   }
 
   private async resetSequence(tableName: string): Promise<void> {
+    // SAFETY: Validate table name is alphanumeric + underscores only (prevent injection)
+    if (!/^[a-z_][a-z0-9_]*$/i.test(tableName)) {
+      this.logger.warn(`Invalid table name rejected: ${tableName}`);
+      return;
+    }
     try {
       const result = await this.prisma.$queryRawUnsafe<{ seq_name: string | null }[]>(
         `SELECT pg_get_serial_sequence('"${tableName}"', 'id') as seq_name`,

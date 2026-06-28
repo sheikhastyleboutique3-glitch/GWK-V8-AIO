@@ -4,9 +4,14 @@ import {
   SubscribeMessage,
   MessageBody,
   ConnectedSocket,
+  OnGatewayInit,
 } from '@nestjs/websockets';
 import { OnEvent } from '@nestjs/event-emitter';
+import { Injectable } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { Server, Socket } from 'socket.io';
+import { createWsAuthMiddleware } from '../../common/guards/ws-auth.middleware';
 
 export const KDS_CHANGED = 'kds.changed';
 export interface KdsChangedEvent {
@@ -16,12 +21,23 @@ export interface KdsChangedEvent {
 /**
  * Real-time Kitchen Display sync. Clients join their branch room and receive a
  * lightweight `kds_update` ping whenever an order/item changes, so the board
- * refetches instantly instead of polling. Falls back to polling client-side if
- * the socket can't connect (e.g. proxy not configured).
+ * refetches instantly instead of polling.
+ *
+ * SECURITY: JWT authentication required. Kitchen staff must be logged in.
  */
-@WebSocketGateway({ cors: { origin: '*' }, namespace: 'kds', path: '/socket.io' })
-export class KdsGateway {
+@WebSocketGateway({ namespace: 'kds', path: '/socket.io', cors: true })
+@Injectable()
+export class KdsGateway implements OnGatewayInit {
   @WebSocketServer() server: Server;
+
+  constructor(
+    private jwtService: JwtService,
+    private configService: ConfigService,
+  ) {}
+
+  afterInit(server: Server) {
+    server.use(createWsAuthMiddleware(this.jwtService, this.configService, false));
+  }
 
   @SubscribeMessage('join_branch')
   joinBranch(@ConnectedSocket() client: Socket, @MessageBody() data: { branchId: number }) {

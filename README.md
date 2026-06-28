@@ -615,10 +615,13 @@ Cashier scans/enters code → System looks up card
 |---------|-------------|
 | **Point of Sale** | Touch-optimized cashier terminal with floor plan, barcode scanning, combos, modifiers |
 | **Waiter App** | Visual floor plan, table claiming (race-proof), KOT printing, split/merge bills |
-| **Kitchen Display (KDS)** | Real-time order board with station filtering, sound alerts, prep time targets |
+| **Kitchen Display (KDS)** | Real-time order board with station filtering, sound alerts, prep time targets, **kitchen recall** |
 | **Self-Ordering** | Customer QR scanning → browse menu → place order (no app install) |
 | **Customer Display** | Second screen showing items + running total in real-time |
 | **Kiosk Mode** | Full self-service ordering with payment integration |
+| **Tip Quick Buttons** | 10%/15%/20% pre-filled tip buttons on payment screen (Odoo 19 parity) |
+| **Forced Session Guard** | Blocks navigation when POS session is open without closing cash count |
+| **Return Without Receipt** | Manual refund form for walk-in returns with no linked order |
 
 ### Back of House
 | Feature | Description |
@@ -640,6 +643,8 @@ Cashier scans/enters code → System looks up card
 | **Customer CLV** | RFM scoring with segment classification (Champions→Lost) |
 | **Waste vs Sales** | Per-product waste ratio with severity alerts |
 | **Scheduled Reports** | Daily EOD email (23:55) + Weekly (Monday) + Monthly (1st) |
+| **ZATCA Phase 2 QR** | TLV-encoded e-invoice QR code on PDF invoices (Saudi expansion ready) |
+| **Tip Reports** | Per-staff and per-session tip tracking and analytics |
 
 ### Operations
 | Feature | Description |
@@ -655,16 +660,18 @@ Cashier scans/enters code → System looks up card
 ### Platform
 | Feature | Description |
 |---------|-------------|
-| **Offline-First** | IndexedDB queue + Background Sync + auto-replay on reconnect |
-| **Real-time** | WebSocket for products, tables, orders, sessions (<100ms) |
+| **Offline-First** | IndexedDB queue + Background Sync + auto-replay + conflict tracking |
+| **Real-time** | WebSocket for products, tables, orders, sessions (<100ms), **JWT-authenticated** |
 | **Code Splitting** | React.lazy() — 65 separate chunks, ~200KB initial load |
 | **Dark Mode** | System + manual toggle, forced on KDS for kitchen visibility |
 | **RTL** | Full Arabic support with right-to-left layout |
 | **PWA** | Installable on mobile/tablet as native-like app |
 | **Multi-Currency** | 9 pre-loaded currencies with exchange rate management |
-| **QR Code Generator** | Menu QR, table QR, kiosk QR — in-app generation + print |
+| **QR Code Generator** | Menu QR, table QR, kiosk QR, ZATCA e-invoice QR — in-app generation |
 | **Thermal Printing** | ESC/POS over TCP/IP via on-prem agent (supports station routing) |
-| **PDF Export** | Receipts, invoices (Qatar VAT), Z-reports, daily summaries |
+| **PDF Export** | Receipts, invoices (Qatar VAT + ZATCA QR), Z-reports, daily summaries |
+| **Security** | Helmet, CORS, rate limiting, DTO validation, WS auth, failed login audit |
+| **Error Recovery** | ErrorBoundary at root — crash shows recovery UI, not blank screen |
 
 ---
 
@@ -819,11 +826,12 @@ Key endpoints:
 | Auth | `POST /api/auth/login`, `/pin-login`, `/refresh` |
 | Products | `GET/POST/PATCH /api/products` |
 | Sales | `POST /api/sales/orders`, `/items`, `/complete`, `/refund` |
+| Sales (new) | `PATCH /api/sales/orders/:id/tip`, `POST /returns`, `GET /:id/zatca-qr` |
 | Inventory | `GET /api/inventory/grouped`, `POST /api/inventory/adjust` |
-| KDS | `GET /api/kds/board`, `PATCH /api/kds/items/:id` |
+| KDS | `GET /api/kds/board`, `PATCH /api/kds/items/:id`, `POST /api/kds/items/:id/recall` |
 | Analytics | `GET /api/analytics/sales-summary`, `/abc-analysis`, `/peak-hours`, `/customer-clv` |
 | Health | `GET /api/health` (public, no auth) |
-| WebSocket | `ws://host/realtime` (namespace, joins branch room) |
+| WebSocket | `ws://host/realtime` (JWT required), `ws://host/kds` (JWT required) |
 
 ---
 
@@ -948,6 +956,69 @@ For production deployment assistance, contact the development team. The system s
 - **Multi-server** deployment (separate API + DB + CDN)
 - **Load-balanced** deployment (requires Redis for session/idempotency sharing)
 - **Kubernetes** deployment (health endpoint at `/api/health` for probes)
+
+---
+
+## V8.2 Changelog — Odoo 19 Parity & Security Hardening
+
+### New Features (Odoo 19 Parity)
+
+| Feature | Description |
+|---------|-------------|
+| **Tip Quick Buttons** | 10% / 15% / 20% tip buttons on POS payment screen with optimistic UI |
+| **Kitchen Recall** | Cancel a fired item from KDS — marks `recalledAt`, emits real-time update |
+| **Return Without Receipt** | Manual refund at `/returns` — creates negative REFUNDED order + finance entry |
+| **Forced POS Closing** | `beforeunload` + React Router blocker prevents leaving with open session |
+| **ZATCA Phase 2 QR** | TLV-encoded QR code (seller, VAT, timestamp, total) on invoice PDF |
+
+### Security Hardening
+
+| Fix | Impact |
+|-----|--------|
+| **SQL Injection eliminated** | `peakHourHeatmap` converted from `$queryRawUnsafe` to parameterized `$queryRaw` |
+| **WebSocket JWT auth** | Both `/realtime` and `/kds` namespaces now require valid JWT token |
+| **WebSocket rate limiting** | 20 connections/min per IP — prevents DoS on socket layer |
+| **Password complexity** | `@MinLength(8)` + `@Matches(uppercase + lowercase + number)` |
+| **Failed login audit** | All failed attempts logged with IP, email, and reason to audit_logs |
+| **Admin SQL validation** | Table names validated against `[a-z_][a-z0-9_]*` regex before use |
+
+### Bug Fixes
+
+| Fix | Description |
+|-----|-------------|
+| **ErrorBoundary at root** | App wrapped in ErrorBoundary — React crashes show recovery UI instead of blank screen |
+| **Print agent memory** | `Set` → `Map` with 24h TTL + hourly purge (prevents OOM on Raspberry Pi) |
+| **Offline conflict tracking** | Failed sync replays (409/400) now recorded to localStorage for user review |
+| **Return productId FK** | Auto-creates `RETURN-PLACEHOLDER` product instead of hardcoding `productId: 1` |
+| **Tip optimistic update** | Existing-order tip updates reflect immediately without waiting for refetch |
+| **Real QR encoder** | Replaced fake SVG placeholder with proper QR matrix (finder patterns, timing, data modules) |
+
+### New API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `PATCH` | `/api/sales/orders/:id/tip` | Apply/update tip on open order |
+| `POST` | `/api/sales/orders/returns` | Return without receipt (manual refund) |
+| `GET` | `/api/sales/orders/:id/zatca-qr` | ZATCA TLV-encoded QR data (Base64) |
+| `POST` | `/api/kds/items/:id/recall` | Kitchen recall — cancel a fired item |
+
+### New Frontend Routes
+
+| Path | Component | Access |
+|------|-----------|--------|
+| `/returns` | `ReturnWithoutReceiptPage` | SUPER_ADMIN, BRANCH_MANAGER |
+
+### Database Migration
+
+```bash
+# After pulling this update, run:
+npx prisma migrate deploy
+```
+
+New fields on `order_items`:
+- `recalledAt` — timestamp when item was recalled from kitchen
+- `recalledById` — user who initiated the recall
+- `recallReason` — reason text for the recall
 
 ---
 

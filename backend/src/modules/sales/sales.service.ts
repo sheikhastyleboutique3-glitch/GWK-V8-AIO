@@ -1398,6 +1398,26 @@ export class SalesService {
       SELECT nextval(pg_get_serial_sequence('orders', 'id'))`;
     const returnNo = `RET-${stamp}-B${dto.branchId}-${String(Number(nextval)).padStart(5, '0')}`;
 
+    // Find or create a placeholder product for manual returns (avoids FK violation)
+    let returnProduct = await this.prisma.product.findFirst({
+      where: { sku: 'RETURN-PLACEHOLDER' },
+      select: { id: true },
+    });
+    if (!returnProduct) {
+      returnProduct = await this.prisma.product.create({
+        data: {
+          sku: 'RETURN-PLACEHOLDER',
+          name: 'Manual Return Item',
+          nameAr: 'عنصر إرجاع يدوي',
+          productType: 'MENU',
+          isSellable: false,
+          isActive: false,
+          isArchived: true,
+        },
+        select: { id: true },
+      });
+    }
+
     // Create the refund order with status REFUNDED
     const order = await this.prisma.order.create({
       data: {
@@ -1416,7 +1436,7 @@ export class SalesService {
         completedAt: new Date(),
         items: {
           create: dto.items.map((item) => ({
-            productId: 1, // Placeholder product for manual returns
+            productId: returnProduct!.id,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             lineTotal: item.quantity * item.unitPrice,

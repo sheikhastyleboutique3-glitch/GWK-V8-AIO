@@ -67,6 +67,19 @@ export async function syncPending(): Promise<{ synced: number; failed: number }>
         // Success or client error (won't succeed on retry) — remove from queue
         await remove(req.id!);
         synced++;
+        // Log conflict details for 400/404 so the user can investigate
+        if (response.status === 400 || response.status === 404) {
+          let errorMsg = 'Unknown conflict';
+          try { const body = await response.json(); errorMsg = body?.message || body?.error || errorMsg; } catch {}
+          addConflict({ id: req.id!, url: req.url, method: req.method, error: errorMsg, status: response.status, at: new Date().toISOString() });
+        }
+      } else if (response.status === 409) {
+        // Conflict (item unavailable, price changed, stock depleted) — remove + record
+        await remove(req.id!);
+        let errorMsg = 'Conflict: data changed while offline';
+        try { const body = await response.json(); errorMsg = body?.message || errorMsg; } catch {}
+        addConflict({ id: req.id!, url: req.url, method: req.method, error: errorMsg, status: 409, at: new Date().toISOString() });
+        failed++;
       } else if (response.status >= 500) {
         // Server error — retry later
         await markFailed(req.id!);
@@ -153,4 +166,48 @@ export async function requestBackgroundSync() {
       // Background Sync not available — will sync on next online event
     }
   }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// OFFLINE CONFLICT TRACKING
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface SyncConflict {
+  id: string;
+  url: string;
+  method: string;
+  error: string;
+  status: number;
+  at: string;
+}
+
+const CONFLICTS_KEY = 'gwk_sync_conflicts';
+
+/** Record a sync conflict for user review. */
+function addConflict(conflict: SyncConflict): void {
+  const conflicts = getConflicts();
+  conflicts.push(conflict);
+  // Keep only last 50 conflicts
+  if (conflicts.length > 50) conflicts.splice(0, conflicts.length - 50);
+  localStorage.setItem(CONFLICTS_KEY, JSON.stringify(conflicts));
+}
+
+/** Get all recorded sync conflicts. */
+export function getConflicts(): SyncConflict[] {
+  try {
+    return JSON.parse(localStorage.getItem(CONFLICTS_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+/** Clear all recorded conflicts (after user acknowledges them). */
+export function clearConflicts(): void {
+  localStorage.removeItem(CONFLICTS_KEY);
+}
+
+/** Get count of unresolved conflicts. */
+export function getConflictCount(): number {
+  return getConflicts().length;
 }

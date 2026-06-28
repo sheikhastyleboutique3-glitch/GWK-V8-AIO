@@ -4,8 +4,12 @@ import {
   SubscribeMessage,
   ConnectedSocket,
   MessageBody,
+  OnGatewayInit,
 } from '@nestjs/websockets';
 import { OnEvent } from '@nestjs/event-emitter';
+import { Injectable } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { Server, Socket } from 'socket.io';
 import { PRODUCT_CHANGED, ProductChangedEvent } from '../../common/events/product-events';
 import {
@@ -13,17 +17,30 @@ import {
   ORDER_CHANGED, OrderChangedEvent,
   SESSION_CHANGED, SessionChangedEvent,
 } from '../../common/events/realtime-events';
+import { createWsAuthMiddleware } from '../../common/guards/ws-auth.middleware';
 
 /**
  * General-purpose realtime gateway. Replaces polling with instant WebSocket
  * pushes for: product changes, table status, order lifecycle, POS sessions.
  *
- * Clients join a branch room via `join_branch` and receive targeted events
- * scoped to their branch. Public clients join `public_menu` for menu updates.
+ * SECURITY: JWT authentication required on connection. Clients must send token
+ * via auth.token handshake or ?token= query param. Public menu clients use
+ * the 'join_public' event (allowPublic flag permits unauthenticated menu viewers).
  */
-@WebSocketGateway({ cors: { origin: '*' }, namespace: 'realtime', path: '/socket.io' })
-export class RealtimeGateway {
+@WebSocketGateway({ namespace: 'realtime', path: '/socket.io', cors: true })
+@Injectable()
+export class RealtimeGateway implements OnGatewayInit {
   @WebSocketServer() server: Server;
+
+  constructor(
+    private jwtService: JwtService,
+    private configService: ConfigService,
+  ) {}
+
+  afterInit(server: Server) {
+    // Apply JWT auth middleware — allow public for menu displays
+    server.use(createWsAuthMiddleware(this.jwtService, this.configService, true));
+  }
 
   @SubscribeMessage('join_branch')
   joinBranch(@ConnectedSocket() client: Socket, @MessageBody() data: { branchId: number }) {

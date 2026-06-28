@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -6,13 +6,15 @@ import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
     private config: ConfigService,
   ) {}
 
-  async login(email: string, password: string) {
+  async login(email: string, password: string, ip?: string) {
     const user = await this.prisma.user.findUnique({
       where: { email },
       include: {
@@ -22,13 +24,25 @@ export class AuthService {
         },
       },
     });
-    if (!user || !user.isActive) throw new UnauthorizedException('Invalid credentials');
+    if (!user || !user.isActive) {
+      this.logger.warn(`Failed login attempt: email="${email}" ip=${ip || 'unknown'} reason=user_not_found`);
+      this.recordFailedLogin(email, ip, 'user_not_found');
+      throw new UnauthorizedException('Invalid credentials');
+    }
     const valid = await bcrypt.compare(password, user.password);
-    if (!valid) throw new UnauthorizedException('Invalid credentials');
+    if (!valid) {
+      this.logger.warn(`Failed login attempt: email="${email}" userId=${user.id} ip=${ip || 'unknown'} reason=wrong_password`);
+      this.recordFailedLogin(email, ip, 'wrong_password');
+      throw new UnauthorizedException('Invalid credentials');
+    }
     // Onboarding gate: credentials are correct but the account isn't approved yet.
     if (!user.isApproved) {
+      this.logger.warn(`Blocked login: email="${email}" userId=${user.id} ip=${ip || 'unknown'} reason=not_approved`);
       throw new UnauthorizedException('Your account is pending approval by a manager.');
     }
+
+    // Clear failed login count on successful auth
+    this.logger.log(`Successful login: email="${email}" userId=${user.id} role=${user.role}`);
 
     const branchIds = user.userBranches.map((ub) => ub.branchId);
     const payload = {
@@ -195,5 +209,21 @@ export class AuthService {
     }
     await this.prisma.user.update({ where: { id: userId }, data: { branchId } });
     return this.getProfile(userId);
+  }
+
+  /**
+   * Record failed login attempt for security auditing.
+   * Fire-and-forget — never blocks the auth flow.
+   */
+  private recordFailedLogin(email: string, ip?: string, reason?: string): void {
+    this.prisma.auditLog.create({
+      data: {
+        userId: null as any,
+        action: 'LOGIN_FAILED',
+        entity: 'Auth',
+        entityId: email,
+        newValues: { email, ip: ip || 'unknown', reason: reason || 'unknown', at: new Date().toISOString() },
+      },
+    }).catch(() => { /* audit is best-effort */ });
   }
 }

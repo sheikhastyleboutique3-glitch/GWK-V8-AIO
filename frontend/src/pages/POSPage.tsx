@@ -458,8 +458,10 @@ export default function POSPage() {
   const cartSubtotal = useMemo(() => cart.reduce((s, l) => s + l.unitPrice * l.quantity, 0) + comboCart.reduce((s, c) => s + c.price, 0), [cart, comboCart]);
   const subtotal = mode === 'existing' ? loadedOrder?.subtotal ?? 0 : cartSubtotal;
   const discount = mode === 'existing' ? (loadedOrder?.couponDiscount ?? 0) + (loadedOrder?.ruleDiscount ?? 0) : coupon?.discount ?? 0;
+  // Optimistic tip: for existing orders, add local tipAmount delta over the server-side tip
+  const existingTipDelta = mode === 'existing' ? tipAmount - (loadedOrder?.tip ?? 0) : 0;
   const total = mode === 'existing'
-    ? (loadedOrder?.total ?? 0)
+    ? (loadedOrder?.total ?? 0) + existingTipDelta
     : Math.max(0, cartSubtotal - (coupon?.discount ?? 0) + tipAmount);
   const appliedCouponCode = mode === 'existing' ? loadedOrder?.couponCode : coupon?.code;
 
