@@ -27,6 +27,9 @@ export default function SettingsPage() {
     { group: 'finance', label: '\ud83d\udcb0 Finance & Currency', keys: ['default_currency', 'supported_currencies'] },
     { group: 'inventory', label: '\ud83d\udce6 Inventory', keys: ['expiry_warning_days', 'low_stock_alert'] },
     { group: 'localization', label: '\ud83c\udf0d Localization', keys: ['default_language'] },
+    { group: 'review', label: '\u2b50 Customer Reviews', keys: ['review_url'] },
+    { group: 'staff_perf', label: '\ud83d\udcca Staff Performance', keys: ['staff_performance_enabled'] },
+    { group: 'digital_menu', label: '\ud83d\udcf1 Digital Menu (QR)', keys: ['menu_banner_url', 'menu_enable_ordering', 'menu_show_prices', 'menu_closed_message', 'menu_footer_text', 'menu_3d_effects'] },
   ];
   return (
     <div className="max-w-2xl">

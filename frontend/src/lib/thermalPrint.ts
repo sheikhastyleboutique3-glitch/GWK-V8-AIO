@@ -183,8 +183,11 @@ export function printReceipt(order: OrderLike, info: BusinessInfo = {}) {
       <div class="c sm">${esc(when)}</div>
       <div class="hr"></div>
       <div class="row"><span>Order</span><span>${esc(order.orderNo)}</span></div>
-      ${order.tableName ? `<div class="row"><span>Table</span><span>${esc(order.tableName)}</span></div>` : ''}
       ${order.channel ? `<div class="row"><span>Type</span><span>${esc(order.channel.replace('_', ' '))}</span></div>` : ''}
+      ${order.channel === 'DINE_IN' && order.tableName ? `<div class="row"><span>Table</span><span>${esc(order.tableName)}</span></div>` : ''}
+      ${order.channel === 'TAKEAWAY' && order.tableName ? `<div class="row"><span>Customer</span><span>${esc(order.tableName)}</span></div>` : ''}
+      ${order.channel === 'DELIVERY' && order.tableName ? `<div class="row"><span>Deliver to</span><span>${esc(order.tableName)}</span></div>` : ''}
+      ${order.channel !== 'DINE_IN' && order.channel !== 'TAKEAWAY' && order.channel !== 'DELIVERY' && order.tableName ? `<div class="row"><span>Ref</span><span>${esc(order.tableName)}</span></div>` : ''}
       <div class="hr"></div>
       ${itemRows}
       <div class="hr"></div>
@@ -200,6 +203,7 @@ export function printReceipt(order: OrderLike, info: BusinessInfo = {}) {
       ${payRows}
       ${change > 0 ? `<div class="row"><span>Change</span><span>${money(change)}</span></div>` : ''}
       <div class="hr"></div>
+      ${order.notes ? `<div class="c sm" style="margin:4px 0;font-style:italic;">📝 ${esc(order.notes)}</div>` : ''}
       <div class="c sm">Thank you & see you again!</div>
     </div>`;
   printDoc(`Receipt ${order.orderNo}`, body);
@@ -235,7 +239,9 @@ function kotSection(order: OrderLike, items: OrderItemLike[], opts: { station?: 
       <div class="c b xl">KITCHEN ORDER</div>
       ${opts.station ? `<div class="c b lg">${esc(opts.station)}</div>` : ''}
       ${order.channel && order.channel !== 'DINE_IN' ? `<div class="c b lg" style="border:2px solid #000;padding:4px;margin:4px 0;">*** ${esc(order.channel.replace('_', ' '))} ***</div>` : ''}
-      ${order.channel === 'DINE_IN' && order.tableName ? `<div class="c b lg">DINE IN ${esc(order.tableName)}</div>` : order.tableName ? `<div class="c b lg">Table ${esc(order.tableName)}</div>` : ''}
+      ${order.channel === 'DINE_IN' && order.tableName ? `<div class="c b lg">DINE IN ${esc(order.tableName)}</div>` : ''}
+      ${order.channel === 'TAKEAWAY' && order.tableName ? `<div class="c b">Customer: ${esc(order.tableName)}</div>` : ''}
+      ${order.channel === 'DELIVERY' && order.tableName ? `<div class="c b">Deliver to: ${esc(order.tableName)}</div>` : ''}
       <div class="c sm">${esc(order.orderNo)} &middot; ${esc(when)}</div>
       ${opts.waiter ? `<div class="c sm">Waiter: ${esc(opts.waiter)}</div>` : ''}
       ${order.notes ? `<div class="c sm b" style="margin-top:4px;border:1px dashed #000;padding:2px 4px;">📝 ${esc(order.notes)}</div>` : ''}

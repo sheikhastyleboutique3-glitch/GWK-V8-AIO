@@ -5,6 +5,10 @@
  * critical, transactional checkout path.
  */
 export const ORDER_COMPLETED = 'order.completed';
+export const ORDER_CREATED = 'order.created';
+export const ORDER_UPDATED = 'order.updated';
+export const ORDER_FIRED = 'order.fired';
+export const ORDER_VOIDED = 'order.voided';
 
 export interface OrderCompletedEvent {
   orderId: number;
@@ -16,4 +20,13 @@ export interface OrderCompletedEvent {
   grossProfit: number;
   customerId?: number | null;
   completedAt: Date;
+}
+
+export interface OrderChangedEvent {
+  orderId: number;
+  orderNo: string;
+  branchId: number;
+  channel?: string;
+  tableName?: string | null;
+  action: 'created' | 'updated' | 'fired' | 'completed' | 'voided' | 'item_added' | 'item_removed' | 'split' | 'merged';
 }

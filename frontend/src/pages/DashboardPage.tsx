@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
 import StatsCard from '../components/StatsCard';
+import DashboardWidgets from '../components/DashboardWidgets';
+import OnboardingWizard from '../components/OnboardingWizard';
 import StatusBadge from '../components/StatusBadge';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { format } from 'date-fns';
@@ -14,8 +16,12 @@ const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6'
 
 export default function DashboardPage() {
   const { t } = useTranslation();
-  const { user, activeBranch } = useAuth();
+  const { user, activeBranch, isAllBranches } = useAuth();
   const navigate = useNavigate();
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    if (localStorage.getItem('gwk_onboarding_complete') === 'true') return false;
+    return user?.role === 'SUPER_ADMIN';
+  });
 
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
   const canSeeAnalytics = ['SUPER_ADMIN', 'BRANCH_MANAGER', 'PROCUREMENT'].includes(user?.role || '');
@@ -112,6 +118,10 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* First-run onboarding wizard */}
+      {showOnboarding && <OnboardingWizard onDismiss={() => setShowOnboarding(false)} />}
+      {/* Role-based KPI Widgets */}
+      <DashboardWidgets />
       {/* Welcome banner */}
       <div className="bg-gradient-to-r from-brand-800 to-brand-600 rounded-2xl p-6 text-white">
         <div className="flex items-start justify-between gap-4">

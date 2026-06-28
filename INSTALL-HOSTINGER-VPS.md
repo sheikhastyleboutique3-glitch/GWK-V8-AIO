@@ -1,209 +1,231 @@
-# GWK V8 AIO — Deployment on a Hostinger VPS (Ubuntu)
+# GWK V8 AIO — Hostinger VPS Installation (Ubuntu)
 
-Production deployment guide for a **Hostinger KVM VPS running Ubuntu 22.04 / 24.04**.
-Two paths are provided — **A) Docker Compose (recommended)** and **B) Manual (Node + PostgreSQL + Nginx + PM2)**.
-
-> Minimum VPS: 1 vCPU / 4 GB RAM (KVM 2). Point a domain's A-record at the VPS IP if you want HTTPS.
+> Step-by-step guide to deploy on a Hostinger VPS running Ubuntu 22.04/24.04.
 
 ---
 
-## 0. First login & hardening
+## 1. SSH into your VPS
 
 ```bash
 ssh root@YOUR_VPS_IP
-
-apt update && apt upgrade -y
-adduser gwk && usermod -aG sudo gwk          # create a non-root user
-# (optional) copy your SSH key, then disable root/password login in /etc/ssh/sshd_config
-
-# Firewall
-apt install -y ufw
-ufw allow OpenSSH
-ufw allow 80
-ufw allow 443
-ufw --force enable
+# Or if using a non-root user:
+ssh gwk@YOUR_VPS_IP
 ```
-Re-login as `gwk` for the rest of this guide.
 
 ---
 
-# Path A — Docker Compose (recommended)
+## 2. Install Docker & Docker Compose
 
-### A1. Install Docker
 ```bash
+# Update system
+sudo apt update && sudo apt upgrade -y
+
+# Install Docker
 curl -fsSL https://get.docker.com | sudo sh
+
+# Add your user to docker group (skip if root)
 sudo usermod -aG docker $USER
 newgrp docker
-docker --version && docker compose version
+
+# Verify
+docker --version
+docker compose version
 ```
 
-### A2. Get the code
+---
+
+## 3. Clone the Repository
+
 ```bash
 cd ~
 git clone https://github.com/sheikhastyleboutique3-glitch/GWK-V8-AIO.git
 cd GWK-V8-AIO
 ```
 
-### A3. Configure environment
+---
+
+## 4. Configure Environment
+
 ```bash
 cp .env.example .env
 nano .env
 ```
-Set strong values (generate with `openssl rand -hex 32`):
+
+Set these values:
 ```env
+# Database (Docker internal — don't change unless custom setup)
 POSTGRES_USER=gwk_user
-POSTGRES_PASSWORD=__strong_db_password__
+POSTGRES_PASSWORD=CHANGE_THIS_PASSWORD
 POSTGRES_DB=gwk_v8_aio
-JWT_SECRET=__64_hex__
-JWT_REFRESH_SECRET=__64_hex__
-JWT_EXPIRES_IN=15m
+DATABASE_URL=postgresql://gwk_user:CHANGE_THIS_PASSWORD@postgres:5432/gwk_v8_aio
+
+# Security
+JWT_SECRET=GENERATE_A_RANDOM_64_CHAR_STRING
+JWT_EXPIRES_IN=8h
+JWT_REFRESH_SECRET=ANOTHER_RANDOM_STRING
 JWT_REFRESH_EXPIRES_IN=7d
 NODE_ENV=production
-ALLOWED_ORIGINS=https://yourdomain.com
+
+# CORS (your VPS IP or domain)
+ALLOWED_ORIGINS=http://YOUR_VPS_IP,http://yourdomain.com
+
+# Email reports (optional but recommended)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
+SMTP_FROM=noreply@yourdomain.com
+EOD_EMAIL_RECIPIENTS=manager@yourdomain.com
+EOD_EMAIL_ENABLED=true
 ```
 
-### A4. Launch
+---
+
+## 5. Start the Application
+
 ```bash
 docker compose up -d --build
-docker compose ps                       # db, backend, frontend should be healthy
 ```
-The backend container runs `prisma migrate deploy` automatically on boot. Seed once:
+
+Wait 30-60 seconds for everything to start. Check status:
+```bash
+docker compose ps
+```
+
+All 3 services should show "healthy" or "Up":
+```
+gwk-v8-aio-postgres-1   healthy
+gwk-v8-aio-backend-1    healthy
+gwk-v8-aio-frontend-1   running   0.0.0.0:80->80/tcp
+```
+
+---
+
+## 6. Seed Demo Data (First Time Only)
+
 ```bash
 docker compose exec backend npx prisma db seed
 ```
 
-### A5. Reverse proxy + HTTPS (Nginx + Let's Encrypt)
-```bash
-sudo apt install -y nginx certbot python3-certbot-nginx
-sudo nano /etc/nginx/sites-available/gwk
-```
-```nginx
-server {
-    listen 80;
-    server_name yourdomain.com;
+---
 
-    location /api/      { proxy_pass http://127.0.0.1:3000; proxy_set_header Host $host; proxy_set_header X-Forwarded-For $remote_addr; }
-    location /uploads/  { proxy_pass http://127.0.0.1:3000; }
-    location /socket.io/ { proxy_pass http://127.0.0.1:3000; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; }
-    location /          { proxy_pass http://127.0.0.1:8080; }   # frontend container
-}
+## 7. Access the Application
+
+Open in your browser:
 ```
-> Adjust ports to match `docker-compose.yml` (backend 3000, frontend served port).
-```bash
-sudo ln -s /etc/nginx/sites-available/gwk /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d yourdomain.com          # issues + auto-renews HTTPS
+http://YOUR_VPS_IP
 ```
 
-### A6. Updates
+Login: `admin@gwk.com` / `Admin@1234`
+
+---
+
+## 8. Set Up SSL (HTTPS) — Optional but Recommended
+
+### Option A: Cloudflare (Easiest)
+1. Point your domain DNS to the VPS IP via Cloudflare
+2. Enable "Full" SSL mode in Cloudflare dashboard
+3. Done — Cloudflare handles the certificate
+
+### Option B: Let's Encrypt (Direct)
 ```bash
-cd ~/GWK-V8-AIO && git pull
-docker compose up -d --build                     # migrations run on backend boot
+sudo apt install certbot
+sudo certbot certonly --standalone -d yourdomain.com
+# Then configure the frontend nginx to use the cert
 ```
 
 ---
 
-# Path B — Manual (Node + PostgreSQL + Nginx + PM2)
+## 9. Print Agent Setup (For Thermal Printers)
 
-### B1. Install runtimes
+If you have a Raspberry Pi or PC at the restaurant on the same network as your printers:
+
 ```bash
-# Node 20
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs
+# On the Raspberry Pi / restaurant PC:
+git clone https://github.com/sheikhastyleboutique3-glitch/GWK-V8-AIO.git
+cd GWK-V8-AIO/agent
+npm install
 
-# PostgreSQL 16
-sudo apt install -y postgresql postgresql-contrib
-sudo systemctl enable --now postgresql
-
-sudo npm i -g pm2
+# Run the agent
+API_URL=http://YOUR_VPS_IP node print-agent.mjs
 ```
 
-### B2. Create the database
+To run as a permanent service:
 ```bash
-sudo -u postgres psql <<'SQL'
-CREATE DATABASE gwk_v8_aio;
-CREATE USER gwk_user WITH PASSWORD 'strong_db_password';
-GRANT ALL PRIVILEGES ON DATABASE gwk_v8_aio TO gwk_user;
-\c gwk_v8_aio
-GRANT ALL ON SCHEMA public TO gwk_user;
-SQL
-```
+sudo tee /etc/systemd/system/gwk-print.service << 'EOF'
+[Unit]
+Description=GWK Print Agent
+After=network.target
 
-### B3. Backend
-```bash
-cd ~ && git clone https://github.com/sheikhastyleboutique3-glitch/GWK-V8-AIO.git
-cd GWK-V8-AIO/backend
-cat > .env <<'ENV'
-DATABASE_URL="postgresql://gwk_user:strong_db_password@localhost:5432/gwk_v8_aio?schema=public"
-JWT_SECRET="__64_hex__"
-JWT_REFRESH_SECRET="__64_hex__"
-JWT_EXPIRES_IN="15m"
-JWT_REFRESH_EXPIRES_IN="7d"
-NODE_ENV="production"
-ALLOWED_ORIGINS="https://yourdomain.com"
-ENV
-npm ci
-npx prisma generate
-npx prisma migrate deploy
-npx prisma db seed
-npm run build
-pm2 start dist/main.js --name gwk-api
-```
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/GWK-V8-AIO/agent
+Environment=API_URL=http://YOUR_VPS_IP
+ExecStart=/usr/bin/node print-agent.mjs
+Restart=always
+RestartSec=5
 
-### B4. Frontend
-```bash
-cd ~/GWK-V8-AIO/frontend
-npm ci
-npm run build               # outputs dist/
-```
+[Install]
+WantedBy=multi-user.target
+EOF
 
-### B5. Nginx (serves the built frontend + proxies the API)
-```bash
-sudo apt install -y nginx certbot python3-certbot-nginx
-sudo nano /etc/nginx/sites-available/gwk
-```
-```nginx
-server {
-    listen 80;
-    server_name yourdomain.com;
-    root /home/gwk/GWK-V8-AIO/frontend/dist;
-    index index.html;
-
-    location /api/       { proxy_pass http://127.0.0.1:3000; proxy_set_header Host $host; proxy_set_header X-Forwarded-For $remote_addr; }
-    location /uploads/   { proxy_pass http://127.0.0.1:3000; }
-    location /socket.io/ { proxy_pass http://127.0.0.1:3000; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; }
-    location /           { try_files $uri /index.html; }       # SPA fallback
-}
-```
-```bash
-sudo ln -s /etc/nginx/sites-available/gwk /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d yourdomain.com
-pm2 save && pm2 startup        # keep the API running across reboots
-```
-
-### B6. Updates
-```bash
-cd ~/GWK-V8-AIO && git pull
-cd backend && npm ci && npx prisma migrate deploy && npm run build && pm2 restart gwk-api
-cd ../frontend && npm ci && npm run build && sudo systemctl reload nginx
+sudo systemctl enable gwk-print
+sudo systemctl start gwk-print
 ```
 
 ---
 
-## Operations
+## 10. Updating the Application
 
-- **Logs:** `pm2 logs gwk-api` (Path B) or `docker compose logs -f backend` (Path A)
-- **DB backup:** `pg_dump -U gwk_user gwk_v8_aio > backup_$(date +%F).sql`
-- **DB restore:** `psql -U gwk_user gwk_v8_aio < backup.sql`
-- **First-run checklist:** log in as admin → change password → approve staff → set printers/floors → open a POS session (opening cash count).
+```bash
+cd ~/GWK-V8-AIO
+git fetch origin && git reset --hard origin/main
+docker compose up -d --build
+```
+
+---
 
 ## Troubleshooting
 
-| Symptom | Fix |
-|---------|-----|
-| 502 Bad Gateway | API not running — `pm2 status` / `docker compose ps`; check ports in Nginx |
-| `P1001` DB unreachable | Check `DATABASE_URL`, that PostgreSQL is running, and credentials |
-| WebSocket/KDS not live | Ensure the `/socket.io/` proxy block with `Upgrade` headers is present |
-| CORS errors | `ALLOWED_ORIGINS` must equal your HTTPS domain exactly |
-| Migration `P3009` | Fresh DB only: ensure the DB is empty before first `migrate deploy` |
+| Issue | Solution |
+|-------|----------|
+| Port 80 in use | `sudo lsof -i :80` → stop Nginx: `sudo systemctl stop nginx && sudo systemctl disable nginx` |
+| Backend unhealthy | `docker compose logs backend --tail 50` |
+| Database connection refused | `docker compose logs postgres --tail 20` |
+| Frontend blank page | Clear browser cache, check `docker compose logs frontend` |
+| Can't login | Run seed: `docker compose exec backend npx prisma db seed` |
+| Print agent 503 | Backend overloaded — increase `POLL_MS` to 30000 |
+| WebSocket not connecting | Check your firewall allows the port, and Nginx proxies `/socket.io` |
+
+---
+
+## Firewall Setup (Recommended)
+
+```bash
+sudo ufw allow 22/tcp    # SSH
+sudo ufw allow 80/tcp    # HTTP
+sudo ufw allow 443/tcp   # HTTPS
+sudo ufw enable
+```
+
+---
+
+## Backups
+
+### Database Backup (Daily Cron)
+```bash
+# Create backup script
+sudo tee /etc/cron.daily/gwk-backup << 'EOF'
+#!/bin/bash
+docker compose -f /root/GWK-V8-AIO/docker-compose.yml exec -T postgres pg_dump -U gwk_user gwk_v8_aio | gzip > /root/backups/gwk-$(date +%Y%m%d).sql.gz
+find /root/backups -name "gwk-*.sql.gz" -mtime +7 -delete
+EOF
+sudo chmod +x /etc/cron.daily/gwk-backup
+mkdir -p /root/backups
+```
+
+### Restore from Backup
+```bash
+gunzip < /root/backups/gwk-20260627.sql.gz | docker compose exec -T postgres psql -U gwk_user gwk_v8_aio
+```
