@@ -9,7 +9,7 @@
  * - Registers Background Sync if available
  */
 
-import { getPending, remove, markFailed, getPendingCount } from './offlineQueue';
+import { getPending, remove, markFailed, getPendingCount, purgeStaleEntries } from './offlineQueue';
 
 export type SyncStatus = 'online' | 'offline' | 'syncing';
 type SyncListener = (status: SyncStatus, pending: number) => void;
@@ -54,8 +54,13 @@ export async function syncPending(): Promise<{ synced: number; failed: number }>
 
   let synced = 0;
   let failed = 0;
+  const now = Date.now();
 
   for (const req of pending) {
+    // Respect exponential backoff — skip if not yet time to retry
+    if ((req as any).nextRetryAt && (req as any).nextRetryAt > now) {
+      continue;
+    }
     try {
       const response = await fetch(req.url, {
         method: req.method,
@@ -143,6 +148,11 @@ export function initSyncManager() {
   if (navigator.onLine) {
     setTimeout(() => syncPending(), 2000);
   }
+
+  // Purge stale offline entries older than 24 hours (orders with old prices are dangerous)
+  purgeStaleEntries(24 * 60 * 60 * 1000).then((purged) => {
+    if (purged > 0) console.log(`[SyncManager] Purged ${purged} stale offline entries (>24h old)`);
+  }).catch(() => {});
 
   // Periodic cache refresh every 5 minutes while online
   setInterval(() => {

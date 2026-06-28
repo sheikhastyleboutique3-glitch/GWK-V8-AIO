@@ -568,6 +568,7 @@ export default function POSPage() {
         }
       }
       for (const ten of tenders) {
+        try {
         // Loyalty / eWallet card: draw the amount down from the card balance,
         // then record it as a wallet payment referencing the card.
         if (ten.method === 'LOYALTY_CARD' && ten.loyaltyCode) {
@@ -589,9 +590,19 @@ export default function POSPage() {
           amount: ten.amount,
           ...(ten.method === 'GIFT_CARD' ? { giftCardCode: ten.giftCardCode } : {}),
         });
+        } catch (payErr: any) {
+          // Attach recovery order ID so onError can load it for retry
+          payErr._recoveryOrderId = orderId;
+          throw payErr;
+        }
       }
-      const { data: done } = await api.post(`/sales/orders/${orderId}/complete`, {});
-      return done.data;
+      try {
+        const { data: done } = await api.post(`/sales/orders/${orderId}/complete`, {});
+        return done.data;
+      } catch (completeErr: any) {
+        completeErr._recoveryOrderId = orderId;
+        throw completeErr;
+      }
     },
     onSuccess: (order) => {
       toast.success(`Sale ${order.orderNo} completed`);
@@ -618,7 +629,24 @@ export default function POSPage() {
       qc.invalidateQueries({ queryKey: ['waiter-tables'] });
       qc.invalidateQueries({ queryKey: ['waiter-active-orders'] });
     },
-    onError: (e: any) => toast.error(e.response?.data?.message || e.message || 'Sale failed'),
+    onError: (e: any) => {
+      const errorMsg = e.response?.data?.message || e.message || 'Sale failed';
+      // If the error contains an order ID, it means the order was created
+      // but payment/complete failed. Offer recovery instead of just a toast.
+      if (e._recoveryOrderId) {
+        toast.error(
+          `Payment failed but order was created. Loading it for retry...`,
+          { duration: 5000 },
+        );
+        // Load the created order so the user can retry payment
+        setLoadedOrderId(e._recoveryOrderId);
+        setCart([]);
+        setComboCart([]);
+        qc.invalidateQueries({ queryKey: ['pos-loaded', e._recoveryOrderId] });
+      } else {
+        toast.error(errorMsg);
+      }
+    },
   });
 
   const refund = useMutation({
@@ -2029,10 +2057,12 @@ export default function POSPage() {
                 )}
               </div>
 
-              {/* Numpad */}
-              <div className="grid grid-cols-4 gap-2 md:gap-3 w-full max-w-xs md:max-w-sm">
+              {/* Numpad — tablet-optimized with larger touch targets + haptic */}
+              <div className="grid grid-cols-4 gap-3 w-full max-w-sm">
                 {['1','2','3','+10','4','5','6','+20','7','8','9','+50','+/-','0','.','⌫'].map((key) => (
                   <button key={key} onClick={() => {
+                    // Haptic feedback for tablet/phone users
+                    try { navigator.vibrate?.(15); } catch {}
                     if (key === '⌫') setPayNumpad((p) => p.slice(0, -1));
                     else if (key === '+/-') setPayNumpad((p) => p.startsWith('-') ? p.slice(1) : '-' + p);
                     else if (key.startsWith('+')) {
@@ -2041,7 +2071,7 @@ export default function POSPage() {
                     }
                     else setPayNumpad((p) => p + key);
                   }}
-                  className={`py-3 md:py-4 rounded-xl text-lg md:text-xl font-bold transition ${key.startsWith('+') ? 'bg-primary/10 text-primary' : key === '⌫' ? 'bg-red-50 dark:bg-red-500/10 text-red-600' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
+                  className={`min-h-[56px] py-4 rounded-xl text-xl font-bold transition-all active:scale-95 select-none touch-manipulation ${key.startsWith('+') ? 'bg-primary/10 text-primary border-2 border-primary/20 hover:bg-primary/20' : key === '⌫' ? 'bg-red-50 dark:bg-red-500/10 text-red-600 border-2 border-red-200 dark:border-red-800' : key === '+/-' ? 'bg-gray-50 dark:bg-gray-800 text-gray-500 border border-gray-200 dark:border-gray-700' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100'}`}>
                     {key}
                   </button>
                 ))}

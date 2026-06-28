@@ -172,7 +172,29 @@ export const baseStyles = StyleSheet.create({
   },
 });
 
-export const money = (v: unknown): string => Number(v ?? 0).toFixed(2);
+/** Currency symbols for common currencies. Falls back to code if unknown. */
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  QAR: 'QR',
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+  SAR: 'SR',
+  AED: 'AED',
+  KWD: 'KD',
+  BHD: 'BD',
+  OMR: 'OMR',
+};
+
+/**
+ * Format a monetary value with optional currency symbol.
+ * Examples: money(10.5, 'QAR') → "QR 10.50", money(10.5) → "10.50"
+ */
+export const money = (v: unknown, currency?: string): string => {
+  const formatted = Number(v ?? 0).toFixed(2);
+  if (!currency) return formatted;
+  const symbol = CURRENCY_SYMBOLS[currency.toUpperCase()] || currency;
+  return `${symbol} ${formatted}`;
+};
 export const pct = (v: unknown): string => Number(v ?? 0).toFixed(1) + '%';
 export const formatDate = (d: string | Date | null | undefined): string => {
   if (!d) return '—';

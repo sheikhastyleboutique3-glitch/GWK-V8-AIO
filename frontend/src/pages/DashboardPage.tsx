@@ -9,6 +9,7 @@ import DashboardWidgets from '../components/DashboardWidgets';
 import OnboardingWizard from '../components/OnboardingWizard';
 import StatusBadge from '../components/StatusBadge';
 import LoadingSpinner from '../components/LoadingSpinner';
+import SkeletonCard, { SkeletonGrid } from '../components/SkeletonCard';
 import { format } from 'date-fns';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -210,7 +211,7 @@ export default function DashboardPage() {
               {t('dashboard.viewAll')} →
             </button>
           </div>
-          {recentLoading ? <LoadingSpinner size="sm" /> : (
+          {recentLoading ? <SkeletonCard rows={5} /> : (
             <div className="divide-y divide-gray-50">
               {(!recentReqs || recentReqs.length === 0) && (
                 <p className="text-center text-gray-400 text-sm py-8">{t('common.noData')}</p>
