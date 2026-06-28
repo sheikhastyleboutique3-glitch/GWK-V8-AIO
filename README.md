@@ -861,6 +861,106 @@ Key endpoints:
 
 ---
 
+## In-App Settings & Configuration
+
+Beyond environment variables, GWK V8 has a **database-driven settings system** that allows managers to configure behavior without restarting the server. Settings are managed through the **Settings page** in the UI (SUPER_ADMIN only) or via the API.
+
+### How to Access Settings
+
+| Method | How |
+|--------|-----|
+| **Web UI** | Login as Super Admin → Sidebar → Settings page |
+| **API (read)** | `GET /api/settings?group=pos` |
+| **API (write)** | `POST /api/settings` with `{ "key": "...", "value": "...", "group": "..." }` |
+| **Bulk update** | `POST /api/settings/bulk` with `{ "settings": [...] }` |
+
+> Only **SUPER_ADMIN** can modify settings. All changes are audit-logged.
+
+### Available Settings Groups
+
+#### `pos` — Point of Sale Behavior
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `pos.held_order_expiry_hours` | `4` | Auto-void HELD orders older than this (hours). Set `0` to disable. |
+| `pos.require_open_session` | `true` | Block sales if no POS session is open |
+| `pos.allow_negative_stock` | `false` | Allow selling items with 0 stock |
+| `pos.tip_enabled` | `true` | Show tip buttons on payment screen |
+| `pos.default_service_charge_pct` | `0` | Auto-apply service charge (%) |
+
+#### `branding` — Company & Invoice Info
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `company_name` | — | Business name (appears on receipts/invoices) |
+| `company_name_ar` | — | Arabic business name |
+| `company_address` | — | Address line for receipts |
+| `company_phone` | — | Phone number on receipts |
+| `company_email` | — | Email on invoices |
+| `company_tax_id` | — | Tax Registration Number (TRN) for VAT invoices |
+| `company_logo_url` | — | Logo URL (upload via Settings page) |
+| `default_currency` | `QAR` | Default currency code |
+
+#### `invoice` — Invoice PDF Configuration
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `invoice_show_tax` | `true` | Show VAT breakdown on invoices |
+| `invoice_footer_text` | — | Custom footer message |
+| `invoice_language` | `en` | Invoice language (en/ar) |
+
+#### `sound` — Notification Sounds
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `sound_enabled` | `true` | Enable audio alerts |
+| `sound_volume` | `70` | Volume (0-100) |
+| `sound_new_order` | — | Custom sound URL for new orders |
+| `sound_kds_alert` | — | Custom sound URL for KDS alerts |
+
+#### `zatca` — ZATCA E-Invoicing (Saudi Expansion)
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `zatca_seller_name` | — | Seller name for ZATCA QR code |
+| `zatca_vat_number` | — | VAT registration number for ZATCA QR |
+
+### Quick Setup via API
+
+```bash
+# Set auto-void to 6 hours (instead of default 4)
+curl -X POST http://localhost:3000/api/settings \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"key": "pos.held_order_expiry_hours", "value": "6", "group": "pos"}'
+
+# Disable auto-void entirely
+curl -X POST http://localhost:3000/api/settings \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"key": "pos.held_order_expiry_hours", "value": "0", "group": "pos"}'
+
+# Set ZATCA info for Saudi invoices
+curl -X POST http://localhost:3000/api/settings/bulk \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"settings": [
+    {"key": "zatca_seller_name", "value": "Gaimer w Kahi", "group": "zatca"},
+    {"key": "zatca_vat_number", "value": "300000000000003", "group": "zatca"}
+  ]}'
+```
+
+### Settings vs Environment Variables
+
+| Aspect | Environment Variables (`.env`) | In-App Settings (DB) |
+|--------|-------------------------------|---------------------|
+| **When to use** | Infrastructure (DB URL, secrets, SMTP) | Business logic (auto-void hours, branding) |
+| **Changed by** | DevOps / deploy | Super Admin in the UI |
+| **Requires restart?** | Yes (server restart) | No (instant, no restart) |
+| **Security** | Secrets only (never exposed to frontend) | Visible in Settings page |
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
