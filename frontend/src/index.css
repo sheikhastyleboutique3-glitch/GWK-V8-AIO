@@ -269,3 +269,125 @@ button:active:not(:disabled),
 .dark .shadow-sm { box-shadow: 0 1px 2px rgba(0,0,0,0.4) !important; }
 .dark .shadow { box-shadow: 0 1px 3px rgba(0,0,0,0.5) !important; }
 .dark .border-gray-100 { border-color: var(--border) !important; }
+
+
+/* =============================================================================
+   TABLET / TOUCH OPTIMIZATION
+   Ensures all interactive elements meet 44px minimum touch target for
+   restaurant tablets (iPad, Android 10"). Prevents "can't tap" frustration.
+   ============================================================================= */
+
+/* POS product cards — bigger touch targets */
+@media (pointer: coarse) {
+  /* All buttons in POS/Waiter/KDS: minimum 44px height */
+  [class*="rounded-lg"],
+  [class*="rounded-xl"] {
+    min-height: 44px;
+  }
+
+  /* Product grid cards — larger for fat fingers */
+  .group[class*="min-h-"] {
+    min-height: 130px !important;
+  }
+
+  /* Category tabs — bigger */
+  [class*="px-3"][class*="py-2"][class*="rounded-lg"] {
+    padding: 10px 16px !important;
+    font-size: 14px !important;
+  }
+
+  /* Numpad buttons — must be large and easy to tap */
+  [class*="grid-cols-4"] button,
+  [class*="grid-cols-3"] button {
+    min-height: 52px !important;
+    font-size: 18px !important;
+  }
+
+  /* Cart items — bigger tap area */
+  [class*="divide-y"] > div[class*="cursor-pointer"] {
+    min-height: 48px;
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+  }
+
+  /* Action buttons (Pay, Fire, etc.) — extra large */
+  button[class*="bg-emerald"],
+  button[class*="bg-primary"],
+  button[class*="bg-red"] {
+    min-height: 48px;
+  }
+
+  /* Table tiles on floor plan — minimum size */
+  [class*="absolute"][class*="flex-col"][class*="items-center"] {
+    min-width: 70px !important;
+    min-height: 70px !important;
+  }
+
+  /* Prevent zoom on input focus (iOS Safari) */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+
+  /* KDS advance buttons — bigger for kitchen staff with wet/gloved hands */
+  button[class*="text-\\[10px\\]"] {
+    font-size: 13px !important;
+    padding: 8px 12px !important;
+    min-height: 36px !important;
+  }
+}
+
+/* Smooth scrolling for internal scroll areas */
+[class*="overflow-y-auto"] {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Prevent pull-to-refresh on POS (mobile Chrome) */
+body {
+  overscroll-behavior-y: contain;
+}
+
+/* Safe area insets for notched devices (iPhone, newer Android) */
+.h-\\[100dvh\\] {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+
+/* =============================================================================
+   RTL (Right-to-Left) FIXES
+   Ensures all components work correctly in Arabic/Urdu mode.
+   ============================================================================= */
+
+/* Flip margins and paddings for RTL */
+[dir="rtl"] .ms-auto { margin-right: auto !important; margin-left: 0 !important; }
+[dir="rtl"] .me-auto { margin-left: auto !important; margin-right: 0 !important; }
+[dir="rtl"] .ms-2 { margin-right: 0.5rem !important; margin-left: 0 !important; }
+[dir="rtl"] .ms-4 { margin-right: 1rem !important; margin-left: 0 !important; }
+[dir="rtl"] .me-1 { margin-left: 0.25rem !important; margin-right: 0 !important; }
+[dir="rtl"] .me-2 { margin-left: 0.5rem !important; margin-right: 0 !important; }
+
+/* Flip text alignment */
+[dir="rtl"] .text-left { text-align: right !important; }
+[dir="rtl"] .text-right { text-align: left !important; }
+[dir="rtl"] .text-start { text-align: right !important; }
+[dir="rtl"] .text-end { text-align: left !important; }
+
+/* Flip flex direction for navigation */
+[dir="rtl"] .flex-row { flex-direction: row-reverse; }
+
+/* Ensure POS grid layout works in RTL */
+[dir="rtl"] [class*="grid-cols"] { direction: rtl; }
+
+/* Breadcrumbs separator direction */
+[dir="rtl"] nav[class*="flex"] span:has(+ a)::after { content: '\\' !important; }
+
+/* Modal slide-in from left in RTL */
+[dir="rtl"] .slide-in-from-right { animation-name: slideInFromLeft !important; }
+@keyframes slideInFromLeft { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+
+/* Command palette input */
+[dir="rtl"] input[class*="bg-transparent"] { text-align: right; }
+
+/* Pin switch numpad stays LTR (numbers are universal) */
+[dir="rtl"] [class*="grid-cols-3"] button[class*="rounded-xl"] { direction: ltr; }

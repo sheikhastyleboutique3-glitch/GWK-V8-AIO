@@ -1413,7 +1413,7 @@ export default function POSPage() {
                 onDoubleClick={async () => {
                   // Double-click: add a note to this specific item (shows on KOT)
                   if (mode === 'existing' && l.itemId) {
-                    const note = window.prompt(`Note for "${l.name}" (printed on KOT):`, (l as any).notes || '');
+                    const note = await prompt({ title: `Note for "${l.name}"`, placeholder: 'Note printed on KOT', defaultValue: (l as any).notes || '' });
                     if (note !== null) {
                       try {
                         await api.patch(`/sales/orders/${loadedOrderId}/items/${l.itemId}`, { notes: note });
@@ -1443,7 +1443,7 @@ export default function POSPage() {
                       <span className="text-sm">×{l.quantity}</span>
                       <button onClick={async () => {
                         if (!l.itemId) return;
-                        const reason = window.prompt(`Cancel "${l.name}"?\nReason (sent to kitchen):`);
+                        const reason = await prompt({ title: `Cancel "${l.name}"?`, placeholder: 'Reason (sent to kitchen)' });
                         if (reason === null) return;
                         try {
                           await api.patch(`/sales/orders/${loadedOrderId}/items/${l.itemId}`, { isVoided: true, voidReason: reason || 'Cancelled' });
@@ -1693,7 +1693,7 @@ export default function POSPage() {
               >🔥 Kitchen</button>
               <button
                 onClick={() => {
-                  const note = window.prompt('Customer note (printed on receipt/KOT):');
+                  const note = await prompt({ title: 'Customer Note', placeholder: 'Note printed on receipt/KOT' });
                   if (note != null && mode === 'existing' && loadedOrderId) {
                     api.patch(`/sales/orders/${loadedOrderId}`, { notes: note }).then(() => {
                       toast.success('Note saved');
@@ -1723,7 +1723,7 @@ export default function POSPage() {
               >🧾 Bill</button>
               <button
                 onClick={() => {
-                  const count = window.prompt('Number of guests:', String(mode === 'existing' ? loadedOrder?.guestCount || 1 : 1));
+                  const count = await prompt({ title: 'Number of guests', defaultValue: String(mode === 'existing' ? loadedOrder?.guestCount || 1 : 1), type: 'number' });
                   if (count && mode === 'existing' && loadedOrderId) {
                     api.patch(`/sales/orders/${loadedOrderId}`, { guestCount: parseInt(count, 10) || 1 });
                     toast.success(`Guests: ${count}`);
@@ -1733,7 +1733,7 @@ export default function POSPage() {
               >👥 Guests</button>
               <button
                 onClick={() => {
-                  const code = window.prompt('Enter coupon or reward code:');
+                  const code = await prompt({ title: 'Coupon / Reward Code', placeholder: 'Enter code' });
                   if (code?.trim()) { setCouponCode(code.trim()); onApplyCoupon(); }
                 }}
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
@@ -1751,7 +1751,7 @@ export default function POSPage() {
               >ℹ️ Info</button>
               <button
                 onClick={() => {
-                  const note = window.prompt('Internal note (staff only, not printed):');
+                  const note = await prompt({ title: 'Internal Note', placeholder: 'Staff only — not printed on customer receipt' });
                   if (note != null) toast.success('Internal note saved');
                 }}
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"

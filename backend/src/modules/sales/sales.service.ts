@@ -183,16 +183,25 @@ export class SalesService {
     });
   }
 
-  findAll(filters?: { branchId?: number; status?: OrderStatus; customerId?: number }) {
+  findAll(filters?: { branchId?: number; status?: OrderStatus; customerId?: number; page?: number; limit?: number; search?: string; dateFrom?: string }) {
+    const take = filters?.limit || 100;
+    const skip = filters?.page && filters.page > 1 ? (filters.page - 1) * take : 0;
     return this.prisma.order.findMany({
       where: {
         ...(filters?.branchId ? { branchId: filters.branchId } : {}),
         ...(filters?.status ? { status: filters.status } : {}),
         ...(filters?.customerId ? { customerId: filters.customerId } : {}),
+        ...(filters?.search ? { OR: [
+          { orderNo: { contains: filters.search, mode: 'insensitive' } },
+          { tableName: { contains: filters.search, mode: 'insensitive' } },
+          { customer: { name: { contains: filters.search, mode: 'insensitive' } } },
+        ] } : {}),
+        ...(filters?.dateFrom ? { createdAt: { gte: new Date(filters.dateFrom + 'T00:00:00.000Z') } } : {}),
       },
       include: this.orderInclude,
       orderBy: { createdAt: 'desc' },
-      take: 200,
+      take,
+      skip,
     });
   }
 
