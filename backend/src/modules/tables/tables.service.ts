@@ -135,9 +135,9 @@ export class TablesService {
               where: { id: existingOrder.id },
               data: { status: 'OPEN' },
             });
-            return { action: 'resumed' as const, orderId: existingOrder.id };
+            return { action: 'resumed' as const, orderId: existingOrder.id, tableName: table.name };
           }
-          return { action: 'existing' as const, orderId: existingOrder.id };
+          return { action: 'existing' as const, orderId: existingOrder.id, tableName: table.name };
         }
 
         // No existing order — create a new one (atomically, inside the lock)
@@ -170,7 +170,7 @@ export class TablesService {
           data: { status: 'OCCUPIED' },
         });
 
-        return { action: 'created' as const, orderId: order.id };
+        return { action: 'created' as const, orderId: order.id, tableName: table.name };
       },
       { isolationLevel: 'Serializable', timeout: 10_000 },
     );
@@ -179,7 +179,7 @@ export class TablesService {
     this.events.emit(TABLE_CHANGED, {
       branchId,
       tableId,
-      tableName: result.action === 'created' ? '' : '', // will be populated by the caller context
+      tableName: result.tableName,
       status: 'OCCUPIED',
       action: result.action === 'created' ? 'opened' : 'status_changed',
     });

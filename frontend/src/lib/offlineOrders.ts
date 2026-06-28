@@ -15,7 +15,7 @@
  * - On reconnection, all orders sync in FIFO order
  */
 
-import { addToQueue } from './offlineQueue';
+import { enqueue } from './offlineQueue';
 
 export interface OfflineOrder {
   localId: string;
@@ -61,7 +61,7 @@ export function saveOfflineOrder(order: OfflineOrder): void {
   localStorage.setItem(OFFLINE_ORDERS_KEY, JSON.stringify(orders));
 
   // Also queue the API request for the sync manager
-  addToQueue({
+  enqueue({
     url: '/api/sales/orders',
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -80,6 +80,7 @@ export function saveOfflineOrder(order: OfflineOrder): void {
       customerId: order.customerId,
       idempotencyKey: order.localId, // Prevents duplicates on retry
     },
+    description: `Offline order ${order.localOrderNo}`,
   });
 }
 
