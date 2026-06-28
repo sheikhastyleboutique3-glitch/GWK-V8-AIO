@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import api from '../lib/api';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { useRealtimeProducts } from '../lib/useRealtimeProducts';
 
 /**
  * Public self-order kiosk (no auth). Reached via QR / kiosk at /kiosk/:configId.
@@ -19,6 +20,9 @@ export default function KioskPage() {
   const [placed, setPlaced] = useState<string | null>(null);
   const [paymentStep, setPaymentStep] = useState(false);
   const [paymentApproved, setPaymentApproved] = useState(false);
+
+  // Live sync: menu updates instantly when staff toggles items (no 30s delay)
+  useRealtimeProducts({ joinPublic: true });
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['kiosk-menu', configId],

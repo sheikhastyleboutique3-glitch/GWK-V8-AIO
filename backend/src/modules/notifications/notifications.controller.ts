@@ -119,4 +119,37 @@ export class NotificationsController {
   ) {
     return this.svc.triggerEvent(body.eventType, body);
   }
+
+  @Post('send-receipt')
+  @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER, Role.CASHIER)
+  @ApiOperation({ summary: 'Send a formatted receipt via WhatsApp' })
+  sendReceipt(
+    @Body()
+    body: {
+      phoneNumber: string;
+      orderNo: string;
+      items: { name: string; qty: number; unitPrice: number }[];
+      total: number;
+      currency?: string;
+      businessName?: string;
+    },
+  ) {
+    return this.svc.sendReceipt(body.phoneNumber, body);
+  }
+
+  @Post('send-order-status')
+  @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER, Role.CASHIER)
+  @ApiOperation({ summary: 'Send an order status update via WhatsApp' })
+  sendOrderStatus(
+    @Body()
+    body: {
+      phoneNumber: string;
+      orderNo: string;
+      status: string;
+      estimatedMinutes?: number;
+      businessName?: string;
+    },
+  ) {
+    return this.svc.sendOrderStatus(body.phoneNumber, body);
+  }
 }

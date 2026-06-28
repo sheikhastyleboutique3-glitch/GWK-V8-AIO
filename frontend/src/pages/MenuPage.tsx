@@ -8,10 +8,12 @@ import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Modal from '../components/Modal';
 import { useAuth } from '../contexts/AuthContext';
+import { useRealtimeProducts } from '../lib/useRealtimeProducts';
 
 const EMPTY = {
   name: '', nameAr: '', sku: '', salePrice: '', costPrice: '', categoryId: '',
   description: '', descriptionAr: '', isSellable: true, isAvailable: true, allowNegativeStock: false,
+  scheduleEnabled: false, scheduleStart: '', scheduleEnd: '', scheduleDays: [] as number[],
 };
 
 export default function MenuPage() {
@@ -26,6 +28,9 @@ export default function MenuPage() {
   const [uploading, setUploading] = useState(false);
 
   const canWrite = ['SUPER_ADMIN', 'BRANCH_MANAGER'].includes(user?.role || '');
+
+  // Live product sync — instant updates when items are toggled/edited elsewhere
+  useRealtimeProducts();
 
   const { data: products, isLoading } = useQuery({
     queryKey: ['menu-items', search, catFilter],
@@ -56,6 +61,10 @@ export default function MenuPage() {
         isAvailable: form.isAvailable,
         allowNegativeStock: (form as any).allowNegativeStock ?? false,
         productType: 'MENU',
+        scheduleEnabled: form.scheduleEnabled,
+        scheduleStart: form.scheduleEnabled ? form.scheduleStart || null : null,
+        scheduleEnd: form.scheduleEnabled ? form.scheduleEnd || null : null,
+        scheduleDays: form.scheduleEnabled ? form.scheduleDays : [],
       };
       if (editId) {
         return api.patch(`/products/${editId}`, payload);
@@ -112,6 +121,10 @@ export default function MenuPage() {
       isSellable: p.isSellable !== false,
       isAvailable: p.isAvailable !== false,
       allowNegativeStock: p.allowNegativeStock ?? false,
+      scheduleEnabled: p.scheduleEnabled ?? false,
+      scheduleStart: p.scheduleStart || '',
+      scheduleEnd: p.scheduleEnd || '',
+      scheduleDays: p.scheduleDays || [],
     });
     setEditId(p.id);
     setShowForm(true);
@@ -205,6 +218,12 @@ export default function MenuPage() {
                         {!on && (
                           <div className="absolute top-1 right-1 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">86'd</div>
                         )}
+                        {p.scheduleEnabled && (
+                          <div className="absolute top-1 left-1 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">⏰</div>
+                        )}
+                        {p.autoEightySixed && (
+                          <div className="absolute bottom-1 right-1 bg-orange-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded" title={p.autoEightySixReason}>Auto-86</div>
+                        )}
                       </div>
 
                       {/* Info */}
@@ -221,6 +240,12 @@ export default function MenuPage() {
                           </span>
                         </div>
                         <div className="text-xs text-gray-400 mt-1">{p.sku} · cost {Number(p.costPrice || 0).toFixed(2)}</div>
+                        {p.scheduleEnabled && p.scheduleStart && p.scheduleEnd && (
+                          <div className="text-[10px] text-blue-500 mt-0.5">⏰ {p.scheduleStart}–{p.scheduleEnd}</div>
+                        )}
+                        {p.autoEightySixed && p.autoEightySixReason && (
+                          <div className="text-[10px] text-orange-500 mt-0.5">⚠️ {p.autoEightySixReason}</div>
+                        )}
 
                         {/* Actions */}
                         <div className="flex gap-1.5 mt-2">
@@ -398,6 +423,67 @@ export default function MenuPage() {
                 />
                 Allow negative stock
               </label>
+            </div>
+
+            {/* Menu Time Schedule */}
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 space-y-2">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  checked={form.scheduleEnabled}
+                  onChange={(e) => setForm({ ...form, scheduleEnabled: e.target.checked })}
+                  className="rounded"
+                />
+                ⏰ Time Schedule (auto show/hide by time)
+              </label>
+              {form.scheduleEnabled && (
+                <div className="space-y-2 pl-6">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs text-gray-500">Available from</label>
+                      <input
+                        type="time"
+                        value={form.scheduleStart}
+                        onChange={(e) => setForm({ ...form, scheduleStart: e.target.value })}
+                        className="w-full mt-0.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">Until</label>
+                      <input
+                        type="time"
+                        value={form.scheduleEnd}
+                        onChange={(e) => setForm({ ...form, scheduleEnd: e.target.value })}
+                        className="w-full mt-0.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1">Days (leave all unchecked = every day)</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => {
+                            const days = form.scheduleDays.includes(idx)
+                              ? form.scheduleDays.filter((d: number) => d !== idx)
+                              : [...form.scheduleDays, idx];
+                            setForm({ ...form, scheduleDays: days });
+                          }}
+                          className={`px-2 py-1 rounded text-xs font-medium transition ${
+                            form.scheduleDays.includes(idx)
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                          }`}
+                        >
+                          {day}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-gray-200 dark:border-gray-800">

@@ -11,6 +11,7 @@ import AdvancedFilterBuilder, { FilterField, FilterPreset, FilterRule } from '..
 import GroupBySelect, { groupData, GroupedData } from '../components/GroupBySelect';
 import { printReceipt } from '../lib/thermalPrint';
 import { downloadReceiptPdf, downloadDailySalesPdf } from '../lib/pdf';
+import { useConfirm } from '../lib/useConfirm';
 
 const STATUSES = ['', 'OPEN', 'HELD', 'COMPLETED', 'VOIDED', 'REFUNDED'];
 const PAYMENT_METHODS = ['CASH', 'CARD', 'BANK_TRANSFER', 'WALLET', 'QR', 'STORE_CREDIT', 'LOYALTY', 'GIFT_CARD', 'AGGREGATOR', 'ON_ACCOUNT'];
@@ -47,6 +48,7 @@ export default function SalesHistoryPage() {
   const branchId = activeBranch?.id;
   const canRefund = user?.role === 'SUPER_ADMIN' || user?.role === 'BRANCH_MANAGER';
   const canCorrect = user?.role === 'SUPER_ADMIN' || user?.role === 'BRANCH_MANAGER';
+  const [confirm, ConfirmDialog] = useConfirm();
 
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
@@ -318,7 +320,7 @@ export default function SalesHistoryPage() {
                       </button>
                     )}
                     {canRefund && o.status === 'COMPLETED' && (
-                      <button onClick={() => { if (window.confirm(t('pos.refundConfirm'))) refund.mutate(o.id); }} disabled={refund.isPending} className="px-3 py-1.5 rounded-lg border border-red-300 text-red-600 text-xs font-medium disabled:opacity-50">{t('salesHistory.refund')}</button>
+                      <button onClick={async () => { const ok = await confirm({ title: t('pos.refundConfirm'), description: 'This will issue a full refund for this order.', variant: 'danger', confirmLabel: 'Refund' }); if (ok) refund.mutate(o.id); }} disabled={refund.isPending} className="px-3 py-1.5 rounded-lg border border-red-300 text-red-600 text-xs font-medium disabled:opacity-50">{t('salesHistory.refund')}</button>
                     )}
                   </div>
                   {/* Per-payment correction buttons when multiple tenders */}
@@ -378,6 +380,7 @@ export default function SalesHistoryPage() {
           </div>
         </div>
       )}
+      <ConfirmDialog />
     </div>
   );
 }

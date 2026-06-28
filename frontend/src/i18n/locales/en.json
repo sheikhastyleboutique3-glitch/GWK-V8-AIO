@@ -67,7 +67,8 @@
     "combos": "Combos",
     "productAttributes": "Attributes & Variants",
     "iotDevices": "IoT Devices",
-    "selfOrder": "Self-Ordering"
+    "selfOrder": "Self-Ordering",
+    "qrCodes": "QR Codes"
   },
   "kiosk": {
     "title": "Self-Order",

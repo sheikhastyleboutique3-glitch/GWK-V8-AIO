@@ -5,6 +5,7 @@
  */
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { usePrompt } from '../lib/usePrompt';
 
 export interface ExportColumn {
   key: string;
@@ -33,6 +34,7 @@ function saveTemplates(exportType: string, templates: Record<string, string[]>) 
 
 export default function ExportColumnsModal({ columns, exportType, onExport, onClose }: Props) {
   const { t } = useTranslation();
+  const [promptFn, PromptDialog] = usePrompt();
   const [selected, setSelected] = useState<Set<string>>(
     new Set(columns.filter((c) => c.default !== false).map((c) => c.key))
   );
@@ -49,8 +51,8 @@ export default function ExportColumnsModal({ columns, exportType, onExport, onCl
   const selectAll = () => setSelected(new Set(columns.map((c) => c.key)));
   const selectNone = () => setSelected(new Set());
 
-  const saveAsTemplate = () => {
-    const name = window.prompt('Template name:', '');
+  const saveAsTemplate = async () => {
+    const name = await promptFn({ title: 'Save Template', placeholder: 'Template name...' });
     if (!name?.trim()) return;
     const updated = { ...templates, [name.trim()]: [...selected] };
     setTemplates(updated);
@@ -64,6 +66,7 @@ export default function ExportColumnsModal({ columns, exportType, onExport, onCl
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <PromptDialog />
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-md p-5 max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-bold">Export Columns</h3>

@@ -13,6 +13,7 @@ import { printReceipt, printKot } from '../lib/thermalPrint';
 import { useOnlineStatus } from '../lib/useOnlineStatus';
 import OfflineBanner from '../components/OfflineBanner';
 import { usePrompt } from '../lib/usePrompt';
+import { useConfirm } from '../lib/useConfirm';
 
 interface CartLine {
   itemId?: number; // present when the line lives on a persisted (loaded) order
@@ -43,6 +44,7 @@ export default function POSPage() {
   const branchId = activeBranch?.id;
   const { isOnline, isSyncing, pendingCount } = useOnlineStatus();
   const [prompt, PromptDialog] = usePrompt();
+  const [confirm, ConfirmDialog] = useConfirm();
   const canRefund = user?.role === 'SUPER_ADMIN' || user?.role === 'BRANCH_MANAGER';
   const canEditFloor = user?.role === 'SUPER_ADMIN' || user?.role === 'BRANCH_MANAGER' || user?.role === 'CASHIER';
 
@@ -1332,7 +1334,7 @@ export default function POSPage() {
                 onDoubleClick={async () => {
                   // Double-click: add a note to this specific item (shows on KOT)
                   if (mode === 'existing' && l.itemId) {
-                    const note = window.prompt(`Note for "${l.name}" (printed on KOT):`, (l as any).notes || '');
+                    const note = await prompt({ title: `Note for "${l.name}"`, description: 'Printed on KOT', defaultValue: (l as any).notes || '', placeholder: 'e.g. No ice, extra sauce' });
                     if (note !== null) {
                       try {
                         await api.patch(`/sales/orders/${loadedOrderId}/items/${l.itemId}`, { notes: note });
@@ -1362,7 +1364,7 @@ export default function POSPage() {
                       <span className="text-sm">×{l.quantity}</span>
                       <button onClick={async () => {
                         if (!l.itemId) return;
-                        const reason = window.prompt(`Cancel "${l.name}"?\nReason (sent to kitchen):`);
+                        const reason = await prompt({ title: `Cancel "${l.name}"?`, description: 'Reason (sent to kitchen):', placeholder: 'e.g. Customer changed mind' });
                         if (reason === null) return;
                         try {
                           await api.patch(`/sales/orders/${loadedOrderId}/items/${l.itemId}`, { isVoided: true, voidReason: reason || 'Cancelled' });
@@ -1591,8 +1593,8 @@ export default function POSPage() {
                 className="px-2 py-2 rounded-lg bg-orange-100 dark:bg-orange-500/10 text-orange-700 hover:bg-orange-200 dark:hover:bg-orange-500/20 text-center font-medium"
               >🔥 Kitchen</button>
               <button
-                onClick={() => {
-                  const note = window.prompt('Customer note (printed on receipt/KOT):');
+                onClick={async () => {
+                  const note = await prompt({ title: 'Customer Note', description: 'Printed on receipt/KOT', placeholder: 'e.g. Allergic to nuts' });
                   if (note != null && mode === 'existing' && loadedOrderId) {
                     api.patch(`/sales/orders/${loadedOrderId}`, { notes: note }).then(() => {
                       toast.success('Note saved');
@@ -1621,8 +1623,8 @@ export default function POSPage() {
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
               >🧾 Bill</button>
               <button
-                onClick={() => {
-                  const count = window.prompt('Number of guests:', String(mode === 'existing' ? loadedOrder?.guestCount || 1 : 1));
+                onClick={async () => {
+                  const count = await prompt({ title: 'Number of Guests', type: 'number', defaultValue: String(mode === 'existing' ? loadedOrder?.guestCount || 1 : 1) });
                   if (count && mode === 'existing' && loadedOrderId) {
                     api.patch(`/sales/orders/${loadedOrderId}`, { guestCount: parseInt(count, 10) || 1 });
                     toast.success(`Guests: ${count}`);
@@ -1631,8 +1633,8 @@ export default function POSPage() {
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
               >👥 Guests</button>
               <button
-                onClick={() => {
-                  const code = window.prompt('Enter coupon or reward code:');
+                onClick={async () => {
+                  const code = await prompt({ title: 'Coupon / Reward Code', placeholder: 'Enter code...' });
                   if (code?.trim()) { setCouponCode(code.trim()); onApplyCoupon(); }
                 }}
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
@@ -1649,8 +1651,8 @@ export default function POSPage() {
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
               >ℹ️ Info</button>
               <button
-                onClick={() => {
-                  const note = window.prompt('Internal note (staff only, not printed):');
+                onClick={async () => {
+                  const note = await prompt({ title: 'Staff Note', description: 'Internal only — not printed on receipt or KOT', placeholder: 'e.g. VIP customer, special request' });
                   if (note != null) toast.success('Internal note saved');
                 }}
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
@@ -1844,8 +1846,9 @@ export default function POSPage() {
               </div>
               {canRefund && lastReceipt.status === 'COMPLETED' && (
                 <button
-                  onClick={() => {
-                    if (window.confirm(t('pos.refundConfirm'))) refund.mutate(lastReceipt.id);
+                  onClick={async () => {
+                    const ok = await confirm({ title: t('pos.refundConfirm'), description: 'This will fully refund this order.', variant: 'danger', confirmLabel: 'Refund' });
+                    if (ok) refund.mutate(lastReceipt.id);
                   }}
                   disabled={refund.isPending}
                   className="w-full mt-2 py-2 rounded-xl border border-red-300 text-red-600 text-sm font-medium disabled:opacity-50"
@@ -2020,6 +2023,7 @@ export default function POSPage() {
       )}
 
       <PromptDialog />
+      <ConfirmDialog />
     </div>
   );
 }

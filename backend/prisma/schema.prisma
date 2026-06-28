@@ -599,6 +599,14 @@ model Product {
   allergens          String[]            @default([])
   allergenNotes      String?
   allergenNotesAr    String?
+  // Menu time-scheduling: control when items appear on the menu
+  scheduleEnabled    Boolean             @default(false)
+  scheduleStart      String?             // HH:MM format (e.g. "06:00")
+  scheduleEnd        String?             // HH:MM format (e.g. "11:00")
+  scheduleDays       Int[]               @default([])  // 0=Sun, 1=Mon...6=Sat (empty = every day)
+  // Auto-86: system-managed unavailability due to low ingredient stock
+  autoEightySixed    Boolean             @default(false)
+  autoEightySixReason String?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 

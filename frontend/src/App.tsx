@@ -7,6 +7,7 @@ import { applyTheme, saveThemeLocal, themeFromSettings } from './lib/theme';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
+import RoleLanding from './components/RoleLanding';
 import RequisitionsPage from './pages/RequisitionsPage';
 import NewRequisitionPage from './pages/NewRequisitionPage';
 import RequisitionDetailPage from './pages/RequisitionDetailPage';
@@ -57,10 +58,12 @@ import CashRoundingsPage from './pages/CashRoundingsPage';
 import FiscalPositionsPage from './pages/FiscalPositionsPage';
 import IotDevicesPage from './pages/IotDevicesPage';
 import SelfOrderConfigsPage from './pages/SelfOrderConfigsPage';
+import QrCodesPage from './pages/QrCodesPage';
 import ProductAttributesPage from './pages/ProductAttributesPage';
 import CombosPage from './pages/CombosPage';
 import PricelistsPage from './pages/PricelistsPage';
 import KioskPage from './pages/KioskPage';
+import PublicMenuPage from './pages/PublicMenuPage';
 import SalesHistoryPage from './pages/SalesHistoryPage';
 import SessionsPage from './pages/SessionsPage';
 import PosReportsPage from './pages/PosReportsPage';
@@ -115,6 +118,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/kiosk/:configId" element={<KioskPage />} />
+      <Route path="/order/:branchId" element={<PublicMenuPage />} />
       <Route
         path="/"
         element={
@@ -124,7 +128,7 @@ export default function App() {
         }
       >
         {/* Open to all authenticated users */}
-        <Route index element={<DashboardPage />} />
+        <Route index element={<RoleLanding />} />
         <Route path="requisitions" element={<RequisitionsPage />} />
         <Route path="requisitions/new" element={<NewRequisitionPage />} />
         <Route path="requisitions/:id" element={<RequisitionDetailPage />} />
@@ -312,6 +316,7 @@ export default function App() {
           { path: 'product-attributes', el: <ProductAttributesPage /> },
           { path: 'combos', el: <CombosPage /> },
           { path: 'pricelists', el: <PricelistsPage /> },
+          { path: 'qr-codes', el: <QrCodesPage /> },
         ].map((r) => (
           <Route
             key={r.path}

@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import api from '../lib/api';
 import { printSessionReport, BusinessInfo } from '../lib/thermalPrint';
 import Modal from './Modal';
+import { usePrompt } from '../lib/usePrompt';
 
 // Qatar denominations (QAR bills + coins)
 const DENOMINATIONS = [500, 200, 100, 50, 10, 5, 1, 0.5, 0.25];
@@ -20,6 +21,7 @@ export default function PosSessionBar({ branchId, businessInfo }: { branchId?: n
   const [showClose, setShowClose] = useState(false);
   const [openDenoms, setOpenDenoms] = useState<DenomRow[]>(emptyDenoms());
   const [closeDenoms, setCloseDenoms] = useState<DenomRow[]>(emptyDenoms());
+  const [prompt, PromptDialog] = usePrompt();
 
   const key = ['pos-session-current', branchId];
   const { data: session } = useQuery({
@@ -82,12 +84,18 @@ export default function PosSessionBar({ branchId, businessInfo }: { branchId?: n
 
   if (!branchId) return null;
 
-  const promptCash = (type: 'CASH_IN' | 'CASH_OUT') => {
-    const raw = window.prompt(type === 'CASH_IN' ? 'Cash In amount:' : 'Cash Out amount:');
+  const promptCash = async (type: 'CASH_IN' | 'CASH_OUT') => {
+    const raw = await prompt({
+      title: type === 'CASH_IN' ? 'Cash In' : 'Cash Out',
+      description: type === 'CASH_IN' ? 'Enter the amount to add to the drawer.' : 'Enter the amount to remove from the drawer.',
+      placeholder: '0.00',
+      type: 'number',
+      confirmLabel: type === 'CASH_IN' ? 'Add Cash' : 'Remove Cash',
+    });
     if (!raw) return;
     const amount = parseFloat(raw);
     if (!(amount > 0)) return toast.error('Invalid amount');
-    const reason = window.prompt('Reason (optional):') || undefined;
+    const reason = await prompt({ title: 'Reason (optional)', placeholder: 'e.g. Change for customer' }) || undefined;
     cashMut.mutate({ type, amount, reason });
   };
 
@@ -126,6 +134,7 @@ export default function PosSessionBar({ branchId, businessInfo }: { branchId?: n
             </div>
           </div>
         </Modal>
+        <PromptDialog />
       </>
     );
   }
@@ -164,6 +173,7 @@ export default function PosSessionBar({ branchId, businessInfo }: { branchId?: n
           </div>
         </div>
       </Modal>
+      <PromptDialog />
     </>
   );
 }
