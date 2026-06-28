@@ -43,4 +43,34 @@ export class AdminController {
   ) {
     return this.svc.deleteRecord(type, id, req.user.sub);
   }
+
+  /** Granular reset: clear only sales data (orders, payments, sessions). */
+  @Post('reset/sales')
+  resetSales(@Request() req: any, @Body() body: { confirmPhrase: string }) {
+    return this.svc.resetModule(req.user.sub, body.confirmPhrase, 'sales');
+  }
+
+  /** Granular reset: clear only inventory data (stock levels, transactions, batches). */
+  @Post('reset/inventory')
+  resetInventory(@Request() req: any, @Body() body: { confirmPhrase: string }) {
+    return this.svc.resetModule(req.user.sub, body.confirmPhrase, 'inventory');
+  }
+
+  /** Granular reset: clear only finance data (journal entries). */
+  @Post('reset/finance')
+  resetFinance(@Request() req: any, @Body() body: { confirmPhrase: string }) {
+    return this.svc.resetModule(req.user.sub, body.confirmPhrase, 'finance');
+  }
+
+  /** Granular reset: clear only procurement data (requisitions, POs). */
+  @Post('reset/procurement')
+  resetProcurement(@Request() req: any, @Body() body: { confirmPhrase: string }) {
+    return this.svc.resetModule(req.user.sub, body.confirmPhrase, 'procurement');
+  }
+
+  /** Granular reset: clear only alerts + notifications. */
+  @Post('reset/notifications')
+  resetNotifications(@Request() req: any, @Body() body: { confirmPhrase: string }) {
+    return this.svc.resetModule(req.user.sub, body.confirmPhrase, 'notifications');
+  }
 }
