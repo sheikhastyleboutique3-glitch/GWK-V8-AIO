@@ -30,6 +30,12 @@ export default function MenuPage() {
   const [uploading, setUploading] = useState(false);
 
   const canWrite = ['SUPER_ADMIN', 'BRANCH_MANAGER'].includes(user?.role || '');
+  // Roles that should NOT see ANY prices (operational/back-of-house staff)
+  const NO_PRICE_ROLES = ['KITCHEN', 'PASTRY', 'BARISTA', 'CLEANER', 'WAREHOUSE', 'DRIVER'];
+  // Roles that can see sale price but NOT cost price (front-of-house service)
+  const SALE_ONLY_ROLES = ['WAITER'];
+  const canSeePrices = !NO_PRICE_ROLES.includes(user?.role || '');
+  const canSeeCostPrice = canSeePrices && !SALE_ONLY_ROLES.includes(user?.role || '');
 
   // Live product sync — instant updates when items are toggled/edited elsewhere
   useRealtimeProducts();
@@ -237,11 +243,17 @@ export default function MenuPage() {
                               <div className="text-xs text-gray-500 truncate" dir="rtl">{p.nameAr}</div>
                             )}
                           </div>
-                          <span className="text-sm font-bold text-primary whitespace-nowrap">
-                            {Number(p.salePrice || 0).toFixed(2)}
-                          </span>
+                          {canSeePrices && (
+                            <span className="text-sm font-bold text-primary whitespace-nowrap">
+                              {Number(p.salePrice || 0).toFixed(2)}
+                            </span>
+                          )}
                         </div>
-                        <div className="text-xs text-gray-400 mt-1">{p.sku} · cost {Number(p.costPrice || 0).toFixed(2)}</div>
+                        {canSeePrices ? (
+                          <div className="text-xs text-gray-400 mt-1">{p.sku}{canSeeCostPrice ? ` · cost ${Number(p.costPrice || 0).toFixed(2)}` : ''}</div>
+                        ) : (
+                          <div className="text-xs text-gray-400 mt-1">{p.sku}</div>
+                        )}
                         {p.scheduleEnabled && p.scheduleStart && p.scheduleEnd && (
                           <div className="text-[10px] text-blue-500 mt-0.5">⏰ {p.scheduleStart}–{p.scheduleEnd}</div>
                         )}
@@ -326,6 +338,7 @@ export default function MenuPage() {
             </div>
 
             <div className="grid grid-cols-3 gap-3">
+              {canSeePrices && (
               <div>
                 <label className="text-xs font-medium text-gray-500">Sale Price *</label>
                 <input
@@ -337,6 +350,8 @@ export default function MenuPage() {
                   placeholder="15.00"
                 />
               </div>
+              )}
+              {canSeeCostPrice && (
               <div>
                 <label className="text-xs font-medium text-gray-500">Cost Price</label>
                 <input
@@ -348,6 +363,7 @@ export default function MenuPage() {
                   placeholder="4.50"
                 />
               </div>
+              )}
               <div>
                 <label className="text-xs font-medium text-gray-500">Category *</label>
                 <select

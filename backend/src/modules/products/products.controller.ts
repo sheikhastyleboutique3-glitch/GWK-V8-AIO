@@ -30,16 +30,40 @@ const UTF8_BOM = '\uFEFF';
 export class ProductsController {
   constructor(private svc: ProductsService) {}
 
+  // Roles that should NOT see any prices in product responses
+  private static readonly NO_PRICE_ROLES: string[] = ['KITCHEN', 'PASTRY', 'BARISTA', 'CLEANER', 'WAREHOUSE', 'DRIVER'];
+  // Roles that can see sale price but NOT cost price
+  private static readonly SALE_ONLY_ROLES: string[] = ['WAITER'];
+
+  private stripPrices(products: any[], userRole: string) {
+    const noPrices = ProductsController.NO_PRICE_ROLES.includes(userRole);
+    const saleOnly = ProductsController.SALE_ONLY_ROLES.includes(userRole);
+    if (!noPrices && !saleOnly) return products;
+
+    return products.map((p: any) => {
+      const safe = { ...p };
+      if (noPrices) {
+        delete safe.salePrice;
+        delete safe.costPrice;
+      } else if (saleOnly) {
+        delete safe.costPrice;
+      }
+      return safe;
+    });
+  }
+
   @Get()
-  findAll(
+  async findAll(
     @Query('categoryId') categoryId?: string,
     @Query('search') search?: string,
     @Query('includeArchived') includeArchived?: string,
     @Query('sellable') sellable?: string,
     @Query('available') available?: string,
     @Query('productType') productType?: string,
+    @CurrentUser('role') userRole?: string,
   ) {
-    return this.svc.findAll(categoryId ? +categoryId : undefined, search, includeArchived === 'true', sellable === 'true', available === 'true', productType);
+    const products = await this.svc.findAll(categoryId ? +categoryId : undefined, search, includeArchived === 'true', sellable === 'true', available === 'true', productType);
+    return this.stripPrices(products as any[], userRole || '');
   }
 
   /** Returns only archived products — SUPER_ADMIN only */
