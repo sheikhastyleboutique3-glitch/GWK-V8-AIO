@@ -19,12 +19,9 @@ export default function DashboardPage() {
   const { user, activeBranch, isAllBranches } = useAuth();
   const navigate = useNavigate();
   const [showOnboarding, setShowOnboarding] = useState(() => {
-    // Show onboarding only if never completed and user is admin
     if (localStorage.getItem('gwk_onboarding_complete') === 'true') return false;
     return user?.role === 'SUPER_ADMIN';
   });
-  const { user, activeBranch } = useAuth();
-  const navigate = useNavigate();
 
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
   const canSeeAnalytics = ['SUPER_ADMIN', 'BRANCH_MANAGER', 'PROCUREMENT'].includes(user?.role || '');
