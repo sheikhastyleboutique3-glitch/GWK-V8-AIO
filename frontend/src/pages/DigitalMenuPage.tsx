@@ -349,11 +349,9 @@ function ProductCard({ product, currency, showPrice, enableOrdering, enable3D, b
       {showDetail && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4" onClick={() => setShowDetail(false)}>
           <div className="bg-white dark:bg-gray-900 w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl overflow-hidden shadow-2xl max-h-[90vh] flex flex-col animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
-            {/* Product image (large) */}
+            {/* Product image (large + zoomable) */}
             {product.imageUrl ? (
-              <div className="h-52 bg-gray-200 dark:bg-gray-800 overflow-hidden">
-                <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
-              </div>
+              <ZoomableImage src={product.imageUrl} alt={product.name} />
             ) : (
               <div className="h-32 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 flex items-center justify-center text-5xl">
                 {product.category?.icon || '🍽️'}
@@ -404,5 +402,98 @@ function ProductCard({ product, currency, showPrice, enableOrdering, enable3D, b
         </div>
       )}
     </>
+  );
+}
+
+
+// ─── Zoomable Image Component (pinch-to-zoom + double-tap) ───────────────────
+function ZoomableImage({ src, alt }: { src: string; alt: string }) {
+  const [zoomed, setZoomed] = useState(false);
+  const [scale, setScale] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const imgRef = useRef<HTMLDivElement>(null);
+  const lastTouchRef = useRef<{ dist: number; x: number; y: number } | null>(null);
+
+  // Double-tap to zoom
+  const lastTapRef = useRef(0);
+  const handleTap = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      // Double tap
+      if (scale > 1) { setScale(1); setPosition({ x: 0, y: 0 }); }
+      else { setScale(2.5); }
+    }
+    lastTapRef.current = now;
+  };
+
+  // Pinch-to-zoom (touch)
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (lastTouchRef.current) {
+        const delta = dist - lastTouchRef.current.dist;
+        setScale(s => Math.max(1, Math.min(4, s + delta * 0.01)));
+      }
+      lastTouchRef.current = { dist, x: (e.touches[0].clientX + e.touches[1].clientX) / 2, y: (e.touches[0].clientY + e.touches[1].clientY) / 2 };
+    } else if (e.touches.length === 1 && scale > 1) {
+      // Pan when zoomed
+      if (lastTouchRef.current) {
+        const dx = e.touches[0].clientX - lastTouchRef.current.x;
+        const dy = e.touches[0].clientY - lastTouchRef.current.y;
+        setPosition(p => ({ x: p.x + dx, y: p.y + dy }));
+      }
+      lastTouchRef.current = { dist: 0, x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }
+  };
+
+  const handleTouchEnd = () => { lastTouchRef.current = null; };
+
+  // Mouse wheel zoom (desktop)
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    setScale(s => Math.max(1, Math.min(4, s - e.deltaY * 0.003)));
+  };
+
+  // Full-screen zoom overlay
+  if (zoomed) {
+    return (
+      <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center" onClick={() => { setZoomed(false); setScale(1); setPosition({ x: 0, y: 0 }); }}>
+        <div
+          ref={imgRef}
+          className="w-full h-full flex items-center justify-center overflow-hidden touch-none"
+          onClick={e => e.stopPropagation()}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onWheel={handleWheel}
+          onDoubleClick={() => { if (scale > 1) { setScale(1); setPosition({ x: 0, y: 0 }); } else setScale(2.5); }}
+        >
+          <img
+            src={src}
+            alt={alt}
+            className="max-w-none transition-transform duration-100"
+            style={{ transform: `scale(${scale}) translate(${position.x / scale}px, ${position.y / scale}px)` }}
+            draggable={false}
+          />
+        </div>
+        <button onClick={() => { setZoomed(false); setScale(1); setPosition({ x: 0, y: 0 }); }} className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 backdrop-blur text-white flex items-center justify-center text-lg">✕</button>
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/60 text-xs">Pinch to zoom · Double-tap to toggle · Tap ✕ to close</div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="h-52 bg-gray-200 dark:bg-gray-800 overflow-hidden relative cursor-zoom-in"
+      onClick={handleTap}
+      onDoubleClick={() => setZoomed(true)}
+    >
+      <img src={src} alt={alt} className="w-full h-full object-cover" />
+      <div className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-black/40 backdrop-blur flex items-center justify-center text-white text-xs">
+        🔍
+      </div>
+    </div>
   );
 }
