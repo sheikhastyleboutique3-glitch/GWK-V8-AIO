@@ -72,7 +72,7 @@ async function main() {
     where: { id: 2 }, update: { cashFloat: 5000 },
     create: {
       id: 2, name: 'Gaimer w Kahi — West Walk (Main)', nameAr: 'قيمر وكاهي — ويست ووك (الرئيسي)',
-      address: 'West Walk, Lusail Boulevard, Lusail, Qatar', phone: '+974-4000-0002', cashFloat: 5000,
+      address: 'West Walk, Al Erkyah, Lusail, Qatar', phone: '+974-4000-0002', cashFloat: 5000,
     },
   });
   const branchGwkDohaPort = await prisma.branch.upsert({
@@ -101,7 +101,7 @@ async function main() {
     where: { id: 6 }, update: { cashFloat: 3500 },
     create: {
       id: 6, name: 'Shai bu Hamad — West Walk', nameAr: 'شاي بو حمد — ويست ووك',
-      address: 'West Walk, Lusail Boulevard, Lusail, Qatar', phone: '+974-4000-0006', cashFloat: 3500,
+      address: 'West Walk, Al Erkyah, Lusail, Qatar', phone: '+974-4000-0006', cashFloat: 3500,
     },
   });
   console.log('✅ Branches (6): Warehouse + Gaimer w Kahi (3) + Shai bu Hamad (2)');

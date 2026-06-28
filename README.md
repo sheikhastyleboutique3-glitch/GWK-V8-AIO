@@ -745,11 +745,11 @@ After seeding (`npx prisma db seed`), use these accounts:
 ### Demo Data Included
 - **6 branches:**
   - Central Warehouse (Industrial Area, Doha)
-  - **Gaimer w Kahi — West Walk** (Main Branch, Lusail)
+  - **Gaimer w Kahi — West Walk** (Main Branch, Al Erkyah, Lusail)
   - **Gaimer w Kahi — Doha Port** (Second Branch)
   - **Gaimer w Kahi Express — Lusail** (Express format)
   - **Shai bu Hamad — Gulf Mall** (Main Branch, Al Gharafa)
-  - **Shai bu Hamad — West Walk** (Second Branch, Lusail)
+  - **Shai bu Hamad — West Walk** (Second Branch, Al Erkyah, Lusail)
 - 20+ menu products with images, categories, and recipes
 - 4 suppliers with price history
 - Sample orders, requisitions, and inventory
