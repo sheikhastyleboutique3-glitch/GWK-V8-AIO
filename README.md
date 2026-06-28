@@ -24,6 +24,7 @@
 
 ## Table of Contents
 
+- [Operational Workflows](#operational-workflows)
 - [Features](#features)
 - [Architecture](#architecture)
 - [Quick Start](#quick-start)
@@ -34,6 +35,572 @@
 - [Environment Variables](#environment-variables)
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
+
+---
+
+## Operational Workflows
+
+### How the System Flows — End to End
+
+```
+┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐
+│ CUSTOMER │────▶│  WAITER  │────▶│ KITCHEN  │────▶│ CASHIER  │────▶│ MANAGER  │
+│          │     │          │     │          │     │          │     │          │
+│ Scans QR │     │ Takes    │     │ Prepares │     │ Collects │     │ Reviews  │
+│ or Sits  │     │ Order    │     │ Food     │     │ Payment  │     │ Reports  │
+└──────────┘     └──────────┘     └──────────┘     └──────────┘     └──────────┘
+```
+
+---
+
+### 1. Customer Journey
+
+```
+Customer arrives → Scans table QR / Waiter greets
+         │
+         ├─── Self-Order (QR): Browse menu → Add to cart → Place order → Kitchen receives
+         │
+         ├─── Dine-In (Waiter): Waiter takes order on tablet → Fires to kitchen
+         │
+         ├─── Takeaway: Cashier enters order → Kitchen prepares → Customer picks up
+         │
+         └─── Delivery (Talabat/Snoonu): Platform sends order → Kitchen prepares → Driver delivers
+```
+
+**What the customer sees:**
+- **QR Menu** (`/order/:branchId`): Full menu with images, categories, prices. Add to cart, checkout with table number.
+- **Customer Display** (`/display/:branchId`): Second screen at counter showing items being scanned + running total.
+- **Kiosk** (`/kiosk/:configId`): Self-service terminal for ordering + payment.
+
+---
+
+### 2. Waiter Workflow
+
+```
+Open App → See Floor Plan (tables colored by status)
+    │
+    ├── Tap GREEN table → Create new order (atomic claim, no duplicates)
+    ├── Tap AMBER table → Resume existing order (add more items)
+    ├── Tap RED table → Bill requested (notify cashier)
+    │
+    ▼
+Select items from menu → Add modifiers (size, sugar, extras)
+    │
+    ▼
+Send to Kitchen (🔥 Fire) → KOT prints at correct station
+    │                         (Hot Kitchen / Bar / Pastry)
+    ▼
+Guest asks for bill → Request Bill → Table turns RED
+    │
+    ▼
+Cashier settles payment → Table auto-resets to GREEN (available)
+```
+
+**Waiter capabilities:**
+- See live floor plan (real-time via WebSocket — no refresh needed)
+- Claim tables atomically (no race conditions with other waiters)
+- Split bill (by item or by seat)
+- Transfer table (move order to different table)
+- Merge orders (combine two tables into one bill)
+- Send to kitchen with course timing (Course 1 first, Course 2 later)
+
+---
+
+### 3. Kitchen (KDS) Workflow
+
+```
+Order Fired by Waiter/POS
+    │
+    ▼
+┌─────────────────────────────────────────────────────────┐
+│  KITCHEN DISPLAY SYSTEM (auto dark mode, sound alerts)  │
+├──────────────┬──────────────────┬───────────────────────┤
+│   QUEUED     │    PREPARING     │        READY          │
+│  (new items) │  (being cooked)  │   (waiting pickup)    │
+├──────────────┼──────────────────┼───────────────────────┤
+│ Order #4521  │  Order #4519     │   Order #4517         │
+│ 2x Latte    │  1x Grilled Fish │   3x Caesar Salad     │
+│ ⏱ 0:45      │  ⏱ 8:23          │   ⏱ Done              │
+│ [Start ▶]   │  [Ready ✓]       │   [Served ✓]          │
+└──────────────┴──────────────────┴───────────────────────┘
+```
+
+**Kitchen capabilities:**
+- See orders grouped by station (Hot Kitchen / Pastry / Bar)
+- Sound alert (🔔 beep) when new orders arrive
+- Prep time timer with color-coded urgency (green → amber → red OVERDUE)
+- Advance items through workflow: Queued → Preparing → Ready → Served
+- Items are routed to the correct printer/station by category
+
+---
+
+### 4. Cashier (POS) Workflow
+
+```
+Open Session (count cash in drawer by denomination)
+    │
+    ▼
+┌── Take Orders ──────────────────────────────┐
+│  • Scan barcode / tap product / search      │
+│  • Apply modifiers, combos, discounts       │
+│  • Choose channel (Dine-in/Takeaway/etc.)   │
+│  • Apply coupon or loyalty card             │
+└─────────────────────────────────────────────┘
+    │
+    ▼
+┌── Settle Payment ───────────────────────────┐
+│  • Split tender (part cash, part card)      │
+│  • Multi-currency (USD/EUR → QAR)           │
+│  • Loyalty points redemption                │
+│  • Gift card / store credit                 │
+│  • Payment terminal integration             │
+└─────────────────────────────────────────────┘
+    │
+    ▼
+Complete Order → Receipt prints → Stock deducted (FEFO) → Finance journal posted
+    │
+    ▼
+End of shift → Close Session → Count drawer → Z-Report prints
+                                (variance = counted - expected)
+```
+
+**Cashier capabilities:**
+- Keyboard shortcuts (F2=Pay, F3=Hold, F4=Print, F8=Clear)
+- Barcode scanning (auto-add product to cart)
+- Hold/resume orders (park a bill, come back later)
+- Refund (full or partial — item-level selection)
+- Payment correction (manager PIN override)
+- Cash in/out movements (tracked, reason required)
+- X-Report (mid-shift check) / Z-Report (end of day)
+
+---
+
+### 5. Driver Workflow
+
+```
+Order marked DELIVERY
+    │
+    ▼
+Manager assigns driver (or driver self-assigns)
+    │
+    ▼
+Driver sees "My Runs" → Status: ASSIGNED
+    │
+    ├── Taps "Out for Delivery" → Status: OUT_FOR_DELIVERY
+    │   (GPS tracking starts, customer can see ETA)
+    │
+    └── Taps "Delivered" → Status: DELIVERED
+        (order complete, driver freed for next run)
+```
+
+---
+
+### 6. Procurement / Warehouse Workflow
+
+```
+┌─ Branch Manager notices low stock ──────────────────────┐
+│                                                          │
+│  System auto-generates LOW STOCK alert                   │
+│  OR Manager creates Requisition manually                 │
+└──────────────────────────────────────────────────────────┘
+         │
+         ▼
+Requisition: DRAFT → SUBMITTED → MANAGER_APPROVED
+         │
+         ▼
+Procurement creates Purchase Order → Sends to Supplier
+         │
+         ▼
+Supplier delivers goods → Warehouse receives
+         │                   (matches PO quantities,
+         │                    records batch/expiry,
+         │                    price change → history)
+         ▼
+Stock added to inventory (FEFO) → Requisition: CONFIRMED_RECEIPT
+         │
+         ▼
+If inter-branch needed: Transfer Order created
+  From Branch → IN_TRANSIT → To Branch RECEIVED
+```
+
+**Auto-reorder:** System checks stock daily against reorder points and generates suggestions based on consumption velocity.
+
+---
+
+### 7. Production (Central Kitchen) Workflow
+
+```
+Production Order: PLANNED
+    │
+    ▼
+Chef starts → Status: IN_PROGRESS
+    │
+    │  Recipe exploded (BOM):
+    │  • 10kg Dough = 7kg Flour + 2kg Water + 1kg Yeast
+    │  • Apply prep loss % + cooking loss % + waste %
+    │
+    ▼
+Complete production → Status: COMPLETED
+    │
+    ├── Ingredients CONSUMED from inventory (FEFO)
+    └── Finished product YIELDED into inventory
+        (with batch number, expiry date, rolled-up unit cost)
+```
+
+---
+
+### 8. Manager Workflow
+
+```
+┌─── Daily ────────────────────────────────────────────────┐
+│  • Review Dashboard (today's sales, food cost %, GP)     │
+│  • Check alerts (low stock, expiry warnings)             │
+│  • Approve/modify requisitions                           │
+│  • Review POS session variances (cash over/short)        │
+│  • Approve new user accounts                             │
+└──────────────────────────────────────────────────────────┘
+
+┌─── Weekly ───────────────────────────────────────────────┐
+│  • ABC Analysis (which products drive 80% revenue?)      │
+│  • Waste Ratio (which items have >10% waste?)            │
+│  • Staff Performance (orders/revenue per cashier)        │
+│  • Peak Hour Heatmap (staffing optimization)             │
+│  • Customer CLV (who are our Champions vs At Risk?)      │
+│  • Auto-email report arrives Monday 7 AM                 │
+└──────────────────────────────────────────────────────────┘
+
+┌─── Monthly ──────────────────────────────────────────────┐
+│  • P&L Summary (Revenue - COGS - Commission = GP)        │
+│  • Supplier price comparison (cheapest vendor per item)  │
+│  • Menu engineering (Stars/Puzzles/Plowhorses/Dogs)      │
+│  • Auto-email report arrives 1st of month                │
+└──────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 9. Super Admin Workflow
+
+```
+┌─── System Configuration ─────────────────────────────────┐
+│  • Branches: Add/edit locations, set operating hours      │
+│  • Users: Create accounts, assign roles + branches       │
+│  • Printers: Configure station routing (IP:port)         │
+│  • Payment Methods: Cash/Card/QR/eWallet/Aggregator      │
+│  • Currencies: Exchange rates for multi-currency POS     │
+│  • Settings: Company info, logo, VAT rate, timezone      │
+│  • Self-Order: Kiosk/QR configs per branch               │
+│  • QR Codes: Generate menu/table/kiosk QR codes          │
+│  • Notifications: WhatsApp API + SMTP email config       │
+│  • Loyalty: Programs, rewards, card management           │
+│  • Discount Rules: Staff/corporate/BOGO/category         │
+└──────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 10. Complete Order Lifecycle
+
+```
+                    ┌─────────────────┐
+                    │   ORDER CREATED  │
+                    │  (OPEN status)   │
+                    └────────┬────────┘
+                             │
+              ┌──────────────┼──────────────┐
+              │              │              │
+              ▼              ▼              ▼
+         ┌────────┐    ┌─────────┐    ┌────────┐
+         │  HELD  │    │  ITEMS  │    │ VOIDED │
+         │(parked)│    │  ADDED  │    │(cancel)│
+         └───┬────┘    └────┬────┘    └────────┘
+             │              │
+             └──────┬───────┘
+                    │
+                    ▼
+            ┌───────────────┐
+            │ FIRE TO KDS   │ (Kitchen receives)
+            │ (firedAt set) │
+            └───────┬───────┘
+                    │
+                    ▼
+            ┌───────────────┐
+            │   PAYMENT     │ (Cash/Card/Split)
+            │   ADDED       │
+            └───────┬───────┘
+                    │
+                    ▼
+            ┌───────────────┐
+            │   COMPLETED   │
+            └───────┬───────┘
+                    │
+    ┌───────────────┼───────────────────────────┐
+    │               │                           │
+    ▼               ▼                           ▼
+┌────────┐   ┌──────────┐              ┌────────────────┐
+│ Stock  │   │ Finance  │              │ Loyalty Points │
+│Deducted│   │ Journal  │              │   Accrued      │
+│ (FEFO) │   │ Posted   │              │                │
+└────────┘   └──────────┘              └────────────────┘
+                    │
+                    ▼
+            ┌───────────────┐
+            │  Can Later:   │
+            │  • Refund     │
+            │  • Partial    │
+            │    Refund     │
+            └───────────────┘
+```
+
+---
+
+### 11. Real-Time Event Flow
+
+```
+Staff Action                    WebSocket Event              Who Receives
+─────────────────────────────────────────────────────────────────────────
+Waiter claims table      →   table_changed (OCCUPIED)    →  All waiters' floor plans
+Waiter adds item         →   order_changed (item_added)  →  KDS board + POS order list
+Kitchen marks Ready      →   kds_update                  →  All KDS screens
+Cashier completes order  →   order_changed (completed)   →  Waiter floor + session bar
+                              table_changed (AVAILABLE)   →  All floor plans
+Staff toggles 86         →   product_changed             →  All POS + menu + kiosk
+Manager updates price    →   product_changed             →  All POS + menu + kiosk
+Session opened/closed    →   session_changed             →  All POS terminals
+```
+
+**Result:** Every screen updates in <100ms. No one waits for a refresh. No stale data.
+
+---
+
+### 13. Internal Staff Workflows (Day-to-Day Operations)
+
+#### Opening the Restaurant (Morning Routine)
+
+```
+Manager/Cashier arrives
+    │
+    ├── 1. Open POS Session (count cash in drawer)
+    │       → Enter denomination counts (bills + coins)
+    │       → System records opening float
+    │
+    ├── 2. Kitchen staff clock in (Shifts → Quick Clock)
+    │       → System records actual start time
+    │
+    ├── 3. Check alerts dashboard
+    │       → Low stock items (need reorder?)
+    │       → Expiry warnings (pull items today?)
+    │       → Pending requisitions to approve
+    │
+    ├── 4. Review today's reservations (Bookings page)
+    │       → Which tables are reserved and when?
+    │       → Any VIP customers expected?
+    │
+    └── 5. Verify menu availability
+            → Check 86'd items from yesterday
+            → Auto-86 may have disabled items (low ingredients)
+            → Re-enable items that got restocked
+```
+
+#### Receiving a Delivery from Supplier
+
+```
+Supplier truck arrives at branch/warehouse
+    │
+    ▼
+Warehouse staff opens Purchase Orders page
+    │
+    ├── Find the matching PO (status: SENT_TO_SUPPLIER)
+    │
+    ├── Click "Receive" on the PO
+    │       │
+    │       ├── For each line item:
+    │       │   • Enter ACTUAL quantity received (may differ from ordered)
+    │       │   • Enter ACTUAL unit price (if different from quoted)
+    │       │   • System logs price change in Supplier Price History
+    │       │   • Enter batch number (if expiry-tracked)
+    │       │   • Enter expiry date (if applicable)
+    │       │
+    │       └── Confirm receipt
+    │               │
+    │               ├── Inventory updated (FEFO batch created)
+    │               ├── PO status → PARTIALLY_RECEIVED or FULLY_RECEIVED
+    │               ├── Accounts Payable entry created (what we owe supplier)
+    │               └── If cost price changed → product cost updated
+    │
+    └── If items came WITHOUT a PO (emergency purchase):
+            → Use Inventory → Manual Adjustment (type: RECEIPT)
+            → Or create a backdated PO and receive immediately
+```
+
+#### Inventory Stock Count (Periodic Audit)
+
+```
+Manager initiates stock count
+    │
+    ├── Start new count (Stock Count page)
+    │       → System snapshots current "system quantity" for all items
+    │
+    ├── Staff physically counts every item
+    │       → Enter actual counted quantity per product
+    │       → System shows variance (counted - system)
+    │
+    ├── Save progress (can pause and resume)
+    │
+    └── Finalize count
+            │
+            ├── System calculates total variance value
+            ├── Inventory adjusted to match physical count
+            ├── Audit trail records who counted, when, and all variances
+            └── Manager reviews → investigates large discrepancies
+```
+
+#### Handling Wastage
+
+```
+Kitchen/Warehouse discovers spoiled/damaged stock
+    │
+    ▼
+Open Wastage page → Log new wastage
+    │
+    ├── Select product (search by name/SKU)
+    ├── Enter quantity wasted
+    ├── Select reason:
+    │   • EXPIRED (past best-before)
+    │   • DAMAGED (broken packaging)
+    │   • SPILLAGE (dropped/spilled)
+    │   • OVERPRODUCTION (made too much)
+    │   • QUALITY_REJECTION (doesn't meet standard)
+    │   • OTHER
+    ├── Add notes (optional)
+    │
+    └── Submit
+            │
+            ├── Stock auto-deducted from inventory (FEFO)
+            ├── Finance entry posted (wastage cost = qty x cost price)
+            ├── If stock now below reorder point → LOW_STOCK alert generated
+            └── Waste ratio report updated (waste / sales)
+```
+
+#### Branch Transfer (Moving Stock Between Locations)
+
+```
+Branch A needs items that Branch B has excess of
+    │
+    ▼
+Manager creates Transfer Order
+    │
+    ├── Select: From Branch → To Branch
+    ├── Add items + quantities to transfer
+    ├── Status: DRAFT
+    │
+    ├── Confirm → Status: IN_TRANSIT
+    │       → Source branch stock DEDUCTED
+    │       → Items are "in limbo" (not at either branch)
+    │
+    └── Receiving branch confirms → Status: RECEIVED
+            → Destination branch stock CREDITED
+            → Both audit trails updated
+```
+
+#### End of Day (Closing Routine)
+
+```
+Last customer leaves
+    │
+    ├── 1. Kitchen closes
+    │       • Mark remaining prep as wastage (if can't keep)
+    │       • Complete any pending production orders
+    │       • Staff clock out (Shifts → Quick Clock)
+    │
+    ├── 2. Waiter closes tables
+    │       • Ensure all bills are settled (no RED tables)
+    │       • Any held orders → void or complete
+    │
+    ├── 3. Cashier closes POS session
+    │       • Click "Close Session"
+    │       • Count all cash by denomination
+    │       • System compares: counted vs expected
+    │       • Variance recorded (over/short)
+    │       • Z-Report auto-prints (session summary)
+    │
+    ├── 4. Manager reviews
+    │       • Check session variance (acceptable? investigate?)
+    │       • Review day's sales vs targets
+    │       • Approve any pending requisitions for tomorrow
+    │       • EOD email auto-sends at 23:55 to all managers
+    │
+    └── 5. System overnight jobs (automatic)
+            • Generate low-stock alerts (hourly)
+            • Generate expiry warnings (7 days ahead)
+            • Auto-86 check (disable items with 0-stock ingredients)
+            • Menu schedule check (disable breakfast items at 11 AM, etc.)
+```
+
+#### Handling a Customer Complaint / Refund
+
+```
+Customer complains about an order
+    │
+    ├── Option A: Full Refund
+    │       • Manager/Cashier opens Sales History
+    │       • Find the order → Click "Refund"
+    │       • Confirm (requires BRANCH_MANAGER or SUPER_ADMIN role)
+    │       • Stock auto-restocked (RETURN_IN via FEFO)
+    │       • Finance entry reversed
+    │       • Payment refunded to original method
+    │
+    ├── Option B: Partial Refund (specific items)
+    │       • Click "Partial Refund" on the order
+    │       • Select which items to refund (checkboxes)
+    │       • Only selected items restocked + refunded
+    │       • Order stays COMPLETED (not fully voided)
+    │
+    └── Option C: Void + Re-make
+            • Waiter/Cashier voids the specific item (with reason)
+            • KDS shows item as CANCELLED (crossed out)
+            • New item added to order → fires to kitchen again
+            • No refund needed (customer gets replacement)
+```
+
+#### Loyalty and Repeat Customer Flow
+
+```
+Customer presents loyalty card (scan barcode / give code)
+    │
+    ▼
+Cashier scans/enters code → System looks up card
+    │
+    ├── Shows: Customer name, points balance, wallet balance
+    │
+    ├── At CHECKOUT:
+    │   ├── Earn: Customer earns points (1 point per QAR spent)
+    │   └── Redeem: Customer spends points for discount
+    │       (e.g., 100 points = 5 QAR off)
+    │
+    └── eWallet: Customer can also pay from prepaid balance
+            → Manager tops up wallet (cash/card → store credit)
+            → Customer pays from balance at POS
+```
+
+---
+
+### 14. Role Access Summary
+
+| Role | Sees | Can Do |
+|------|------|--------|
+| **SUPER_ADMIN** | Everything | Full system control |
+| **BRANCH_MANAGER** | Their branch + reports | Approve, configure, override |
+| **CASHIER** | POS + orders + sessions | Take orders, collect payment, refund |
+| **WAITER** | Floor plan + menu (no prices for cost) | Take orders, fire to kitchen, split bills |
+| **KITCHEN** | KDS board only (no prices) | Advance item status (Queue→Prep→Ready) |
+| **PASTRY** | KDS board only (no prices) | Same as kitchen, pastry station |
+| **BARISTA** | KDS board only (no prices) | Same as kitchen, bar station |
+| **PROCUREMENT** | Suppliers + POs + inventory | Create POs, receive goods, price negotiate |
+| **WAREHOUSE** | Inventory + transfers + stock counts | Receive, dispatch, count stock |
+| **DRIVER** | My deliveries only | Update delivery status, GPS tracking |
+| **CLEANER** | Staff tasks only | Mark cleaning tasks done |
+| **ACCOUNTANT** | Finance + reports | View all financial data, no operational actions |
 
 ---
 
