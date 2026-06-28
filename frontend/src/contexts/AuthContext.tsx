@@ -97,13 +97,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const switchBranch = useCallback(async (branchId: number) => {
     try {
-      const res = await api.patch<{ data: any }>('/auth/switch-branch', { branchId });
-      const profile = res.data.data;
-      const branch = profile.branch || profile.assignedBranches?.find((b: any) => b.id === branchId);
-      if (branch) { setActiveBranch({ id: branch.id, name: branch.name, nameAr: branch.nameAr }); localStorage.setItem('activeBranch', JSON.stringify({ id: branch.id, name: branch.name, nameAr: branch.nameAr })); }
+      if (navigator.onLine) {
+        const res = await api.patch<{ data: any }>('/auth/switch-branch', { branchId });
+        const profile = res.data.data;
+        const branch = profile.branch || profile.assignedBranches?.find((b: any) => b.id === branchId);
+        if (branch) { setActiveBranch({ id: branch.id, name: branch.name, nameAr: branch.nameAr }); localStorage.setItem('activeBranch', JSON.stringify({ id: branch.id, name: branch.name, nameAr: branch.nameAr })); }
+      } else {
+        // OFFLINE: switch using cached branch list (no API call needed)
+        const cachedBranches = JSON.parse(localStorage.getItem('gwk_cache_branches') || '[]');
+        const branch = cachedBranches.find((b: any) => b.id === branchId)
+          || user?.assignedBranches?.find((b: any) => b.id === branchId);
+        if (branch) {
+          setActiveBranch({ id: branch.id, name: branch.name, nameAr: branch.nameAr });
+          localStorage.setItem('activeBranch', JSON.stringify({ id: branch.id, name: branch.name, nameAr: branch.nameAr }));
+        }
+      }
       setIsAllBranches(false); localStorage.setItem('branchScope', 'branch');
       if (user) { const updated = { ...user, branchId }; setUser(updated); localStorage.setItem('user', JSON.stringify(updated)); }
-    } catch (e) { console.error('Switch branch failed:', e); }
+    } catch (e) {
+      // If API failed (offline), try cached branch list as fallback
+      const cachedBranches = JSON.parse(localStorage.getItem('gwk_cache_branches') || '[]');
+      const branch = cachedBranches.find((b: any) => b.id === branchId)
+        || user?.assignedBranches?.find((b: any) => b.id === branchId);
+      if (branch) {
+        setActiveBranch({ id: branch.id, name: branch.name, nameAr: branch.nameAr });
+        localStorage.setItem('activeBranch', JSON.stringify({ id: branch.id, name: branch.name, nameAr: branch.nameAr }));
+        setIsAllBranches(false); localStorage.setItem('branchScope', 'branch');
+        if (user) { const updated = { ...user, branchId }; setUser(updated); localStorage.setItem('user', JSON.stringify(updated)); }
+      } else {
+        console.error('Switch branch failed (offline, no cached data):', e);
+      }
+    }
   }, [user]);
 
   // Select the "All Branches" scope: no branchId is sent so every page shows

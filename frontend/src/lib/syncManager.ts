@@ -101,6 +101,13 @@ export function initSyncManager() {
     if (result.synced > 0) {
       console.log(`[SyncManager] Synced ${result.synced} offline transactions`);
     }
+    // Refresh offline cache with fresh data from server
+    import('./offlineCache').then(({ preloadCriticalData, syncLocalStock }) => {
+      const branchRaw = localStorage.getItem('activeBranch');
+      const branchId = branchRaw ? JSON.parse(branchRaw)?.id : undefined;
+      preloadCriticalData(branchId);
+      if (branchId) syncLocalStock(branchId);
+    });
   });
 
   window.addEventListener('offline', async () => {
@@ -123,6 +130,17 @@ export function initSyncManager() {
   if (navigator.onLine) {
     setTimeout(() => syncPending(), 2000);
   }
+
+  // Periodic cache refresh every 5 minutes while online
+  setInterval(() => {
+    if (navigator.onLine) {
+      import('./offlineCache').then(({ preloadCriticalData }) => {
+        const branchRaw = localStorage.getItem('activeBranch');
+        const branchId = branchRaw ? JSON.parse(branchRaw)?.id : undefined;
+        preloadCriticalData(branchId);
+      });
+    }
+  }, 5 * 60_000);
 }
 
 /** Request a background sync (for when we go offline during a mutation). */

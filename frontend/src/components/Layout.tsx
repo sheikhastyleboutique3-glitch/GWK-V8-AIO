@@ -9,6 +9,7 @@ import { unlockAudio } from '../lib/sound';
 import { toggleDarkMode, loadThemeLocal } from '../lib/theme';
 import ThemePanel from './ThemePanel';
 import CommandPalette from './CommandPalette';
+import SyncIndicator from './SyncIndicator';
 import {
   Squares2X2Icon, ClipboardDocumentListIcon, TrashIcon,
   BellAlertIcon, ChatBubbleLeftRightIcon, ArchiveBoxIcon, TruckIcon,
@@ -312,6 +313,7 @@ export default function Layout() {
             {t('auth.welcome')}, <span className="font-semibold text-fg">{user?.firstName}</span>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2">
+            <SyncIndicator />
             {hasMultipleBranches && (
               <div className="relative">
                 <button

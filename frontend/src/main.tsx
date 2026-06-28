@@ -49,22 +49,30 @@ const queryClient = new QueryClient({
 // ─── Prefetch critical POS data on app boot (products/categories load instantly) ───
 const token = localStorage.getItem('token');
 if (token) {
-  // Products & categories are static during a shift — prefetch once, cache long
-  queryClient.prefetchQuery({
-    queryKey: ['pos-categories'],
-    queryFn: () =>
-      fetch('/api/categories?posVisible=true', { headers: { Authorization: `Bearer ${token}` } })
-        .then((r) => r.json())
-        .then((d) => d.data),
-    staleTime: 5 * 60_000, // 5min — categories almost never change mid-shift
+  // Preload ALL critical data into cache (survives offline for entire shift)
+  import('./lib/offlineCache').then(({ preloadCriticalData }) => {
+    const branchRaw = localStorage.getItem('activeBranch');
+    const branchId = branchRaw ? JSON.parse(branchRaw)?.id : undefined;
+    preloadCriticalData(branchId).then((data) => {
+      // Seed React Query cache with the preloaded data (instant page loads)
+      if (data.categories?.length) {
+        queryClient.setQueryData(['pos-categories'], data.categories);
+      }
+      if (data.products?.length) {
+        queryClient.setQueryData(['pos-products', undefined, ''], data.products);
+        queryClient.setQueryData(['menu-items', '', ''], data.products);
+      }
+      if (data.modifierGroups?.length) {
+        queryClient.setQueryData(['modifier-groups'], data.modifierGroups);
+      }
+    });
   });
-  queryClient.prefetchQuery({
-    queryKey: ['pos-products', undefined, ''],
-    queryFn: () =>
-      fetch('/api/products?sellable=true&available=true&productType=MENU', { headers: { Authorization: `Bearer ${token}` } })
-        .then((r) => r.json())
-        .then((d) => d.data),
-    staleTime: 2 * 60_000, // 2min — products rarely change mid-shift
+
+  // Also sync local stock estimates (for offline stock warnings)
+  import('./lib/offlineCache').then(({ syncLocalStock }) => {
+    const branchRaw = localStorage.getItem('activeBranch');
+    const branchId = branchRaw ? JSON.parse(branchRaw)?.id : undefined;
+    if (branchId) syncLocalStock(branchId);
   });
 }
 
