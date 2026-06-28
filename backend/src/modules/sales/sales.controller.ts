@@ -31,6 +31,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { OrderChannel, OrderStatus, PaymentMethod, Role } from '@prisma/client';
 import { Transform } from 'class-transformer';
+import { generateZatcaQrBase64, canGenerateZatcaQr } from '../../common/utils/zatca-qr';
 
 export class OrderItemDto {
   @IsInt() productId: number;
@@ -89,6 +90,25 @@ export class CorrectPaymentDto {
   @IsString() reason: string;
 }
 
+export class ApplyTipDto {
+  @IsNumber() @Min(0) amount: number;
+}
+
+export class ReturnWithoutReceiptItemDto {
+  @IsString() description: string;
+  @IsNumber() @Min(0.0001) quantity: number;
+  @IsNumber() @Min(0) unitPrice: number;
+}
+
+export class ReturnWithoutReceiptDto {
+  @IsInt() branchId: number;
+  @IsOptional() @IsString() customerName?: string;
+  @IsOptional() @IsString() reason?: string;
+  @IsEnum(PaymentMethod) refundMethod: PaymentMethod;
+  @IsArray() @ValidateNested({ each: true }) @Type(() => ReturnWithoutReceiptItemDto)
+  items: ReturnWithoutReceiptItemDto[];
+}
+
 export class TransferTableDto {
   @IsString() tableName: string;
 }
@@ -129,6 +149,40 @@ export class SalesController {
       skip: skip ? parseInt(skip, 10) : undefined,
       take: take ? parseInt(take, 10) : undefined,
     });
+  }
+
+  /**
+   * Return without receipt — manual refund entry without linking to an
+   * original order. Creates a negative-total "refund" order with
+   * status REFUNDED and records REFUND finance entry.
+   * NOTE: Placed before :id routes to avoid route collision.
+   */
+  @Post('returns') @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
+  returnWithoutReceipt(
+    @Body() dto: ReturnWithoutReceiptDto,
+    @CurrentUser('id') userId: number,
+  ) {
+    return this.svc.returnWithoutReceipt(dto, userId);
+  }
+
+  /**
+   * Generate ZATCA Phase 2 QR code data for a completed order.
+   * Returns the Base64-encoded TLV string to be rendered as a QR on the invoice.
+   */
+  @Get(':id/zatca-qr')
+  async zatcaQr(@Param('id', ParseIntPipe) id: number, @Query('sellerName') sellerName?: string, @Query('vatNumber') vatNumber?: string) {
+    const order = await this.svc.findOne(id);
+    const input = {
+      sellerName: sellerName || 'Business',
+      vatNumber: vatNumber || '',
+      timestamp: (order.completedAt || order.createdAt).toISOString(),
+      totalWithVat: order.total,
+      vatAmount: order.taxTotal,
+    };
+    if (!canGenerateZatcaQr(input)) {
+      return { qr: null, message: 'Missing required ZATCA fields (seller name, VAT number, or order total).' };
+    }
+    return { qr: generateZatcaQrBase64(input) };
   }
 
   @Get(':id')
@@ -279,5 +333,14 @@ export class SalesController {
     @CurrentUser('id') userId: number,
   ) {
     return this.svc.complete(id, { allowUnpaid: !!dto?.allowUnpaid }, userId);
+  }
+
+  /** Apply a tip (or update existing tip) on an open/held order. */
+  @Patch(':id/tip') @Roles(...POS_ROLES)
+  applyTip(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ApplyTipDto,
+  ) {
+    return this.svc.applyTip(id, dto.amount);
   }
 }

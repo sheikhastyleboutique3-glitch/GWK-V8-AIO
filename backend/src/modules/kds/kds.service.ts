@@ -51,6 +51,35 @@ export class KdsService {
     return updated;
   }
 
+  /**
+   * Recall a fired item: mark it with recalledAt timestamp and set kdsStatus
+   * to CANCELLED. Emits KDS_CHANGED so kitchen displays update instantly.
+   * This is the Odoo "Kitchen Recall" feature — cancel a fired item and
+   * notify KDS to stop preparing it.
+   */
+  async recall(itemId: number, userId?: number, reason?: string) {
+    const item = await this.prisma.orderItem.findUnique({
+      where: { id: itemId },
+      include: { order: { select: { branchId: true, status: true } } },
+    });
+    if (!item) throw new NotFoundException(`Order item ${itemId} not found`);
+    if (!item.firedAt) throw new BadRequestException('Item has not been fired to kitchen yet.');
+    if (item.recalledAt) throw new BadRequestException('Item has already been recalled.');
+    if (item.kdsStatus === KdsStatus.SERVED) throw new BadRequestException('Item has already been served — cannot recall.');
+
+    const updated = await this.prisma.orderItem.update({
+      where: { id: itemId },
+      data: {
+        kdsStatus: KdsStatus.CANCELLED,
+        recalledAt: new Date(),
+        recalledById: userId ?? null,
+        recallReason: reason || 'Recalled by staff',
+      },
+    });
+    this.events.emit(KDS_CHANGED, { branchId: item.order.branchId });
+    return updated;
+  }
+
   /** Simple kitchen performance: avg prep time (firedAt -> readyAt) for a period. */
   async performance(branchId?: number, from?: string, to?: string) {
     const items = await this.prisma.orderItem.findMany({

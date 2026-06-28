@@ -1577,6 +1577,10 @@ model OrderItem {
   kdsStatus KdsStatus @default(QUEUED)
   firedAt   DateTime?
   readyAt   DateTime?
+  // Kitchen recall: timestamp when a fired item is recalled (stop preparing).
+  recalledAt   DateTime?
+  recalledById Int?
+  recallReason String?
   // Soft void — order lines are never hard-deleted once fired (audit trail).
   isVoided     Boolean   @default(false)
   voidReason   String?

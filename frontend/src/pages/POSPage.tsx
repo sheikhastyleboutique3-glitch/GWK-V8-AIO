@@ -16,6 +16,7 @@ import { usePrompt } from '../lib/usePrompt';
 import { useConfirm } from '../lib/useConfirm';
 import { useDebounce } from '../lib/useDebounce';
 import { usePosKeyboard } from '../lib/usePosKeyboard';
+import { usePosSessionGuard } from '../lib/usePosSessionGuard';
 
 interface CartLine {
   itemId?: number; // present when the line lives on a persisted (loaded) order
@@ -98,6 +99,8 @@ export default function POSPage() {
   const [tenders, setTenders] = useState<Tender[]>([]);
   const [couponCode, setCouponCode] = useState('');
   const [coupon, setCoupon] = useState<{ code: string; discount: number } | null>(null);
+  // Tip state for Odoo-style quick tip buttons (10%/15%/20%)
+  const [tipAmount, setTipAmount] = useState(0);
   const [discountRuleId, setDiscountRuleId] = useState<number | ''>('');
   const [lastReceipt, setLastReceipt] = useState<any>(null);
   const [showPayment, setShowPayment] = useState(false);
@@ -192,6 +195,11 @@ export default function POSPage() {
     queryFn: () => api.get('/pos-sessions/current', { params: { branchId } }).then((r) => r.data.data),
     enabled: !!branchId,
     refetchInterval: 30_000,
+  });
+
+  // ── Forced POS Closing Popup: block navigation when session is open ────
+  const { blocked: sessionBlocked, proceed: sessionProceed, cancel: sessionCancel } = usePosSessionGuard({
+    sessionOpen: !!posSession,
   });
 
   // Customer search (for loyalty / store-credit redemption).
@@ -450,7 +458,9 @@ export default function POSPage() {
   const cartSubtotal = useMemo(() => cart.reduce((s, l) => s + l.unitPrice * l.quantity, 0) + comboCart.reduce((s, c) => s + c.price, 0), [cart, comboCart]);
   const subtotal = mode === 'existing' ? loadedOrder?.subtotal ?? 0 : cartSubtotal;
   const discount = mode === 'existing' ? (loadedOrder?.couponDiscount ?? 0) + (loadedOrder?.ruleDiscount ?? 0) : coupon?.discount ?? 0;
-  const total = mode === 'existing' ? loadedOrder?.total ?? 0 : Math.max(0, cartSubtotal - (coupon?.discount ?? 0));
+  const total = mode === 'existing'
+    ? (loadedOrder?.total ?? 0)
+    : Math.max(0, cartSubtotal - (coupon?.discount ?? 0) + tipAmount);
   const appliedCouponCode = mode === 'existing' ? loadedOrder?.couponCode : coupon?.code;
 
   const paid = useMemo(() => tenders.reduce((s, t) => s + t.amount, 0), [tenders]);
@@ -544,6 +554,7 @@ export default function POSPage() {
           idempotencyKey,
           items: cart.map((l) => ({ productId: l.productId, quantity: l.quantity, unitPrice: l.unitPrice, modifiers: l.modifiers })),
           combos: comboCart.map((c) => ({ comboId: c.comboId, choiceIds: c.choiceIds })),
+          tip: tipAmount > 0 ? tipAmount : undefined,
         });
         orderId = created.data.id;
         // Auto-fire to kitchen + print KOT for new orders
@@ -595,6 +606,7 @@ export default function POSPage() {
       setGiftCardCode('');
       setTenderAmount('');
       setTenders([]);
+      setTipAmount(0);
       setLoadedOrderId(null);
       setCustomer(null);
       setCustomerSearch('');
@@ -1969,6 +1981,49 @@ export default function POSPage() {
                 {payNumpad || remaining.toFixed(2)}
               </div>
 
+              {/* ── Tip Quick Buttons (Odoo parity: 10%/15%/20%) ──────── */}
+              <div className="w-full max-w-xs md:max-w-sm mb-4">
+                <div className="text-xs font-semibold text-gray-400 uppercase text-center mb-2">Add Tip</div>
+                <div className="grid grid-cols-4 gap-2">
+                  {[10, 15, 20].map((pct) => {
+                    const baseForTip = mode === 'existing' ? (loadedOrder?.subtotal ?? 0) : cartSubtotal;
+                    const tipVal = +(baseForTip * pct / 100).toFixed(2);
+                    const isActive = Math.abs(tipAmount - tipVal) < 0.01;
+                    return (
+                      <button
+                        key={pct}
+                        onClick={() => {
+                          const newTip = isActive ? 0 : tipVal;
+                          setTipAmount(newTip);
+                          if (mode === 'existing' && loadedOrderId) {
+                            api.patch(`/sales/orders/${loadedOrderId}/tip`, { amount: newTip }).then(() => refetchLoaded?.());
+                          }
+                        }}
+                        className={`py-2 rounded-lg text-sm font-bold transition ${isActive ? 'bg-amber-500 text-white ring-2 ring-amber-300' : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40'}`}
+                      >
+                        {pct}%
+                      </button>
+                    );
+                  })}
+                  <button
+                    onClick={() => {
+                      setTipAmount(0);
+                      if (mode === 'existing' && loadedOrderId) {
+                        api.patch(`/sales/orders/${loadedOrderId}/tip`, { amount: 0 }).then(() => refetchLoaded?.());
+                      }
+                    }}
+                    className={`py-2 rounded-lg text-sm font-bold transition ${tipAmount === 0 ? 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 hover:bg-gray-200'}`}
+                  >
+                    No Tip
+                  </button>
+                </div>
+                {tipAmount > 0 && (
+                  <div className="text-center mt-1 text-xs text-amber-600 font-medium">
+                    Tip: +{tipAmount.toFixed(2)}
+                  </div>
+                )}
+              </div>
+
               {/* Numpad */}
               <div className="grid grid-cols-4 gap-2 md:gap-3 w-full max-w-xs md:max-w-sm">
                 {['1','2','3','+10','4','5','6','+20','7','8','9','+50','+/-','0','.','⌫'].map((key) => (
@@ -2063,6 +2118,36 @@ export default function POSPage() {
 
       <PromptDialog />
       <ConfirmDialog />
+
+      {/* ── Forced POS Closing Popup: blocks leaving with open session ── */}
+      {sessionBlocked && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 text-center">
+            <div className="text-4xl mb-3">⚠️</div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2">
+              POS Session Still Open
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+              You have an active POS session. Please close it (count your cash drawer)
+              before navigating away. Leaving without closing may cause cash discrepancies.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={sessionCancel}
+                className="flex-1 py-2.5 rounded-xl bg-primary text-white font-semibold text-sm"
+              >
+                Stay & Close Session
+              </button>
+              <button
+                onClick={sessionProceed}
+                className="flex-1 py-2.5 rounded-xl border border-red-300 text-red-600 font-semibold text-sm hover:bg-red-50 dark:hover:bg-red-900/20"
+              >
+                Leave Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

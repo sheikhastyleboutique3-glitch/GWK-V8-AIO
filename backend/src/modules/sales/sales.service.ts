@@ -1350,4 +1350,102 @@ export class SalesService {
 
     return completed;
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FEATURE: Tip percentage buttons (Odoo parity)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Apply a tip (or update existing tip) on an open/held order.
+   * Recomputes the order total to include the tip.
+   */
+  async applyTip(orderId: number, amount: number) {
+    await this.assertOpen(orderId);
+    if (amount < 0) throw new BadRequestException('Tip cannot be negative.');
+    await this.prisma.order.update({
+      where: { id: orderId },
+      data: { tip: amount },
+    });
+    return this.recompute(orderId);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FEATURE: Return without receipt (Odoo parity)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Create a manual refund entry without linking to an original order.
+   * This handles returns when the customer has no receipt. Creates a
+   * negative-total REFUNDED order with a REFUND finance journal entry.
+   */
+  async returnWithoutReceipt(
+    dto: {
+      branchId: number;
+      customerName?: string;
+      reason?: string;
+      refundMethod: string;
+      items: Array<{ description: string; quantity: number; unitPrice: number }>;
+    },
+    userId: number,
+  ) {
+    if (!dto.items?.length) throw new BadRequestException('At least one return item is required.');
+    const refundTotal = dto.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+    if (refundTotal <= 0) throw new BadRequestException('Refund total must be greater than zero.');
+
+    // Generate a unique return order number
+    const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const [{ nextval }] = await this.prisma.$queryRaw<[{ nextval: bigint }]>`
+      SELECT nextval(pg_get_serial_sequence('orders', 'id'))`;
+    const returnNo = `RET-${stamp}-B${dto.branchId}-${String(Number(nextval)).padStart(5, '0')}`;
+
+    // Create the refund order with status REFUNDED
+    const order = await this.prisma.order.create({
+      data: {
+        orderNo: returnNo,
+        branchId: dto.branchId,
+        channel: 'DINE_IN',
+        status: OrderStatus.REFUNDED,
+        subtotal: -refundTotal,
+        total: -refundTotal,
+        notes: [
+          dto.reason ? `Reason: ${dto.reason}` : null,
+          dto.customerName ? `Customer: ${dto.customerName}` : null,
+          'Return without receipt',
+        ].filter(Boolean).join(' | '),
+        createdById: userId,
+        completedAt: new Date(),
+        items: {
+          create: dto.items.map((item) => ({
+            productId: 1, // Placeholder product for manual returns
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            lineTotal: item.quantity * item.unitPrice,
+            notes: item.description,
+            kdsStatus: 'CANCELLED' as KdsStatus,
+          })),
+        },
+        payments: {
+          create: [{
+            method: dto.refundMethod as any,
+            amount: -refundTotal,
+          }],
+        },
+      },
+      include: this.orderInclude,
+    });
+
+    // Record refund in finance journal
+    await this.finance.create({
+      type: FinanceEntryType.REFUND,
+      amount: -refundTotal,
+      branchId: dto.branchId,
+      sourceType: 'order',
+      sourceId: order.id,
+      reference: returnNo,
+      notes: `Return without receipt: ${dto.reason || 'No reason given'}`,
+      createdById: userId,
+    });
+
+    return order;
+  }
 }

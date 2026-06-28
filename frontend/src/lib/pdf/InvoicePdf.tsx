@@ -9,8 +9,9 @@
  * - Total inclusive of VAT
  * - VAT amount separately stated
  */
-import { Document, Page, Text, View } from '@react-pdf/renderer';
+import { Document, Page, Text, View, Image } from '@react-pdf/renderer';
 import { baseStyles as s, colors, money, formatDate } from './styles';
+import { generateZatcaQrBase64, canGenerateZatcaQr, generateQrSvgDataUri } from '../zatcaQr';
 
 export interface InvoiceOrder {
   id: number;
@@ -44,6 +45,7 @@ export interface InvoicePdfProps {
   address?: string;
   phone?: string;
   taxId?: string; // TRN (Tax Registration Number)
+  vatNumber?: string; // ZATCA VAT number (for Saudi expansion QR code)
   email?: string;
   invoiceNo?: string; // Sequential invoice number (e.g. INV-2026-00123)
   currency?: string;
@@ -57,12 +59,25 @@ export default function InvoicePdf({
   address,
   phone,
   taxId,
+  vatNumber,
   email,
   invoiceNo,
   currency = 'QAR',
 }: InvoicePdfProps) {
   const issueDate = order.completedAt || order.createdAt || new Date().toISOString();
   const invNo = invoiceNo || `INV-${order.orderNo.replace('ORD-', '')}`;
+
+  // ZATCA Phase 2 QR Code generation (for Saudi expansion)
+  const zatcaInput = {
+    sellerName: businessName || 'Business',
+    vatNumber: vatNumber || taxId || '',
+    timestamp: issueDate,
+    totalWithVat: order.total,
+    vatAmount: order.taxTotal,
+  };
+  const showZatcaQr = canGenerateZatcaQr(zatcaInput);
+  const zatcaQrBase64 = showZatcaQr ? generateZatcaQrBase64(zatcaInput) : '';
+  const qrImageUri = showZatcaQr ? generateQrSvgDataUri(zatcaQrBase64, 100) : '';
 
   return (
     <Document>
@@ -147,6 +162,12 @@ export default function InvoicePdf({
               <Text>{money(order.serviceCharge, currency)}</Text>
             </View>
           )}
+          {(order as any).tip > 0 && (
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 }}>
+              <Text>Tip:</Text>
+              <Text style={{ color: '#059669' }}>{money((order as any).tip, currency)}</Text>
+            </View>
+          )}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#111', paddingTop: 4, marginTop: 4 }}>
             <Text style={{ fontSize: 11, fontWeight: 'bold' }}>TOTAL ({currency}):</Text>
             <Text style={{ fontSize: 11, fontWeight: 'bold' }}>{money(order.total, currency)}</Text>
@@ -162,6 +183,24 @@ export default function InvoicePdf({
                 {p.method.replace(/_/g, ' ')}: {money(p.amount, currency)}
               </Text>
             ))}
+          </View>
+        )}
+
+        {/* ZATCA Phase 2 QR Code (Saudi expansion) */}
+        {showZatcaQr && (
+          <View style={{ marginTop: 20, alignItems: 'center' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <Image src={qrImageUri} style={{ width: 80, height: 80 }} />
+              <View>
+                <Text style={{ fontSize: 8, fontWeight: 'bold', marginBottom: 2 }}>ZATCA E-Invoice QR</Text>
+                <Text style={{ fontSize: 6, color: colors.muted, maxWidth: 180 }}>
+                  Scan to verify invoice authenticity. Contains seller name, VAT number, timestamp, total, and VAT amount per ZATCA Phase 2 requirements.
+                </Text>
+                <Text style={{ fontSize: 6, color: colors.muted, marginTop: 2 }}>
+                  TLV Data: {zatcaQrBase64.substring(0, 40)}...
+                </Text>
+              </View>
+            </View>
           </View>
         )}
 

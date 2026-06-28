@@ -25,6 +25,7 @@ const SalesHistoryPage = lazy(() => import('./pages/SalesHistoryPage'));
 const SalesOrdersPage = lazy(() => import('./pages/SalesOrdersPage'));
 const PosReportsPage = lazy(() => import('./pages/PosReportsPage'));
 const SessionsPage = lazy(() => import('./pages/SessionsPage'));
+const ReturnWithoutReceiptPage = lazy(() => import('./pages/ReturnWithoutReceiptPage'));
 
 // Inventory & Supply Chain
 const InventoryPage = lazy(() => import('./pages/InventoryPage'));
@@ -248,6 +249,14 @@ export default function App() {
           element={
             <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER']}>
               <SalesHistoryPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="returns"
+          element={
+            <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER']}>
+              <ReturnWithoutReceiptPage />
             </ProtectedRoute>
           }
         />

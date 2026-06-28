@@ -137,6 +137,17 @@ export default function KDSPage() {
     onError: (e: any) => toast.error(e.response?.data?.message || 'Failed'),
   });
 
+  // Kitchen Recall: cancel a fired item and notify KDS to stop preparing.
+  const recall = useMutation({
+    mutationFn: ({ id, reason }: { id: number; reason?: string }) =>
+      api.post(`/kds/items/${id}/recall`, { reason }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['kds-board'] });
+      toast.success('Item recalled — kitchen notified');
+    },
+    onError: (e: any) => toast.error(e.response?.data?.message || 'Recall failed'),
+  });
+
   const columns: KdsStatus[] = ['QUEUED', 'PREPARING', 'READY'];
 
   return (
@@ -248,6 +259,17 @@ export default function KDSPage() {
                                 className="px-2 py-1 rounded text-[10px] font-medium bg-primary/10 text-primary hover:bg-primary hover:text-white transition-colors flex-shrink-0"
                               >
                                 {NEXT[col].label}
+                              </button>
+                            )}
+                            {/* Kitchen Recall: cancel a fired item (Odoo parity) */}
+                            {(col === 'QUEUED' || col === 'PREPARING') && (
+                              <button
+                                onClick={() => recall.mutate({ id: it.id, reason: 'Recalled from KDS' })}
+                                disabled={recall.isPending}
+                                className="px-2 py-1 rounded text-[10px] font-medium bg-red-50 dark:bg-red-900/20 text-red-600 hover:bg-red-600 hover:text-white transition-colors flex-shrink-0"
+                                title="Recall — stop preparing this item"
+                              >
+                                ↩ Recall
                               </button>
                             )}
                           </div>
