@@ -61,4 +61,28 @@ export class LoyaltyService {
       data: { points: { decrement: points }, balance: { decrement: amount } },
     });
   }
+
+  /** Lookup a loyalty card by barcode/NFC code — returns card info + customer. */
+  async lookupCard(code: string) {
+    const card = await this.prisma.loyaltyCard.findUnique({
+      where: { code },
+      include: {
+        program: { select: { id: true, name: true, type: true, currency: true } },
+        customer: { select: { id: true, name: true, phone: true, email: true, loyaltyPoints: true } },
+      },
+    });
+    if (!card) throw new NotFoundException(`Card with code "${code}" not found.`);
+    return {
+      card: {
+        code: card.code,
+        points: card.points,
+        balance: card.balance,
+        isActive: card.isActive,
+        expiresAt: card.expiresAt,
+        isExpired: card.expiresAt ? card.expiresAt < new Date() : false,
+      },
+      program: card.program,
+      customer: card.customer,
+    };
+  }
 }

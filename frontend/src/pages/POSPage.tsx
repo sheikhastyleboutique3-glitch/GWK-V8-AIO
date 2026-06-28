@@ -13,6 +13,9 @@ import { printReceipt, printKot } from '../lib/thermalPrint';
 import { useOnlineStatus } from '../lib/useOnlineStatus';
 import OfflineBanner from '../components/OfflineBanner';
 import { usePrompt } from '../lib/usePrompt';
+import { useConfirm } from '../lib/useConfirm';
+import { useDebounce } from '../lib/useDebounce';
+import { usePosKeyboard } from '../lib/usePosKeyboard';
 
 interface CartLine {
   itemId?: number; // present when the line lives on a persisted (loaded) order
@@ -43,6 +46,7 @@ export default function POSPage() {
   const branchId = activeBranch?.id;
   const { isOnline, isSyncing, pendingCount } = useOnlineStatus();
   const [prompt, PromptDialog] = usePrompt();
+  const [confirm, ConfirmDialog] = useConfirm();
   const canRefund = user?.role === 'SUPER_ADMIN' || user?.role === 'BRANCH_MANAGER';
   const canEditFloor = user?.role === 'SUPER_ADMIN' || user?.role === 'BRANCH_MANAGER' || user?.role === 'CASHIER';
 
@@ -75,6 +79,7 @@ export default function POSPage() {
 
   const [categoryId, setCategoryId] = useState<number | undefined>(undefined);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [comboCart, setComboCart] = useState<{ comboId: number; name: string; price: number; choiceIds: number[] }[]>([]);
   const [comboPick, setComboPick] = useState<{ combo: any; sel: Record<number, number> } | null>(null);
@@ -86,6 +91,7 @@ export default function POSPage() {
   const [payMethod, setPayMethod] = useState<PayMethod>('CASH');
   const [customer, setCustomer] = useState<any>(null);
   const [customerSearch, setCustomerSearch] = useState('');
+  const debouncedCustomerSearch = useDebounce(customerSearch, 300);
   const [giftCardCode, setGiftCardCode] = useState('');
   const [selectedTerminalId, setSelectedTerminalId] = useState<number | undefined>(undefined);
   const [tenderAmount, setTenderAmount] = useState('');
@@ -149,10 +155,10 @@ export default function POSPage() {
     
   });
   const { data: products, isLoading } = useQuery({
-    queryKey: ['pos-products', categoryId, search],
+    queryKey: ['pos-products', categoryId, debouncedSearch],
     queryFn: () =>
       api
-        .get('/products', { params: { sellable: true, available: true, productType: 'MENU', ...(categoryId && { categoryId }), ...(search && { search }) } })
+        .get('/products', { params: { sellable: true, available: true, productType: 'MENU', ...(categoryId && { categoryId }), ...(debouncedSearch && { search: debouncedSearch }) } })
         .then((r) => r.data.data),
     
   });
@@ -190,9 +196,9 @@ export default function POSPage() {
 
   // Customer search (for loyalty / store-credit redemption).
   const { data: customerResults } = useQuery({
-    queryKey: ['pos-customers', customerSearch],
-    queryFn: () => api.get('/customers', { params: { search: customerSearch } }).then((r) => r.data.data),
-    enabled: customerSearch.trim().length >= 2,
+    queryKey: ['pos-customers', debouncedCustomerSearch],
+    queryFn: () => api.get('/customers', { params: { search: debouncedCustomerSearch } }).then((r) => r.data.data),
+    enabled: debouncedCustomerSearch.trim().length >= 2,
   });
 
   // Open + held bills for this branch (waiter tickets waiting to be settled).
@@ -682,6 +688,26 @@ export default function POSPage() {
   const [selectedLineIdx, setSelectedLineIdx] = useState<number>(-1);
   const [numBuffer, setNumBuffer] = useState<string>('');
   const [numMode, setNumMode] = useState<'Qty' | '%Disc' | 'Price' | null>(null);
+
+  // ── POS Keyboard Shortcuts (F2=Pay, F3=Hold, F4=Print, F8=Clear, Esc) ──
+  usePosKeyboard({
+    onPay: () => setShowPayment(true),
+    onHold: () => {
+      if (mode === 'existing' && loadedOrderId) {
+        api.patch(`/sales/orders/${loadedOrderId}/hold`, {}).then(() => {
+          toast.success('Order held');
+          setLoadedOrderId(null);
+          setCart([]);
+        });
+      }
+    },
+    onPrint: () => { if (lastReceipt) printReceipt(lastReceipt, businessInfo); },
+    onClear: () => { setCart([]); setComboCart([]); setLoadedOrderId(null); setLastReceipt(null); setShowPayment(false); },
+    onOrders: () => setPosView('orders'),
+    onEscape: () => { if (showPayment) setShowPayment(false); else if (lastReceipt) setLastReceipt(null); },
+    onQtyUp: () => { if (selectedLineIdx >= 0 && selectedLineIdx < cart.length) setCart(p => p.map((l, i) => i === selectedLineIdx ? { ...l, quantity: l.quantity + 1 } : l)); },
+    onQtyDown: () => { if (selectedLineIdx >= 0 && selectedLineIdx < cart.length) setCart(p => p.map((l, i) => i === selectedLineIdx ? { ...l, quantity: Math.max(1, l.quantity - 1) } : l)); },
+  });
 
   // Open a table from the floor plan → switch to order view
   const openTableOrder = async (table: any) => {
@@ -1196,7 +1222,7 @@ export default function POSPage() {
                 >
                   <div className="h-20 bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden">
                     {p.imageUrl ? (
-                      <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                      <img src={p.imageUrl} alt={p.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     ) : (
                       <span className="text-3xl">{p.category?.icon || '🍽️'}</span>
                     )}
@@ -1332,7 +1358,7 @@ export default function POSPage() {
                 onDoubleClick={async () => {
                   // Double-click: add a note to this specific item (shows on KOT)
                   if (mode === 'existing' && l.itemId) {
-                    const note = window.prompt(`Note for "${l.name}" (printed on KOT):`, (l as any).notes || '');
+                    const note = await prompt({ title: `Note for "${l.name}"`, description: 'Printed on KOT', defaultValue: (l as any).notes || '', placeholder: 'e.g. No ice, extra sauce' });
                     if (note !== null) {
                       try {
                         await api.patch(`/sales/orders/${loadedOrderId}/items/${l.itemId}`, { notes: note });
@@ -1362,7 +1388,7 @@ export default function POSPage() {
                       <span className="text-sm">×{l.quantity}</span>
                       <button onClick={async () => {
                         if (!l.itemId) return;
-                        const reason = window.prompt(`Cancel "${l.name}"?\nReason (sent to kitchen):`);
+                        const reason = await prompt({ title: `Cancel "${l.name}"?`, description: 'Reason (sent to kitchen):', placeholder: 'e.g. Customer changed mind' });
                         if (reason === null) return;
                         try {
                           await api.patch(`/sales/orders/${loadedOrderId}/items/${l.itemId}`, { isVoided: true, voidReason: reason || 'Cancelled' });
@@ -1591,8 +1617,8 @@ export default function POSPage() {
                 className="px-2 py-2 rounded-lg bg-orange-100 dark:bg-orange-500/10 text-orange-700 hover:bg-orange-200 dark:hover:bg-orange-500/20 text-center font-medium"
               >🔥 Kitchen</button>
               <button
-                onClick={() => {
-                  const note = window.prompt('Customer note (printed on receipt/KOT):');
+                onClick={async () => {
+                  const note = await prompt({ title: 'Customer Note', description: 'Printed on receipt/KOT', placeholder: 'e.g. Allergic to nuts' });
                   if (note != null && mode === 'existing' && loadedOrderId) {
                     api.patch(`/sales/orders/${loadedOrderId}`, { notes: note }).then(() => {
                       toast.success('Note saved');
@@ -1621,8 +1647,8 @@ export default function POSPage() {
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
               >🧾 Bill</button>
               <button
-                onClick={() => {
-                  const count = window.prompt('Number of guests:', String(mode === 'existing' ? loadedOrder?.guestCount || 1 : 1));
+                onClick={async () => {
+                  const count = await prompt({ title: 'Number of Guests', type: 'number', defaultValue: String(mode === 'existing' ? loadedOrder?.guestCount || 1 : 1) });
                   if (count && mode === 'existing' && loadedOrderId) {
                     api.patch(`/sales/orders/${loadedOrderId}`, { guestCount: parseInt(count, 10) || 1 });
                     toast.success(`Guests: ${count}`);
@@ -1631,8 +1657,8 @@ export default function POSPage() {
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
               >👥 Guests</button>
               <button
-                onClick={() => {
-                  const code = window.prompt('Enter coupon or reward code:');
+                onClick={async () => {
+                  const code = await prompt({ title: 'Coupon / Reward Code', placeholder: 'Enter code...' });
                   if (code?.trim()) { setCouponCode(code.trim()); onApplyCoupon(); }
                 }}
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
@@ -1649,8 +1675,8 @@ export default function POSPage() {
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
               >ℹ️ Info</button>
               <button
-                onClick={() => {
-                  const note = window.prompt('Internal note (staff only, not printed):');
+                onClick={async () => {
+                  const note = await prompt({ title: 'Staff Note', description: 'Internal only — not printed on receipt or KOT', placeholder: 'e.g. VIP customer, special request' });
                   if (note != null) toast.success('Internal note saved');
                 }}
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
@@ -1844,8 +1870,9 @@ export default function POSPage() {
               </div>
               {canRefund && lastReceipt.status === 'COMPLETED' && (
                 <button
-                  onClick={() => {
-                    if (window.confirm(t('pos.refundConfirm'))) refund.mutate(lastReceipt.id);
+                  onClick={async () => {
+                    const ok = await confirm({ title: t('pos.refundConfirm'), description: 'This will fully refund this order.', variant: 'danger', confirmLabel: 'Refund' });
+                    if (ok) refund.mutate(lastReceipt.id);
                   }}
                   disabled={refund.isPending}
                   className="w-full mt-2 py-2 rounded-xl border border-red-300 text-red-600 text-sm font-medium disabled:opacity-50"
@@ -1969,7 +1996,22 @@ export default function POSPage() {
                   <div className="font-medium text-sm text-primary">👤 {activeCustomer.name}</div>
                 </div>
               )}
-              <button onClick={() => { /* TODO: generate invoice */ toast('Invoice feature coming soon'); }}
+              <button onClick={() => {
+                if (!lastReceipt) return;
+                import('../lib/pdf').then(({ downloadInvoicePdf }) => {
+                  downloadInvoicePdf({
+                    order: lastReceipt,
+                    businessName: businessInfo.businessName,
+                    branchName: businessInfo.branchName,
+                    address: businessInfo.address,
+                    phone: businessInfo.phone,
+                    taxId: businessInfo.taxId,
+                    email: businessInfo.email,
+                    currency: businessInfo.currency || 'QAR',
+                  });
+                  toast.success('Invoice generated');
+                });
+              }}
                 className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 mb-2">
                 🧾 Invoice
               </button>
@@ -2020,6 +2062,7 @@ export default function POSPage() {
       )}
 
       <PromptDialog />
+      <ConfirmDialog />
     </div>
   );
 }

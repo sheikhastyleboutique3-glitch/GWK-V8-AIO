@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import api from '../lib/api';
@@ -10,6 +10,18 @@ import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 type KdsStatus = 'QUEUED' | 'PREPARING' | 'READY' | 'SERVED' | 'CANCELLED';
+
+// ── Force dark mode on KDS page (kitchen screens need high contrast) ──────
+function useKdsDarkMode() {
+  useEffect(() => {
+    const root = document.documentElement;
+    const wasDark = root.classList.contains('dark');
+    root.classList.add('dark');
+    return () => {
+      if (!wasDark) root.classList.remove('dark');
+    };
+  }, []);
+}
 
 const NEXT: Record<string, { label: string; status: KdsStatus }> = {
   QUEUED: { label: 'Start', status: 'PREPARING' },
@@ -27,6 +39,9 @@ export default function KDSPage() {
   const { activeBranch } = useAuth();
   const qc = useQueryClient();
   const [station, setStation] = useState<string | null>(null); // null = ALL stations
+
+  // Force dark mode on KDS (kitchen visibility)
+  useKdsDarkMode();
 
   const { data: board, isLoading } = useQuery({
     queryKey: ['kds-board', activeBranch?.id ?? 'all'],
@@ -59,6 +74,62 @@ export default function KDSPage() {
     return disconnect;
   }, [activeBranch?.id, qc]);
 
+  // ── KDS Sound Alert: play a bell/chime when new items arrive ──────────
+  const prevQueuedCount = useRef<number>(0);
+  const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('kds_sound') !== 'false');
+
+  useEffect(() => {
+    const queuedItems = board?.QUEUED ?? [];
+    const currentCount = queuedItems.length;
+    if (currentCount > prevQueuedCount.current && prevQueuedCount.current > 0 && soundEnabled) {
+      // Play alert sound for new items arriving
+      try {
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = 880; // A5 note — audible bell
+        osc.type = 'sine';
+        gain.gain.value = 0.3;
+        osc.start();
+        // Two short beeps
+        setTimeout(() => { gain.gain.value = 0; }, 150);
+        setTimeout(() => { gain.gain.value = 0.3; }, 250);
+        setTimeout(() => { osc.stop(); ctx.close(); }, 400);
+      } catch { /* audio not available */ }
+    }
+    prevQueuedCount.current = currentCount;
+  }, [board?.QUEUED?.length, soundEnabled]);
+
+  // ── Prep Time Targets (configurable per station) ──────────────────────
+  // Default targets in seconds; can be overridden via Settings
+  const PREP_TARGETS: Record<string, number> = {
+    'BAR / DRINKS': 120,      // 2 min
+    'PASTRY / BAKERY': 480,   // 8 min
+    'HOT KITCHEN': 720,       // 12 min
+    'DEFAULT': 600,           // 10 min fallback
+  };
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const getElapsed = (firedAt: string | null) => {
+    if (!firedAt) return 0;
+    return Math.floor((now - new Date(firedAt).getTime()) / 1000);
+  };
+  const formatTime = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  };
+  const getTargetForStation = (item: any) => {
+    const st = stationForItem(item) || 'DEFAULT';
+    return PREP_TARGETS[st] ?? PREP_TARGETS['DEFAULT'];
+  };
+
   const advance = useMutation({
     mutationFn: ({ id, status }: { id: number; status: KdsStatus }) =>
       api.patch(`/kds/items/${id}`, { status }),
@@ -72,8 +143,8 @@ export default function KDSPage() {
     <div>
       <PageHeader title={t('nav.kds')} subtitle={activeBranch?.name} />
 
-      {/* Station tabs */}
-      <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+      {/* Station tabs + Sound toggle */}
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-1 items-center">
         <button onClick={() => setStation(null)} className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap ${!station ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200'}`}>
           🍽️ All Stations
         </button>
@@ -85,6 +156,14 @@ export default function KDSPage() {
         </button>
         <button onClick={() => setStation('BAR / DRINKS')} className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap ${station === 'BAR / DRINKS' ? 'bg-amber-600 text-white' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200'}`}>
           ☕ Bar / Drinks
+        </button>
+        {/* Sound toggle */}
+        <button
+          onClick={() => { const next = !soundEnabled; setSoundEnabled(next); localStorage.setItem('kds_sound', String(next)); }}
+          className={`ms-auto px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap ${soundEnabled ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}
+          title={soundEnabled ? 'Sound alerts ON' : 'Sound alerts OFF'}
+        >
+          {soundEnabled ? '🔔 Sound ON' : '🔕 Sound OFF'}
         </button>
       </div>
 
@@ -150,6 +229,17 @@ export default function KDSPage() {
                                 </div>
                               )}
                               {it.notes && <div className="text-[11px] text-gray-500 italic">* {it.notes}</div>}
+                              {/* Prep time elapsed */}
+                              {it.firedAt && col !== 'READY' && (() => {
+                                const elapsed = getElapsed(it.firedAt);
+                                const target = getTargetForStation(it);
+                                const overdue = elapsed > target;
+                                return (
+                                  <div className={`text-[10px] font-mono mt-0.5 ${overdue ? 'text-red-600 font-bold animate-pulse' : elapsed > target * 0.75 ? 'text-amber-600' : 'text-gray-400'}`}>
+                                    ⏱ {formatTime(elapsed)}{overdue ? ' OVERDUE' : ''}
+                                  </div>
+                                );
+                              })()}
                             </div>
                             {NEXT[col] && (
                               <button

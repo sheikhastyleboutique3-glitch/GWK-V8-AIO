@@ -149,7 +149,11 @@ export function printReceipt(order: OrderLike, info: BusinessInfo = {}) {
     .map(
       (it) => {
         const mods = Array.isArray(it.modifiers) ? it.modifiers : (typeof it.modifiers === 'string' ? JSON.parse(it.modifiers) : []);
-        const modText = mods.map((m: any) => m?.name || m?.nameAr).filter(Boolean).join(', ');
+        const modText = mods.map((m: any) => {
+          const name = m?.name || m?.nameAr || '';
+          const price = m?.priceDelta ? ` +${money(m.priceDelta)}` : '';
+          return name ? `${name}${price}` : '';
+        }).filter(Boolean).join(', ');
         const lineTotal = it.unitPrice * it.quantity;
         const disc = (it as any).discount ?? 0;
         const discPct = lineTotal > 0 ? Math.round(disc / lineTotal * 100) : 0;

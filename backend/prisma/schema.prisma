@@ -599,6 +599,14 @@ model Product {
   allergens          String[]            @default([])
   allergenNotes      String?
   allergenNotesAr    String?
+  // Menu time-scheduling: control when items appear on the menu
+  scheduleEnabled    Boolean             @default(false)
+  scheduleStart      String?             // HH:MM format (e.g. "06:00")
+  scheduleEnd        String?             // HH:MM format (e.g. "11:00")
+  scheduleDays       Int[]               @default([])  // 0=Sun, 1=Mon...6=Sat (empty = every day)
+  // Auto-86: system-managed unavailability due to low ingredient stock
+  autoEightySixed    Boolean             @default(false)
+  autoEightySixReason String?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
@@ -1122,6 +1130,74 @@ model NotificationConfig {
   @@map("notification_configs")
 }
 
+// =============================================================================
+// MULTI-CURRENCY SUPPORT
+// =============================================================================
+
+model CurrencyRate {
+  id           Int      @id @default(autoincrement())
+  code         String   @unique  // ISO 4217 (e.g. USD, EUR, GBP, SAR)
+  name         String             // Display name (e.g. "US Dollar")
+  nameAr       String?
+  symbol       String             // e.g. $, €, £, ﷼
+  rateToBase   Float              // How many base currency units = 1 of this currency (e.g. 3.64 for USD→QAR)
+  isActive     Boolean  @default(true)
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+
+  @@map("currency_rates")
+}
+
+// =============================================================================
+// STAFF SHIFT SCHEDULING
+// =============================================================================
+
+model StaffShift {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  branchId    Int
+  scheduledStart DateTime
+  scheduledEnd   DateTime
+  actualStart    DateTime?
+  actualEnd      DateTime?
+  status      ShiftStatus @default(SCHEDULED)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, scheduledStart])
+  @@index([branchId, scheduledStart])
+  @@map("staff_shifts")
+}
+
+enum ShiftStatus {
+  SCHEDULED
+  CLOCKED_IN
+  CLOCKED_OUT
+  MISSED
+  CANCELLED
+}
+
+// =============================================================================
+// DRIVER GPS TRACKING
+// =============================================================================
+
+model DriverLocation {
+  id         Int      @id @default(autoincrement())
+  driverId   Int
+  deliveryId Int?
+  latitude   Float
+  longitude  Float
+  heading    Float?   // compass direction 0-360
+  speed      Float?   // km/h
+  accuracy   Float?   // meters
+  recordedAt DateTime @default(now())
+
+  @@index([driverId, recordedAt])
+  @@index([deliveryId])
+  @@map("driver_locations")
+}
+
 model UserNotificationPreference {
   id             Int     @id @default(autoincrement())
   userId         Int
@@ -1474,6 +1550,9 @@ model Order {
   @@index([sessionId])
   @@index([tableId])
   @@index([createdAt])
+  @@index([completedAt])
+  @@index([branchId, status, completedAt])
+  @@index([sessionId, status])
   @@map("orders")
 }
 
@@ -1509,6 +1588,8 @@ model OrderItem {
   @@index([orderId])
   @@index([productId])
   @@index([kdsStatus])
+  @@index([orderId, isVoided])
+  @@index([firedAt, kdsStatus])
   @@map("order_items")
 }
 

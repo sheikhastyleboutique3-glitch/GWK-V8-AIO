@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import api from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
 import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 
@@ -17,7 +18,10 @@ const emptyRow = (): ComponentRow => ({ componentProductId: '', quantity: '', un
 
 export default function RecipesPage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const qc = useQueryClient();
+  // Kitchen/pastry/barista/cleaner/warehouse/driver should not see recipe costs
+  const canSeeCosts = !['KITCHEN', 'PASTRY', 'BARISTA', 'CLEANER', 'WAREHOUSE', 'DRIVER'].includes(user?.role || '');
 
   const [productId, setProductId] = useState('');
   const [name, setName] = useState('');
@@ -200,7 +204,7 @@ export default function RecipesPage() {
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={() => showCost.mutate(rec.id)} className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-800">{t('recipes.cost')}</button>
+                  {canSeeCosts && <button onClick={() => showCost.mutate(rec.id)} className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-800">{t('recipes.cost')}</button>}
                   <button onClick={() => setActive.mutate({ id: rec.id, isActive: !rec.isActive })} className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-800">
                     {rec.isActive ? t('recipes.deactivate') : t('recipes.activate')}
                   </button>

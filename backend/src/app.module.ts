@@ -66,6 +66,9 @@ import { PaymentMethodsModule } from './modules/payment-methods/payment-methods.
 import { PricelistsModule } from './modules/pricelists/pricelists.module';
 import { UserViewsModule } from './modules/user-views/user-views.module';
 import { HealthModule } from './modules/health/health.module';
+import { RealtimeModule } from './modules/realtime/realtime.module';
+import { CurrencyModule } from './modules/currency/currency.module';
+import { ShiftsModule } from './modules/shifts/shifts.module';
 
 @Module({
   imports: [
@@ -142,6 +145,9 @@ import { HealthModule } from './modules/health/health.module';
     PricelistsModule,
     UserViewsModule,
     HealthModule,
+    RealtimeModule,
+    CurrencyModule,
+    ShiftsModule,
   ],
   providers: [
     // Apply rate limiting globally.

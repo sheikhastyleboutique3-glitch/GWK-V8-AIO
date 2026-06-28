@@ -301,4 +301,369 @@ export class AnalyticsService {
       maxOverage: sessions.reduce((max, s) => Math.max(max, s.cashDifference ?? 0), 0),
     };
   }
+
+  // =========================================================================
+  // ADVANCED ANALYTICS
+  // =========================================================================
+
+  /**
+   * ABC Analysis — Pareto classification of products by revenue contribution.
+   *
+   * A = top products contributing 80% of total revenue (high-value, protect stock)
+   * B = next 15% of revenue (moderate value, standard attention)
+   * C = bottom 5% of revenue (low value, consider discontinuing)
+   *
+   * Returns each product with its class, cumulative %, revenue, quantity, and GP.
+   */
+  async abcAnalysis(opts: { branchId?: number; from?: string; to?: string }) {
+    const { gte, lte } = this.range(undefined, opts.from, opts.to);
+    const orderWhere: Prisma.OrderWhereInput = {
+      status: OrderStatus.COMPLETED,
+      ...(opts.branchId ? { branchId: opts.branchId } : {}),
+      ...(gte || lte ? { completedAt: { ...(gte ? { gte } : {}), ...(lte ? { lte } : {}) } } : {}),
+    };
+
+    const grouped = await this.prisma.orderItem.groupBy({
+      by: ['productId'],
+      where: { order: orderWhere, isVoided: false },
+      _sum: { lineTotal: true, lineCost: true, quantity: true },
+      orderBy: { _sum: { lineTotal: 'desc' } },
+    });
+
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: grouped.map((g) => g.productId) } },
+      select: { id: true, sku: true, name: true, nameAr: true, category: { select: { id: true, name: true } } },
+    });
+    const byId = new Map(products.map((p) => [p.id, p]));
+
+    const totalRevenue = grouped.reduce((s, g) => s + (g._sum.lineTotal ?? 0), 0);
+    if (totalRevenue === 0) return { items: [], summary: { A: 0, B: 0, C: 0 }, totalRevenue: 0 };
+
+    let cumulative = 0;
+    const items = grouped.map((g) => {
+      const revenue = g._sum.lineTotal ?? 0;
+      const cost = g._sum.lineCost ?? 0;
+      cumulative += revenue;
+      const cumulativePct = (cumulative / totalRevenue) * 100;
+      const revenuePct = (revenue / totalRevenue) * 100;
+
+      let classification: 'A' | 'B' | 'C';
+      if (cumulativePct <= 80) classification = 'A';
+      else if (cumulativePct <= 95) classification = 'B';
+      else classification = 'C';
+
+      return {
+        product: byId.get(g.productId) ?? { id: g.productId },
+        classification,
+        revenue,
+        revenuePct: Math.round(revenuePct * 100) / 100,
+        cumulativePct: Math.round(cumulativePct * 100) / 100,
+        quantity: g._sum.quantity ?? 0,
+        cost,
+        grossProfit: revenue - cost,
+        grossMarginPct: revenue > 0 ? Math.round(((revenue - cost) / revenue) * 10000) / 100 : 0,
+      };
+    });
+
+    const summary = {
+      A: items.filter((i) => i.classification === 'A').length,
+      B: items.filter((i) => i.classification === 'B').length,
+      C: items.filter((i) => i.classification === 'C').length,
+    };
+
+    return { items, summary, totalRevenue, totalProducts: items.length };
+  }
+
+  /**
+   * Waste vs Sales Ratio — Shows how much of each product/category is wasted
+   * relative to how much is sold, helping identify over-ordering or spoilage patterns.
+   *
+   * Formula: wasteRatio = (wastedQty / (soldQty + wastedQty)) × 100
+   * A ratio >10% suggests over-prep or storage issues.
+   */
+  async wasteVsSalesRatio(opts: { branchId?: number; from?: string; to?: string }) {
+    const { gte, lte } = this.range(undefined, opts.from, opts.to);
+    const dateFilter = gte || lte
+      ? { createdAt: { ...(gte ? { gte } : {}), ...(lte ? { lte } : {}) } }
+      : {};
+    const branchFilter = opts.branchId ? { branchId: opts.branchId } : {};
+
+    // Sold quantities per product (from completed orders)
+    const orderWhere: Prisma.OrderWhereInput = {
+      status: OrderStatus.COMPLETED,
+      ...branchFilter,
+      ...(gte || lte ? { completedAt: { ...(gte ? { gte } : {}), ...(lte ? { lte } : {}) } } : {}),
+    };
+    const sold = await this.prisma.orderItem.groupBy({
+      by: ['productId'],
+      where: { order: orderWhere, isVoided: false },
+      _sum: { quantity: true, lineTotal: true },
+    });
+    const soldMap = new Map(sold.map((s) => [s.productId, { qty: s._sum.quantity ?? 0, revenue: s._sum.lineTotal ?? 0 }]));
+
+    // Wasted quantities per product
+    const wasted = await this.prisma.wastageRecord.groupBy({
+      by: ['productId'],
+      where: { ...branchFilter, ...dateFilter },
+      _sum: { quantity: true },
+      _count: { _all: true },
+    });
+
+    if (!wasted.length) return { items: [], byCategory: [], totals: { soldQty: 0, wastedQty: 0, wasteRatio: 0 } };
+
+    const productIds = [...new Set([...sold.map((s) => s.productId), ...wasted.map((w) => w.productId)])];
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, name: true, nameAr: true, sku: true, costPrice: true, category: { select: { id: true, name: true } } },
+    });
+    const byId = new Map(products.map((p) => [p.id, p]));
+
+    const items = wasted.map((w) => {
+      const product = byId.get(w.productId);
+      const soldData = soldMap.get(w.productId) || { qty: 0, revenue: 0 };
+      const wastedQty = w._sum.quantity ?? 0;
+      const totalUsage = soldData.qty + wastedQty;
+      const wasteRatio = totalUsage > 0 ? (wastedQty / totalUsage) * 100 : 100;
+      const wasteCost = wastedQty * (product?.costPrice ?? 0);
+
+      return {
+        product: product ?? { id: w.productId },
+        category: product?.category,
+        soldQty: soldData.qty,
+        soldRevenue: soldData.revenue,
+        wastedQty,
+        wasteIncidents: w._count._all,
+        wasteCost,
+        wasteRatio: Math.round(wasteRatio * 100) / 100,
+        severity: wasteRatio > 20 ? 'critical' : wasteRatio > 10 ? 'high' : wasteRatio > 5 ? 'medium' : 'low',
+      };
+    }).sort((a, b) => b.wasteRatio - a.wasteRatio);
+
+    // Aggregate by category
+    const catMap = new Map<string, { name: string; soldQty: number; wastedQty: number; wasteCost: number }>();
+    for (const item of items) {
+      const catName = item.category?.name ?? 'Uncategorized';
+      const entry = catMap.get(catName) || { name: catName, soldQty: 0, wastedQty: 0, wasteCost: 0 };
+      entry.soldQty += item.soldQty;
+      entry.wastedQty += item.wastedQty;
+      entry.wasteCost += item.wasteCost;
+      catMap.set(catName, entry);
+    }
+    const byCategory = Array.from(catMap.values()).map((c) => ({
+      ...c,
+      wasteRatio: (c.soldQty + c.wastedQty) > 0
+        ? Math.round((c.wastedQty / (c.soldQty + c.wastedQty)) * 10000) / 100
+        : 0,
+    })).sort((a, b) => b.wasteRatio - a.wasteRatio);
+
+    const totalSold = items.reduce((s, i) => s + i.soldQty, 0);
+    const totalWasted = items.reduce((s, i) => s + i.wastedQty, 0);
+
+    return {
+      items,
+      byCategory,
+      totals: {
+        soldQty: totalSold,
+        wastedQty: totalWasted,
+        totalWasteCost: items.reduce((s, i) => s + i.wasteCost, 0),
+        wasteRatio: (totalSold + totalWasted) > 0
+          ? Math.round((totalWasted / (totalSold + totalWasted)) * 10000) / 100
+          : 0,
+      },
+    };
+  }
+
+  /**
+   * Peak Hour Heatmap — Order counts by hour × day-of-week.
+   *
+   * Returns a 7×24 matrix (7 days, 24 hours) with:
+   * - Order count per cell
+   * - Revenue per cell
+   * - Avg ticket per cell
+   *
+   * Used for staffing decisions (e.g., "We need 3 people Thursday 12-2pm").
+   */
+  async peakHourHeatmap(opts: { branchId?: number; from?: string; to?: string }) {
+    const { gte, lte } = this.range(undefined, opts.from, opts.to);
+    const branchFilter = opts.branchId ? `AND o."branchId" = ${opts.branchId}` : '';
+    const dateFilter = gte ? `AND o."completedAt" >= '${gte.toISOString()}'` : '';
+    const dateFilter2 = lte ? `AND o."completedAt" <= '${lte.toISOString()}'` : '';
+
+    // Raw SQL for hour/day extraction (PostgreSQL EXTRACT)
+    const rows = await this.prisma.$queryRawUnsafe<
+      Array<{ dow: number; hour: number; orders: bigint; revenue: number; avg_ticket: number }>
+    >(`
+      SELECT
+        EXTRACT(DOW FROM o."completedAt") AS dow,
+        EXTRACT(HOUR FROM o."completedAt") AS hour,
+        COUNT(*)::bigint AS orders,
+        COALESCE(SUM(o.total), 0) AS revenue,
+        COALESCE(AVG(o.total), 0) AS avg_ticket
+      FROM orders o
+      WHERE o.status = 'COMPLETED'
+        ${branchFilter}
+        ${dateFilter}
+        ${dateFilter2}
+      GROUP BY EXTRACT(DOW FROM o."completedAt"), EXTRACT(HOUR FROM o."completedAt")
+      ORDER BY dow, hour
+    `);
+
+    // Build 7×24 matrix
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const matrix: Array<{
+      day: string;
+      dayIndex: number;
+      hours: Array<{ hour: number; orders: number; revenue: number; avgTicket: number }>;
+    }> = dayNames.map((name, i) => ({
+      day: name,
+      dayIndex: i,
+      hours: Array.from({ length: 24 }, (_, h) => ({ hour: h, orders: 0, revenue: 0, avgTicket: 0 })),
+    }));
+
+    let peakHour = { day: '', hour: 0, orders: 0 };
+    let totalOrders = 0;
+
+    for (const row of rows) {
+      const dow = Number(row.dow);
+      const hour = Number(row.hour);
+      const orders = Number(row.orders);
+      const revenue = Number(row.revenue);
+      const avgTicket = Number(row.avg_ticket);
+
+      if (matrix[dow]) {
+        matrix[dow].hours[hour] = { hour, orders, revenue: Math.round(revenue * 100) / 100, avgTicket: Math.round(avgTicket * 100) / 100 };
+      }
+      totalOrders += orders;
+      if (orders > peakHour.orders) {
+        peakHour = { day: dayNames[dow], hour, orders };
+      }
+    }
+
+    // Find the busiest 5 slots
+    const allSlots = rows
+      .map((r) => ({ day: dayNames[Number(r.dow)], hour: Number(r.hour), orders: Number(r.orders), revenue: Number(r.revenue) }))
+      .sort((a, b) => b.orders - a.orders);
+
+    return {
+      matrix,
+      peak: peakHour,
+      busiestSlots: allSlots.slice(0, 5),
+      quietestSlots: allSlots.filter(s => s.orders > 0).slice(-5).reverse(),
+      totalOrders,
+      avgOrdersPerHour: totalOrders > 0 ? Math.round(totalOrders / allSlots.filter(s => s.orders > 0).length) : 0,
+    };
+  }
+
+  /**
+   * Customer Lifetime Value (CLV) — RFM-style scoring.
+   *
+   * Scores each customer on three axes:
+   * - Recency: days since last order (lower = better)
+   * - Frequency: total order count (higher = better)
+   * - Monetary: total spend (higher = better)
+   *
+   * Each axis is scored 1-5 (quintiles), combined into a CLV score 3-15.
+   * Segments: Champions (13-15), Loyal (10-12), Potential (7-9), At Risk (4-6), Lost (3).
+   */
+  async customerLifetimeValue(opts: { branchId?: number; from?: string; to?: string; limit?: number }) {
+    const { gte, lte } = this.range(undefined, opts.from, opts.to);
+    const where: Prisma.OrderWhereInput = {
+      status: OrderStatus.COMPLETED,
+      customerId: { not: null },
+      ...(opts.branchId ? { branchId: opts.branchId } : {}),
+      ...(gte || lte ? { completedAt: { ...(gte ? { gte } : {}), ...(lte ? { lte } : {}) } } : {}),
+    };
+
+    // Get aggregated stats per customer
+    const grouped = await this.prisma.order.groupBy({
+      by: ['customerId'],
+      where,
+      _sum: { total: true },
+      _count: { _all: true },
+      _max: { completedAt: true },
+      _min: { completedAt: true },
+    });
+
+    if (!grouped.length) return { customers: [], segments: {} };
+
+    const customerIds = grouped.map((g) => g.customerId).filter((x): x is number => x != null);
+    const customers = await this.prisma.customer.findMany({
+      where: { id: { in: customerIds } },
+      select: { id: true, name: true, phone: true, email: true, loyaltyPoints: true },
+    });
+    const custMap = new Map(customers.map((c) => [c.id, c]));
+
+    const now = Date.now();
+    const rfmData = grouped
+      .filter((g) => g.customerId != null)
+      .map((g) => {
+        const lastOrder = g._max.completedAt ? new Date(g._max.completedAt).getTime() : 0;
+        const firstOrder = g._min.completedAt ? new Date(g._min.completedAt).getTime() : now;
+        return {
+          customerId: g.customerId!,
+          recencyDays: Math.floor((now - lastOrder) / 86400000),
+          frequency: g._count._all,
+          monetary: g._sum.total ?? 0,
+          firstOrderDays: Math.floor((now - firstOrder) / 86400000),
+        };
+      });
+
+    // Score each axis into quintiles (1-5)
+    const sortedR = [...rfmData].sort((a, b) => a.recencyDays - b.recencyDays); // lower = better for recency
+    const sortedF = [...rfmData].sort((a, b) => b.frequency - a.frequency);
+    const sortedM = [...rfmData].sort((a, b) => b.monetary - a.monetary);
+
+    const quintile = (sorted: typeof rfmData, item: typeof rfmData[0], key: keyof typeof item) => {
+      const idx = sorted.findIndex((s) => s.customerId === item.customerId);
+      const pct = idx / sorted.length;
+      if (pct <= 0.2) return 5;
+      if (pct <= 0.4) return 4;
+      if (pct <= 0.6) return 3;
+      if (pct <= 0.8) return 2;
+      return 1;
+    };
+
+    const scored = rfmData.map((d) => {
+      const rScore = quintile(sortedR, d, 'recencyDays');
+      const fScore = quintile(sortedF, d, 'frequency');
+      const mScore = quintile(sortedM, d, 'monetary');
+      const clvScore = rScore + fScore + mScore;
+
+      let segment: string;
+      if (clvScore >= 13) segment = 'Champions';
+      else if (clvScore >= 10) segment = 'Loyal';
+      else if (clvScore >= 7) segment = 'Potential';
+      else if (clvScore >= 4) segment = 'At Risk';
+      else segment = 'Lost';
+
+      return {
+        customer: custMap.get(d.customerId) ?? { id: d.customerId },
+        recencyDays: d.recencyDays,
+        frequency: d.frequency,
+        monetary: Math.round(d.monetary * 100) / 100,
+        customerLifetimeDays: d.firstOrderDays,
+        rScore,
+        fScore,
+        mScore,
+        clvScore,
+        segment,
+        avgOrderValue: d.frequency > 0 ? Math.round((d.monetary / d.frequency) * 100) / 100 : 0,
+        ordersPerMonth: d.firstOrderDays > 30 ? Math.round((d.frequency / (d.firstOrderDays / 30)) * 100) / 100 : d.frequency,
+      };
+    }).sort((a, b) => b.clvScore - a.clvScore || b.monetary - a.monetary);
+
+    // Segment counts
+    const segments: Record<string, number> = {};
+    for (const s of scored) {
+      segments[s.segment] = (segments[s.segment] || 0) + 1;
+    }
+
+    return {
+      customers: scored.slice(0, opts.limit ?? 100),
+      totalCustomers: scored.length,
+      segments,
+      avgClvScore: scored.length ? Math.round((scored.reduce((s, c) => s + c.clvScore, 0) / scored.length) * 10) / 10 : 0,
+      totalRevenue: scored.reduce((s, c) => s + c.monetary, 0),
+    };
+  }
 }

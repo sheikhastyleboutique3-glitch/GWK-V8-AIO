@@ -48,6 +48,11 @@ export class SuppliersController {
     return this.svc.getPriceHistory(id, productId ? parseInt(productId, 10) : undefined);
   }
 
+  @Post('price-comparison')
+  priceComparison(@Body() body: { productIds: number[] }) {
+    return this.svc.priceComparison(body.productIds || []);
+  }
+
   @Post() @Roles(Role.SUPER_ADMIN, Role.PROCUREMENT)
   create(@Body() dto: CreateSupplierDto) { return this.svc.create(dto); }
 

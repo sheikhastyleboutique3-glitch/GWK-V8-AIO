@@ -10,6 +10,7 @@ import ModifierModal, { ModGroup, ChosenModifier } from '../components/ModifierM
 import { printKot } from '../lib/thermalPrint';
 import { useOnlineStatus } from '../lib/useOnlineStatus';
 import OfflineBanner from '../components/OfflineBanner';
+import { useRealtimeFloor } from '../lib/useRealtimeFloor';
 
 interface TableRow { id: number; name: string; seats: number; status: string; branchId: number; isActive: boolean }
 interface OrderRow { id: number; orderNo: string; status: string; tableName?: string | null; total: number }
@@ -49,18 +50,21 @@ export default function WaiterPage() {
 
   const waiterName = user ? `${user.firstName} ${user.lastName}` : undefined;
 
-  // ---- Floor-plan data ----
+  // Real-time floor updates via WebSocket (replaces 15s polling)
+  useRealtimeFloor(branchId);
+
+  // ---- Floor-plan data (slow fallback polling; WebSocket is primary) ----
   const { data: floors } = useQuery({
     queryKey: ['waiter-floors', branchId],
     queryFn: () => api.get('/floors', { params: { branchId } }).then((r) => r.data.data),
     enabled: !!branchId,
-    refetchInterval: 15_000,
+    refetchInterval: 120_000,
   });
   const { data: tables, isLoading: tablesLoading } = useQuery({
     queryKey: ['waiter-tables', branchId],
     queryFn: () => api.get('/tables', { params: { branchId } }).then((r) => r.data.data),
     enabled: !!branchId,
-    refetchInterval: 15_000,
+    refetchInterval: 120_000,
   });
   const [activeFloorId, setActiveFloorId] = useState<number | null>(null);
   // Filter tables by active floor (if selected)
@@ -79,7 +83,7 @@ export default function WaiterPage() {
       return [...(open || []), ...(held || [])] as OrderRow[];
     },
     enabled: !!branchId,
-    refetchInterval: 15_000,
+    refetchInterval: 120_000,
   });
 
   const orderForTable = (name: string): OrderRow | undefined =>
@@ -166,22 +170,10 @@ export default function WaiterPage() {
         setWaiterTablePicker({ table, orders: tableOrders });
         return null;
       }
-      if (tableOrders.length === 1) {
-        const existing = tableOrders[0];
-        if (existing.status === 'HELD') await api.patch(`/sales/orders/${existing.id}/resume`, {});
-        return existing.id;
-      }
-      // No orders — create new
-      const { data } = await api.post('/sales/orders', {
-        branchId,
-        channel: 'DINE_IN',
-        tableName: table.name,
-      });
-      // Mark the table occupied when a fresh ticket opens.
-      if (table.status === 'AVAILABLE' || table.status === 'RESERVED') {
-        await api.patch(`/tables/${table.id}`, { status: 'OCCUPIED' }).catch(() => {});
-      }
-      return data.data.id as number;
+      // Use atomic claim endpoint to prevent race conditions
+      // (two waiters tapping the same table simultaneously)
+      const { data } = await api.post(`/tables/${table.id}/claim`, { branchId });
+      return data.data.orderId as number;
     },
     onSuccess: (orderId, table) => {
       if (orderId === null) return; // picker is showing, don't navigate
@@ -522,7 +514,7 @@ export default function WaiterPage() {
                   >
                     <div className="h-20 bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden">
                       {p.imageUrl ? (
-                        <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                        <img src={p.imageUrl} alt={p.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                       ) : (
                         <span className="text-2xl">🍽️</span>
                       )}

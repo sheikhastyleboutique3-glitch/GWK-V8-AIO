@@ -9,6 +9,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '@prisma/client';
+import { CreateProductDto, UpdateProductDto, SetAvailabilityDto } from './dto/product.dto';
 import { Response } from 'express';
 import * as fs from 'fs';
 
@@ -29,16 +30,40 @@ const UTF8_BOM = '\uFEFF';
 export class ProductsController {
   constructor(private svc: ProductsService) {}
 
+  // Roles that should NOT see any prices in product responses
+  private static readonly NO_PRICE_ROLES: string[] = ['KITCHEN', 'PASTRY', 'BARISTA', 'CLEANER', 'WAREHOUSE', 'DRIVER'];
+  // Roles that can see sale price but NOT cost price
+  private static readonly SALE_ONLY_ROLES: string[] = ['WAITER'];
+
+  private stripPrices(products: any[], userRole: string) {
+    const noPrices = ProductsController.NO_PRICE_ROLES.includes(userRole);
+    const saleOnly = ProductsController.SALE_ONLY_ROLES.includes(userRole);
+    if (!noPrices && !saleOnly) return products;
+
+    return products.map((p: any) => {
+      const safe = { ...p };
+      if (noPrices) {
+        delete safe.salePrice;
+        delete safe.costPrice;
+      } else if (saleOnly) {
+        delete safe.costPrice;
+      }
+      return safe;
+    });
+  }
+
   @Get()
-  findAll(
+  async findAll(
     @Query('categoryId') categoryId?: string,
     @Query('search') search?: string,
     @Query('includeArchived') includeArchived?: string,
     @Query('sellable') sellable?: string,
     @Query('available') available?: string,
     @Query('productType') productType?: string,
+    @CurrentUser('role') userRole?: string,
   ) {
-    return this.svc.findAll(categoryId ? +categoryId : undefined, search, includeArchived === 'true', sellable === 'true', available === 'true', productType);
+    const products = await this.svc.findAll(categoryId ? +categoryId : undefined, search, includeArchived === 'true', sellable === 'true', available === 'true', productType);
+    return this.stripPrices(products as any[], userRole || '');
   }
 
   /** Returns only archived products — SUPER_ADMIN only */
@@ -77,7 +102,7 @@ export class ProductsController {
 
   @Post()
   @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER, Role.PROCUREMENT)
-  create(@Body() dto: any, @CurrentUser('sub') userId: number) { return this.svc.create(dto, userId); }
+  create(@Body() dto: CreateProductDto, @CurrentUser('sub') userId: number) { return this.svc.create(dto, userId); }
 
   @Post('bulk-import')
   @Roles(Role.SUPER_ADMIN, Role.PROCUREMENT)
@@ -89,11 +114,11 @@ export class ProductsController {
 
   @Patch(':id')
   @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER, Role.PROCUREMENT)
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: any, @CurrentUser('sub') userId: number) { return this.svc.update(id, dto, userId); }
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateProductDto, @CurrentUser('sub') userId: number) { return this.svc.update(id, dto, userId); }
 
   @Patch(':id/availability')
   @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER, Role.CASHIER, Role.WAITER, Role.KITCHEN, Role.BARISTA, Role.PASTRY)
-  setAvailability(@Param('id', ParseIntPipe) id: number, @Body() body: { isAvailable: boolean }, @CurrentUser('sub') userId: number) {
+  setAvailability(@Param('id', ParseIntPipe) id: number, @Body() body: SetAvailabilityDto, @CurrentUser('sub') userId: number) {
     return this.svc.setAvailability(id, !!body.isAvailable, userId);
   }
 

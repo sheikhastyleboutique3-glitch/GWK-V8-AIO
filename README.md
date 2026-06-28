@@ -1,158 +1,278 @@
 <div align="center">
 
 # GWK V8 AIO
-### All-In-One Restaurant ERP & Point of Sale
 
-**Odoo 19.0 POS + ERP parity (~95%)** · Multi-branch · Bilingual (EN / AR) · Touch-first PWA · Offline-capable
+### All-In-One Restaurant ERP & Point of Sale System
 
-[![Stack](https://img.shields.io/badge/backend-NestJS%2010-e0234e)](#)
-[![ORM](https://img.shields.io/badge/ORM-Prisma%205-2d3748)](#)
-[![DB](https://img.shields.io/badge/db-PostgreSQL-336791)](#)
-[![Frontend](https://img.shields.io/badge/frontend-React%2018%20%2B%20Vite-61dafb)](#)
-[![Lang](https://img.shields.io/badge/language-TypeScript-3178c6)](#)
+**Enterprise F&B Operations** | **Odoo 19.0 POS Parity (~95%)** | **Multi-Branch** | **Bilingual (EN/AR + RTL)** | **Offline-First PWA**
+
+[![NestJS](https://img.shields.io/badge/Backend-NestJS%2010-e0234e?style=flat-square&logo=nestjs)](https://nestjs.com)
+[![React](https://img.shields.io/badge/Frontend-React%2018-61dafb?style=flat-square&logo=react)](https://react.dev)
+[![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2016-336791?style=flat-square&logo=postgresql)](https://postgresql.org)
+[![TypeScript](https://img.shields.io/badge/Language-TypeScript%205-3178c6?style=flat-square&logo=typescript)](https://typescriptlang.org)
+[![Prisma](https://img.shields.io/badge/ORM-Prisma%205-2d3748?style=flat-square&logo=prisma)](https://prisma.io)
+[![Socket.IO](https://img.shields.io/badge/Realtime-Socket.IO%204-010101?style=flat-square&logo=socket.io)](https://socket.io)
+[![License](https://img.shields.io/badge/License-Proprietary-red?style=flat-square)](#)
+
+---
+
+**60+ Backend Modules** | **63 Pages** | **30 Components** | **12 User Roles** | **Real-time WebSocket**
 
 </div>
 
 ---
 
-## Overview
+## Table of Contents
 
-**GWK V8 AIO** unifies the entire restaurant operation in one TypeScript stack:
+- [Features](#features)
+- [Architecture](#architecture)
+- [Quick Start](#quick-start)
+- [Demo Credentials](#demo-credentials)
+- [Installation Guides](#installation-guides)
+- [Print Agent](#print-agent)
+- [API Documentation](#api-documentation)
+- [Environment Variables](#environment-variables)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
 
-- **Front of house** — Cashier POS with floor plan, Waiter app, Kitchen Display (KDS), Self-order kiosk/QR
-- **Back of house** — Inventory with FEFO batch tracking, Recipes/BOM, Production, Procurement, Transfers
-- **Finance** — POS sessions & cash control, Aggregator reconciliation, Accounts receivable/payable, Immutable finance journal
-- **Reporting** — PDF exports, Product sales, Staff performance, Tips, Cash reconciliation, End-of-day email
+---
+
+## Features
+
+### Front of House (POS)
+| Feature | Description |
+|---------|-------------|
+| **Point of Sale** | Touch-optimized cashier terminal with floor plan, barcode scanning, combos, modifiers |
+| **Waiter App** | Visual floor plan, table claiming (race-proof), KOT printing, split/merge bills |
+| **Kitchen Display (KDS)** | Real-time order board with station filtering, sound alerts, prep time targets |
+| **Self-Ordering** | Customer QR scanning → browse menu → place order (no app install) |
+| **Customer Display** | Second screen showing items + running total in real-time |
+| **Kiosk Mode** | Full self-service ordering with payment integration |
+
+### Back of House
+| Feature | Description |
+|---------|-------------|
+| **Inventory (FEFO)** | Batch-tracked stock with First-Expired-First-Out engine, serializable transactions |
+| **Recipes & BOM** | Bill of Materials with yield, prep/cooking/waste loss %, multi-version |
+| **Production** | Central kitchen orders — explode recipe, consume ingredients, yield finished product |
+| **Procurement** | Requisitions → PO → receive → 3-way match. Auto-reorder suggestions |
+| **Branch Transfers** | Inter-branch stock movements with dispatch/receive workflow |
+| **Wastage** | Log waste by reason (expired/damaged/spillage) — auto-deducts stock + posts finance entry |
+
+### Finance & Analytics
+| Feature | Description |
+|---------|-------------|
+| **POS Sessions** | Opening/closing cash count (denomination grid), X/Z reports |
+| **Finance Journal** | Revenue, COGS, Tax, Tips, Service, Commission — immutable ledger |
+| **ABC Analysis** | Pareto product classification (A=80% revenue, B=15%, C=5%) |
+| **Peak Hour Heatmap** | 7×24 matrix for staffing decisions |
+| **Customer CLV** | RFM scoring with segment classification (Champions→Lost) |
+| **Waste vs Sales** | Per-product waste ratio with severity alerts |
+| **Scheduled Reports** | Daily EOD email (23:55) + Weekly (Monday) + Monthly (1st) |
+
+### Operations
+| Feature | Description |
+|---------|-------------|
+| **Multi-Branch** | Branch isolation guard, per-user branch assignment, all-branches view for admins |
+| **12 Roles** | SUPER_ADMIN, BRANCH_MANAGER, CASHIER, WAITER, KITCHEN, PASTRY, BARISTA, PROCUREMENT, WAREHOUSE, DRIVER, CLEANER, ACCOUNTANT |
+| **Staff Scheduling** | Shift creation, clock in/out, attendance reports |
+| **Notifications** | In-app inbox + WhatsApp (Meta API) + Email (SMTP) |
+| **Audit Trail** | Every action logged with before/after values |
+| **Menu Scheduling** | Time-based availability (breakfast/lunch/dinner menus) |
+| **Auto-86** | Low-stock ingredients auto-disable linked menu items |
+
+### Platform
+| Feature | Description |
+|---------|-------------|
+| **Offline-First** | IndexedDB queue + Background Sync + auto-replay on reconnect |
+| **Real-time** | WebSocket for products, tables, orders, sessions (<100ms) |
+| **Code Splitting** | React.lazy() — 65 separate chunks, ~200KB initial load |
+| **Dark Mode** | System + manual toggle, forced on KDS for kitchen visibility |
+| **RTL** | Full Arabic support with right-to-left layout |
+| **PWA** | Installable on mobile/tablet as native-like app |
+| **Multi-Currency** | 9 pre-loaded currencies with exchange rate management |
+| **QR Code Generator** | Menu QR, table QR, kiosk QR — in-app generation + print |
+| **Thermal Printing** | ESC/POS over TCP/IP via on-prem agent (supports station routing) |
+| **PDF Export** | Receipts, invoices (Qatar VAT), Z-reports, daily summaries |
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         FRONTEND (React 18 + Vite)              │
+│  63 Pages · 30 Components · TanStack Query · Socket.IO Client  │
+│  Tailwind CSS · i18next (EN/AR) · React-PDF · Recharts         │
+└─────────────────────┬───────────────────────────────────────────┘
+                      │ REST API + WebSocket (/realtime)
+┌─────────────────────▼───────────────────────────────────────────┐
+│                    BACKEND (NestJS 10 + Prisma 5)               │
+│  60 Modules · JWT Auth · Rate Limiting · Event-Driven           │
+│  Cron Jobs · Swagger Docs · Helmet · Compression · CORS        │
+└─────────────────────┬───────────────────────────────────────────┘
+                      │ Prisma ORM (Serializable Transactions)
+┌─────────────────────▼───────────────────────────────────────────┐
+│                    PostgreSQL 16                                 │
+│  60+ Tables · FEFO Indexes · Row Locking · Audit Trail          │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│              ON-PREM PRINT AGENT (Node.js)                      │
+│  Polls backend → Routes KOT to station printers (ESC/POS TCP)  │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Quick Start
 
-### Prerequisites
-- Node.js 18+ (recommended: 22)
-- PostgreSQL 14+
-- npm
-
-### Installation
-
 ```bash
-# Clone
+# 1. Clone
 git clone https://github.com/sheikhastyleboutique3-glitch/GWK-V8-AIO.git
 cd GWK-V8-AIO
 
-# Backend
+# 2. Backend setup
 cd backend
-cp .env.example .env   # Edit DATABASE_URL + JWT_SECRET
+cp .env.example .env          # Edit DATABASE_URL + JWT secrets
 npm install
-npx prisma db push     # Creates all tables
-npx prisma db seed     # Loads demo data (20 products, 12 users, 3 orders)
+npx prisma migrate deploy     # Create all tables + indexes
+npx prisma db seed            # Load demo data
 npm run build
+npm run start:prod            # Starts on port 3000
 
-# Frontend
+# 3. Frontend setup (separate terminal)
 cd ../frontend
 npm install
-npm run build
+npm run build                 # Production build → dist/
 
-# Run
-cd ../backend
-npm run start:prod
-# → http://localhost:3000
+# 4. Open browser
+# http://localhost:3000        (serves frontend + API)
 ```
-
-### Demo Credentials
-
-| Email | Role | Branch |
-|-------|------|--------|
-| `admin@gwk.com` | Super Admin | All |
-| `manager.d@gwk.com` | Branch Manager | Doha (West Bay) |
-| `cashier@gwk.com` | Cashier | Doha |
-| `waiter@gwk.com` | Waiter | Doha |
-| `kitchen@gwk.com` | Kitchen | Doha |
-| `barista@gwk.com` | Barista | Doha |
-| `pastry@gwk.com` | Pastry | Doha |
-| `procurement@gwk.com` | Procurement | Warehouse |
-
-**All passwords:** `Admin@1234`
 
 ---
 
-## Feature Highlights
+## Demo Credentials
 
-### Point of Sale
-| Feature | Description |
-|---------|-------------|
-| **Floor plan** | Visual table grid with drag/resize, status colors, multi-order badges |
-| **Modifier selection** | Size/milk/extras modal before adding drinks (POS + Waiter) |
-| **Item merging** | Tap same item twice → qty increments (not duplicate lines) |
-| **Numpad** | Tap item to select → Qty / %Disc / Price actions |
-| **Split bill** | Visual item+qty picker → Pay now (Cash/Card) or Pay later |
-| **Multi-order tables** | Table picker when 2+ orders exist; "+ New order" button |
-| **Kitchen fire** | Only prints NEW items on KOT; qty changes re-fire |
-| **Station splitting** | KOT splits into BAR/DRINKS, HOT KITCHEN, PASTRY pages |
-| **Payment correction** | Manager can fix Cash→Card on closed orders (audit trail) |
-| **Variants** | Product attribute-based variants (e.g., S/M/L with price extra) |
-| **Combos** | Multi-choice combos that explode into component lines |
+After seeding (`npx prisma db seed`), use these accounts:
 
-### Kitchen & Printing
-| Feature | Description |
-|---------|-------------|
-| **KDS** | Real-time kitchen display with QUEUED → PREPARING → READY flow |
-| **KOT** | Thermal print with Arabic names + modifiers + notes |
-| **Station routing** | Each category routes to its printer (category.printerId) |
-| **Print agent** | On-prem ESC/POS agent pushes to network printers |
+| Role | Email | Password | PIN |
+|------|-------|----------|-----|
+| **Super Admin** | admin@gwk.com | Admin@1234 | 1111 |
+| **Branch Manager** | manager@gwk.com | Admin@1234 | 2222 |
+| **Cashier** | cashier@gwk.com | Admin@1234 | 3333 |
+| **Waiter** | waiter@gwk.com | Admin@1234 | 4444 |
+| **Kitchen** | kitchen@gwk.com | Admin@1234 | 5555 |
+| **Barista** | barista@gwk.com | Admin@1234 | 6666 |
+| **Procurement** | procurement@gwk.com | Admin@1234 | 7777 |
+| **Warehouse** | warehouse@gwk.com | Admin@1234 | 8888 |
+| **Driver** | driver@gwk.com | Admin@1234 | 9999 |
+| **Accountant** | accountant@gwk.com | Admin@1234 | 0000 |
 
-### Sessions & Cash Control
-| Feature | Description |
-|---------|-------------|
-| **Session gate** | No orders without an open session (configurable) |
-| **Denomination counts** | Opening + closing cash count with line-by-line breakdown |
-| **Z/X Reports** | Session summary: sales, payments by method, cash variance |
-| **PDF export** | Download Z-Report, Daily Sales, or Receipt as PDF |
+> **PIN Login**: Use the numeric PIN at the POS terminal for fast cashier switching (no email/password needed).
 
-### Reporting (new `/pos-reports` page)
-| Report | Data |
-|--------|------|
-| Product Sales | Qty/revenue/GP per product + category breakdown |
-| Staff Performance | Orders, revenue, avg ticket, tips per user |
-| Tip Report | Total tips, by-staff, by-session |
-| Cash Reconciliation | All closed sessions with variances |
-| End-of-Day Email | Auto 23:55 or manual trigger |
+### Demo Data Included
+- 3 branches (Warehouse + Doha + Al Wakra)
+- 20+ menu products with images, categories, and recipes
+- 4 suppliers with price history
+- Sample orders, requisitions, and inventory
+- Floor plans with tables
+- Delivery platforms (Talabat, Snoonu)
+- Loyalty programs and gift cards
+- 9 currencies (QAR, USD, EUR, GBP, SAR, AED, KWD, BHD, OMR)
 
-### Inventory & Supply Chain
-- FEFO batch tracking (auto-deducts oldest expiry first)
-- Recipe/BOM auto-deduction on every sale
-- Requisitions (12-status workflow)
-- Purchase orders with supplier price history
-- Branch transfers with driver dispatch
-- Stock counts with variance audit
-- Wastage logging (6 reasons)
+---
 
-### Search, Filter & Export (Odoo Parity)
-| Feature | Description |
-|---------|-------------|
-| **DataToolbar** | Unified toolbar on all 17 list pages: filter + group + export + saved views |
-| **Advanced Filter** | Multi-condition AND/OR logic, field picker, 5 types × 6+ operators |
-| **Group By** | Multi-layer collapsible accordion with subtotals per group |
-| **CSV Export** | 17 entity types, filter-aligned, relational (parent/child rows) |
-| **Excel Export** | Client-side .xls generation via ExportColumnsModal |
-| **Saved Views** | Named presets with "Set as Default" + backend persistence |
+## Installation Guides
 
-### Theme Engine
-| Feature | Description |
-|---------|-------------|
-| **4 Themes** | Corporate Light ☀️ / Deep Slate 🌙 / AMOLED POS 🚨 / Accessibility 👁️ |
-| **3 Densities** | Compact (back-office) / Default / Spacious (touch POS) |
-| **Auto-detect** | Touch devices → Spacious; OS dark/light sync |
-| **Schedule** | Time-based auto-switch (light at 06:00, dark at 18:00) |
-| **Persistence** | localStorage + backend user profile (cross-device) |
+| Platform | Guide |
+|----------|-------|
+| **Docker Compose** (recommended) | [INSTALL.md](INSTALL.md) |
+| **Hostinger VPS (Ubuntu)** | [INSTALL-HOSTINGER-VPS.md](INSTALL-HOSTINGER-VPS.md) |
+| **Windows (local dev)** | [INSTALL-WINDOWS.md](INSTALL-WINDOWS.md) |
+| **macOS (local dev)** | See [Quick Start](#quick-start) — same steps |
+| **Linux (local dev)** | See [Quick Start](#quick-start) |
 
-### Data Integrity & Safety
-| Feature | Description |
-|---------|-------------|
-| **Idempotency** | Server-side 60s key cache prevents duplicate orders on double-click |
-| **Offline POS** | IndexedDB queue + auto-sync with background sync API |
-| **Stock validation** | Pre-flight check before completing sale (configurable override) |
-| **Offline Banner** | Persistent red/blue/amber status bar on POS + Waiter |
+### Docker Compose (One Command)
+
+```bash
+cp .env.example .env    # Edit secrets
+docker compose up -d    # Starts PostgreSQL + Backend + Frontend
+```
+
+---
+
+## Print Agent
+
+The **on-prem print agent** runs at the restaurant on a device connected to the same network as your thermal printers (Raspberry Pi, mini-PC, or the cashier's workstation).
+
+```bash
+cd agent
+
+# Auto-login mode (recommended):
+API_URL=http://your-server:3000 \
+API_EMAIL=admin@gwk.com \
+API_PASSWORD=Admin@1234 \
+BRANCH_ID=2 \
+node print-agent.mjs
+```
+
+Features:
+- Zero dependencies (uses Node.js built-ins only)
+- Auto-discovers printer IPs from the app's Printers configuration
+- Routes KOT tickets to the correct station printer (Hot Kitchen / Pastry / Bar)
+- Prints customer receipts on order completion
+- Reconnects automatically if the server goes down
+
+See [agent/README.md](agent/README.md) for systemd service setup, Windows deployment, and troubleshooting.
+
+---
+
+## API Documentation
+
+Swagger UI is available in development mode:
+
+```
+http://localhost:3000/api/docs
+```
+
+Key endpoints:
+| Module | Endpoints |
+|--------|-----------|
+| Auth | `POST /api/auth/login`, `/pin-login`, `/refresh` |
+| Products | `GET/POST/PATCH /api/products` |
+| Sales | `POST /api/sales/orders`, `/items`, `/complete`, `/refund` |
+| Inventory | `GET /api/inventory/grouped`, `POST /api/inventory/adjust` |
+| KDS | `GET /api/kds/board`, `PATCH /api/kds/items/:id` |
+| Analytics | `GET /api/analytics/sales-summary`, `/abc-analysis`, `/peak-hours`, `/customer-clv` |
+| Health | `GET /api/health` (public, no auth) |
+| WebSocket | `ws://host/realtime` (namespace, joins branch room) |
+
+---
+
+## Environment Variables
+
+### Required (Production)
+
+| Variable | Example | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | `postgresql://user:pass@host:5432/db` | PostgreSQL connection string |
+| `JWT_SECRET` | `openssl rand -hex 32` | **Required in production** — app crashes without it |
+| `JWT_REFRESH_SECRET` | `openssl rand -hex 32` | **Required in production** — separate from JWT_SECRET |
+| `NODE_ENV` | `production` | Enables security hardening |
+| `ALLOWED_ORIGINS` | `https://yourdomain.com` | CORS origin (comma-separated) |
+
+### Optional
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3000` | Server port |
+| `JWT_EXPIRES_IN` | `15m` | Access token lifetime |
+| `JWT_REFRESH_EXPIRES_IN` | `7d` | Refresh token lifetime |
+| `EOD_EMAIL_ENABLED` | `true` | Enable daily sales email |
+| `EOD_EMAIL_RECIPIENTS` | — | Comma-separated emails for EOD report |
+| `WEEKLY_REPORT_RECIPIENTS` | — | Recipients for weekly summary |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | — | Email delivery |
 
 ---
 
@@ -160,16 +280,17 @@ npm run start:prod
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | NestJS 10 (TypeScript) |
-| ORM | Prisma 5 |
-| Database | PostgreSQL |
-| Frontend | React 18 + Vite + Tailwind CSS |
-| State | TanStack React Query (staleTime: 0 = always fresh) |
-| i18n | i18next (EN + AR) |
-| PDF | @react-pdf/renderer |
-| Realtime | Socket.IO |
-| Auth | JWT + bcrypt + role-based guards |
-| Printing | ESC/POS via TCP/IP (agent) + browser window.print() |
+| **Backend** | NestJS 10, TypeScript 5, Prisma 5 |
+| **Database** | PostgreSQL 16 (FEFO, row-locking, sequences) |
+| **Frontend** | React 18, Vite 5, TanStack Query 5, Tailwind 3 |
+| **Real-time** | Socket.IO 4 (WebSocket + polling fallback) |
+| **Auth** | JWT (access + refresh) + PIN login + bcrypt |
+| **Scheduling** | @nestjs/schedule (cron) |
+| **Events** | @nestjs/event-emitter (decoupled side effects) |
+| **PDF** | @react-pdf/renderer (client-side generation) |
+| **Printing** | ESC/POS over TCP/IP (zero-dependency agent) |
+| **Security** | Helmet, CORS, rate limiting, DTO validation |
+| **i18n** | i18next (English + Arabic + RTL) |
 
 ---
 
@@ -177,112 +298,84 @@ npm run start:prod
 
 ```
 GWK-V8-AIO/
-├── backend/
-│   ├── src/
-│   │   ├── modules/          # ~42 domain modules
-│   │   ├── common/           # Guards, filters, interceptors, decorators
-│   │   ├── main.ts           # Bootstrap (CORS, validation, Swagger)
-│   │   └── app.module.ts     # Module registry
-│   └── prisma/
-│       ├── schema.prisma     # ~97 models
-│       ├── seed.ts           # Demo data
-│       └── migrations/       # Single baseline migration
-├── frontend/
-│   ├── src/
-│   │   ├── pages/            # 60+ pages
-│   │   ├── components/       # Shared UI (DataToolbar, ThemePanel, Skeleton, etc.)
-│   │   ├── lib/              # API, PDF, themes, syncManager, exportExcel, savedViews
-│   │   ├── i18n/locales/     # en.json + ar.json
-│   │   └── App.tsx           # Router + role-based guards
-│   └── package.json
-├── agent/
-│   └── print-agent.mjs       # On-prem ESC/POS print agent
-└── docs/
-    ├── MEMORY.md             # Architecture & decisions
-    ├── SKILLS.md             # Operational playbooks
-    └── ODOO19-PARITY.md      # Feature coverage audit
+├── backend/                    # NestJS API server
+│   ├── prisma/
+│   │   ├── schema.prisma       # 60+ models, all enums
+│   │   ├── migrations/         # PostgreSQL migrations
+│   │   └── seed.ts             # Full demo seed
+│   └── src/
+│       ├── main.ts             # Bootstrap (helmet, CORS, swagger)
+│       ├── app.module.ts       # 60 registered modules
+│       ├── common/             # Guards, filters, interceptors, events
+│       └── modules/            # 60 feature modules
+│           ├── auth/           # Login, PIN, refresh, branch switch
+│           ├── sales/          # Orders, payments, refunds, split/merge
+│           ├── products/       # CRUD + 86 toggle + scheduling
+│           ├── inventory/      # FEFO engine, batch tracking
+│           ├── kds/            # Kitchen display gateway
+│           ├── analytics/      # ABC, CLV, peak hours, waste ratio
+│           ├── realtime/       # WebSocket gateway (4 event types)
+│           ├── currency/       # Multi-currency exchange rates
+│           ├── shifts/         # Staff scheduling + clock in/out
+│           └── ...             # 50+ more modules
+├── frontend/                   # React SPA
+│   └── src/
+│       ├── pages/              # 63 lazy-loaded page components
+│       ├── components/         # 30 shared components
+│       ├── lib/                # 35 utility hooks & services
+│       └── i18n/               # EN + AR translations
+├── agent/                      # On-prem thermal print agent
+│   ├── print-agent.mjs        # Zero-dependency ESC/POS printer
+│   └── README.md               # Agent setup guide
+├── docker-compose.yml          # One-command deployment
+├── INSTALL.md                  # Full installation guide
+├── INSTALL-WINDOWS.md          # Windows-specific guide
+└── INSTALL-HOSTINGER-VPS.md    # VPS deployment guide
 ```
 
 ---
 
-## Demo Workflow
+## Public Routes (No Auth)
 
-1. **Login** as `admin@gwk.com` / `Admin@1234`
-2. **Open session:** Sessions → Open (float: 1500)
-3. **Dine-in:** POS → Floor Plan → tap T3 → add Cappuccino (modifiers) → add Cheesecake
-4. **Numpad:** Tap Cheesecake → tap Qty → type 3 → qty updates to 3 instantly
-5. **Discount:** Tap %Disc → type 10 → 10% discount applied (shown on item + receipt)
-6. **Kitchen:** Click Kitchen → KOT prints "DINE IN T3" with items + modifiers
-7. **KDS:** Open Kitchen Display → 🔥 Hot Kitchen tab → see items → Start → Ready
-8. **Payment:** Back in POS → Payment → Cash 50 → Complete (change: 5.00)
-9. **Receipt:** Auto-prints with QAR currency, tax, company phone/email
-10. **Takeaway:** + New Order → select Takeaway → type customer name → add items → Kitchen → Pay
-11. **KOT shows:** *** TAKEAWAY *** banner prominently
-12. **Waiter:** Login as `waiter@gwk.com` → floor tabs → tap table → add items → Send to Kitchen
-13. **Split:** Waiter → Split → select qty per item → Create separate bill
-14. **Z-Report:** Sessions → Close (must settle all orders first!) → denomination count → PDF
-15. **Theme:** Click 🎨 → pick Emerald preset → Compact density → Schedule dark at 18:00
-16. **Reports:** POS Reports → Product Sales / Staff Performance / Tips
-17. **Filter:** Inventory → DataToolbar → Add filter → Group By Category → Export CSV
-18. **Offline:** Disconnect network → red banner → add items → reconnect → auto-syncs
-19. **Table edit:** Floor Plan → ✏️ → click table → change shape to Round → Save Layout
-20. **Menu:** Menu page → Edit item → check "Allow negative stock" → Save
+| Route | Purpose |
+|-------|---------|
+| `/login` | Staff login page |
+| `/order/:branchId` | Public digital menu + self-ordering |
+| `/kiosk/:configId` | Self-service kiosk |
+| `/display/:branchId` | Customer-facing second screen |
+| `/api/health` | Health check endpoint |
 
 ---
 
-## Environment Variables
+## Keyboard Shortcuts
 
-```env
-# Required
-DATABASE_URL=postgresql://user:pass@localhost:5432/gwk_v8_aio
-JWT_SECRET=your-256-bit-secret
-PORT=3000
-
-# Optional: End-of-day email
-EOD_EMAIL_ENABLED=true
-EOD_EMAIL_RECIPIENTS=manager@company.qa,owner@company.qa
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_SECURE=false
-SMTP_USER=your-email@gmail.com
-SMTP_PASS=your-app-password
-SMTP_FROM=noreply@company.qa
-
-# Optional: CORS (production)
-ALLOWED_ORIGINS=https://pos.company.qa
-NODE_ENV=production
-```
+| Key | Action (POS Page) |
+|-----|-------------------|
+| `Ctrl+K` / `Cmd+K` | Global search (works everywhere) |
+| `F2` | Open payment panel |
+| `F3` | Hold order |
+| `F4` | Print last receipt |
+| `F5` | Send to kitchen |
+| `F8` | Clear cart / new order |
+| `F9` | Open orders list |
+| `Esc` | Close modal / cancel |
+| `+` / `-` | Adjust selected item quantity |
 
 ---
 
-## Update (running system)
+## Support & Deployment
 
-```bash
-git pull
-cd backend && npm run build
-cd ../frontend && npm run build
-# Restart backend process
-```
+For production deployment assistance, contact the development team. The system supports:
 
----
-
-## Reset Database
-
-```bash
-cd backend
-npx prisma db push --force-reset
-npx prisma db seed
-npm run build && npm run start:prod
-```
+- **Single-server** deployment (Docker Compose)
+- **Multi-server** deployment (separate API + DB + CDN)
+- **Load-balanced** deployment (requires Redis for session/idempotency sharing)
+- **Kubernetes** deployment (health endpoint at `/api/health` for probes)
 
 ---
 
-## API Documentation
+<div align="center">
 
-Swagger available at `/api/docs` (dev mode only).
+**Built for Qatar F&B businesses** | **Odoo 19 POS parity** | **Production-hardened**
 
----
-
-## License
-
-Proprietary — GWK Restaurant Group.
+</div>
