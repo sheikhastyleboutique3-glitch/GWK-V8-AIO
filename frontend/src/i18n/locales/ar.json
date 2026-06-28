@@ -1,7 +1,7 @@
 {
   "app": {
-    "name": "نظام GWK V7",
-    "tagline": "سلسلة التوريد والعمليات"
+    "name": "نظام GWK V8",
+    "tagline": "إدارة المطاعم والعمليات"
   },
   "navGroups": {
     "overview": "نظرة عامة",
@@ -68,7 +68,10 @@
     "productAttributes": "الخصائص والمتغيرات",
     "iotDevices": "الأجهزة الطرفية",
     "selfOrder": "الطلب الذاتي",
-    "qrCodes": "رموز QR"
+    "qrCodes": "رموز QR",
+    "bookings": "الحجوزات",
+    "permissions": "الصلاحيات",
+    "advancedAnalytics": "التحليلات المتقدمة"
   },
   "kiosk": {
     "title": "الطلب الذاتي",
@@ -666,7 +669,8 @@
     "CASHIER": "كاشير",
     "CLEANER": "عامل نظافة",
     "WAITER": "نادل",
-    "DRIVER": "سائق"
+    "DRIVER": "سائق",
+    "ACCOUNTANT": "محاسب"
   },
   "settings": {
     "theme": "المظهر",

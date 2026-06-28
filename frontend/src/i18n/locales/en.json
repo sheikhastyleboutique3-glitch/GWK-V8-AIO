@@ -1,7 +1,7 @@
 {
   "app": {
-    "name": "GWK V7 Enterprise",
-    "tagline": "Supply Chain & Operations"
+    "name": "GWK V8 Enterprise",
+    "tagline": "Restaurant ERP & Operations"
   },
   "navGroups": {
     "overview": "Overview",
@@ -69,7 +69,9 @@
     "productAttributes": "Attributes & Variants",
     "iotDevices": "IoT Devices",
     "selfOrder": "Self-Ordering",
-    "qrCodes": "QR Codes"
+    "qrCodes": "QR Codes",
+    "bookings": "Reservations",
+    "permissions": "Permissions"
   },
   "kiosk": {
     "title": "Self-Order",
@@ -660,7 +662,8 @@
     "CASHIER": "Cashier",
     "CLEANER": "Cleaner",
     "WAITER": "Waiter",
-    "DRIVER": "Driver"
+    "DRIVER": "Driver",
+    "ACCOUNTANT": "Accountant"
   },
   "settings": {
     "theme": "Theme",
