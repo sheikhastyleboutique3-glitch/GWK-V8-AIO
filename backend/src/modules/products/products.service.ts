@@ -9,7 +9,9 @@ export class ProductsService {
     private audit: AuditService,
   ) {}
 
-  async findAll(categoryId?: number, search?: string, includeArchived?: boolean, sellable?: boolean, availableOnly?: boolean, productType?: string) {
+  async findAll(categoryId?: number, search?: string, includeArchived?: boolean, sellable?: boolean, availableOnly?: boolean, productType?: string, page?: number, limit?: number) {
+    const take = limit || 200; // Default 200 products per page (enough for POS grid)
+    const skip = page && page > 1 ? (page - 1) * take : 0;
     return this.prisma.product.findMany({
       where: {
         isActive: true,
@@ -32,6 +34,8 @@ export class ProductsService {
         supplier: { select: { id: true, name: true } },
       },
       orderBy: { name: 'asc' },
+      take,
+      skip,
     });
     // allergens / allergenNotes are scalar columns and returned by default.
   }

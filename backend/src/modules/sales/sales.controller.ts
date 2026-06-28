@@ -119,11 +119,19 @@ export class SalesController {
     @Query('branchId') branchId?: string,
     @Query('status') status?: OrderStatus,
     @Query('customerId') customerId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('dateFrom') dateFrom?: string,
   ) {
     return this.svc.findAll({
       branchId: branchId ? parseInt(branchId, 10) : undefined,
       status,
       customerId: customerId ? parseInt(customerId, 10) : undefined,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      search,
+      dateFrom,
     });
   }
 

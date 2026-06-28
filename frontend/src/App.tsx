@@ -31,6 +31,8 @@ import NotificationsPage from './pages/NotificationsPage';
 import UnitsPage from './pages/UnitsPage';
 import PosDashboardPage from './pages/PosDashboardPage';
 import CustomerDisplayPage from './pages/CustomerDisplayPage';
+import TablePayPage from './pages/TablePayPage';
+import ReservationWidgetPage from './pages/ReservationWidgetPage';
 import POSPage from './pages/POSPage';
 import KDSPage from './pages/KDSPage';
 import SalesDashboardPage from './pages/SalesDashboardPage';
@@ -122,6 +124,8 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/kiosk/:configId" element={<KioskPage />} />
       <Route path="/customer-display" element={<CustomerDisplayPage />} />
+      <Route path="/pay/:orderId" element={<TablePayPage />} />
+      <Route path="/book" element={<ReservationWidgetPage />} />
       {/* Full-screen POS & Waiter — no sidebar */}
       <Route
         path="/pos"
