@@ -1,10 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ReservationStatus, TableShape, TableStatus } from '@prisma/client';
+import { TABLE_CHANGED } from '../../common/events/realtime-events';
 
 @Injectable()
 export class TablesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private events: EventEmitter2,
+  ) {}
 
   // ---- Floors (areas / zones) ----
   listFloors(branchId?: number) {
@@ -93,6 +98,93 @@ export class TablesService {
   async removeTable(id: number) {
     await this.getTable(id);
     return this.prisma.restaurantTable.update({ where: { id }, data: { isActive: false } });
+  }
+
+  /**
+   * Atomic table claim — prevents race condition where two waiters open the
+   * same table simultaneously and create duplicate orders. Uses a serializable
+   * transaction with row-locking to ensure only one order is created.
+   *
+   * Returns: { action: 'created' | 'resumed' | 'existing', orderId: number }
+   */
+  async claimTable(tableId: number, branchId: number, userId?: number) {
+    const result = await this.prisma.$transaction(
+      async (tx) => {
+        // Lock the table row to prevent concurrent claims
+        const [table] = await tx.$queryRaw<Array<{ id: number; name: string; status: string }>>`
+          SELECT id, name, status FROM restaurant_tables
+          WHERE id = ${tableId} FOR UPDATE
+        `;
+        if (!table) throw new NotFoundException(`Table ${tableId} not found`);
+
+        // Check if there's already an OPEN/HELD order for this table
+        const existingOrder = await tx.order.findFirst({
+          where: {
+            branchId,
+            tableName: table.name,
+            status: { in: ['OPEN', 'HELD'] },
+          },
+          select: { id: true, status: true },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        if (existingOrder) {
+          // Resume if HELD, otherwise return existing
+          if (existingOrder.status === 'HELD') {
+            await tx.order.update({
+              where: { id: existingOrder.id },
+              data: { status: 'OPEN' },
+            });
+            return { action: 'resumed' as const, orderId: existingOrder.id };
+          }
+          return { action: 'existing' as const, orderId: existingOrder.id };
+        }
+
+        // No existing order — create a new one (atomically, inside the lock)
+        const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const [{ nextval }] = await tx.$queryRaw<[{ nextval: bigint }]>`
+          SELECT nextval(pg_get_serial_sequence('orders', 'id'))`;
+        const orderNo = `ORD-${stamp}-B${branchId}-${String(Number(nextval)).padStart(5, '0')}`;
+
+        // Check for an open session
+        const session = await tx.posSession.findFirst({
+          where: { branchId, status: 'OPEN' },
+          select: { id: true },
+        });
+
+        const order = await tx.order.create({
+          data: {
+            orderNo,
+            branchId,
+            channel: 'DINE_IN',
+            tableName: table.name,
+            tableId,
+            sessionId: session?.id ?? null,
+            createdById: userId ?? null,
+          },
+        });
+
+        // Mark the table as occupied
+        await tx.restaurantTable.update({
+          where: { id: tableId },
+          data: { status: 'OCCUPIED' },
+        });
+
+        return { action: 'created' as const, orderId: order.id };
+      },
+      { isolationLevel: 'Serializable', timeout: 10_000 },
+    );
+
+    // Emit table change event after transaction commits (for live floor plan updates)
+    this.events.emit(TABLE_CHANGED, {
+      branchId,
+      tableId,
+      tableName: result.action === 'created' ? '' : '', // will be populated by the caller context
+      status: 'OCCUPIED',
+      action: result.action === 'created' ? 'opened' : 'status_changed',
+    });
+
+    return result;
   }
 
   // ---- Reservations ----

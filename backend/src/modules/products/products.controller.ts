@@ -9,6 +9,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '@prisma/client';
+import { CreateProductDto, UpdateProductDto, SetAvailabilityDto } from './dto/product.dto';
 import { Response } from 'express';
 import * as fs from 'fs';
 
@@ -77,7 +78,7 @@ export class ProductsController {
 
   @Post()
   @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER, Role.PROCUREMENT)
-  create(@Body() dto: any, @CurrentUser('sub') userId: number) { return this.svc.create(dto, userId); }
+  create(@Body() dto: CreateProductDto, @CurrentUser('sub') userId: number) { return this.svc.create(dto, userId); }
 
   @Post('bulk-import')
   @Roles(Role.SUPER_ADMIN, Role.PROCUREMENT)
@@ -89,11 +90,11 @@ export class ProductsController {
 
   @Patch(':id')
   @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER, Role.PROCUREMENT)
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: any, @CurrentUser('sub') userId: number) { return this.svc.update(id, dto, userId); }
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateProductDto, @CurrentUser('sub') userId: number) { return this.svc.update(id, dto, userId); }
 
   @Patch(':id/availability')
   @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER, Role.CASHIER, Role.WAITER, Role.KITCHEN, Role.BARISTA, Role.PASTRY)
-  setAvailability(@Param('id', ParseIntPipe) id: number, @Body() body: { isAvailable: boolean }, @CurrentUser('sub') userId: number) {
+  setAvailability(@Param('id', ParseIntPipe) id: number, @Body() body: SetAvailabilityDto, @CurrentUser('sub') userId: number) {
     return this.svc.setAvailability(id, !!body.isAvailable, userId);
   }
 

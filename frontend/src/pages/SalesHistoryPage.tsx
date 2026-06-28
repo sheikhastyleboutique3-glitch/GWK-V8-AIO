@@ -10,7 +10,7 @@ import StatusBadge from '../components/StatusBadge';
 import AdvancedFilterBuilder, { FilterField, FilterPreset, FilterRule } from '../components/AdvancedFilterBuilder';
 import GroupBySelect, { groupData, GroupedData } from '../components/GroupBySelect';
 import { printReceipt } from '../lib/thermalPrint';
-import { downloadReceiptPdf, downloadDailySalesPdf } from '../lib/pdf';
+import { downloadReceiptPdf, downloadDailySalesPdf, downloadInvoicePdf } from '../lib/pdf';
 import { useConfirm } from '../lib/useConfirm';
 
 const STATUSES = ['', 'OPEN', 'HELD', 'COMPLETED', 'VOIDED', 'REFUNDED'];
@@ -63,6 +63,9 @@ export default function SalesHistoryPage() {
   const [correcting, setCorrecting] = useState<{ orderId: number; paymentId: number; currentMethod: string; amount: number } | null>(null);
   const [newMethod, setNewMethod] = useState('');
   const [correctionReason, setCorrectionReason] = useState('');
+  // Partial refund modal
+  const [partialRefundOrder, setPartialRefundOrder] = useState<any>(null);
+  const [partialRefundItems, setPartialRefundItems] = useState<Set<number>>(new Set());
 
   // Merge simple filters + advanced filters for the API call
   const apiParams = useMemo(() => ({
@@ -105,6 +108,18 @@ export default function SalesHistoryPage() {
     mutationFn: (id: number) => api.post(`/sales/orders/${id}/refund`, {}).then((r) => r.data.data),
     onSuccess: (o) => { toast.success(`Order ${o.orderNo} refunded`); qc.invalidateQueries({ queryKey: ['sales-history'] }); },
     onError: (e: any) => toast.error(e.response?.data?.message || 'Refund failed'),
+  });
+
+  const partialRefundMut = useMutation({
+    mutationFn: (params: { orderId: number; itemIds: number[]; reason?: string }) =>
+      api.post(`/sales/orders/${params.orderId}/partial-refund`, { itemIds: params.itemIds, reason: params.reason }),
+    onSuccess: () => {
+      toast.success('Partial refund processed');
+      setPartialRefundOrder(null);
+      setPartialRefundItems(new Set());
+      qc.invalidateQueries({ queryKey: ['sales-history'] });
+    },
+    onError: (e: any) => toast.error(e.response?.data?.message || 'Partial refund failed'),
   });
 
   const correctPayment = useMutation({
@@ -307,6 +322,7 @@ export default function SalesHistoryPage() {
                   <div className="flex gap-2 mt-3">
                     <button onClick={() => printReceipt(o, businessInfo)} className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs font-medium">🖨 {t('salesHistory.reprint')}</button>
                     <button onClick={() => downloadReceiptPdf({ order: o, businessName: businessInfo.businessName, branchName: businessInfo.branchName, address: businessInfo.address, phone: businessInfo.phone, taxId: businessInfo.taxId })} className="px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium">📄 PDF</button>
+                    <button onClick={() => downloadInvoicePdf({ order: o, businessName: businessInfo.businessName, branchName: businessInfo.branchName, address: businessInfo.address, phone: businessInfo.phone, taxId: businessInfo.taxId, currency: businessInfo.currency || 'QAR' })} className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 text-xs font-medium">🧾 Invoice</button>
                     {canCorrect && o.status === 'COMPLETED' && (o.payments || []).filter((p: any) => !p.isReversed).length > 0 && (
                       <button onClick={() => {
                         const activePay = (o.payments || []).find((p: any) => !p.isReversed);
@@ -321,6 +337,9 @@ export default function SalesHistoryPage() {
                     )}
                     {canRefund && o.status === 'COMPLETED' && (
                       <button onClick={async () => { const ok = await confirm({ title: t('pos.refundConfirm'), description: 'This will issue a full refund for this order.', variant: 'danger', confirmLabel: 'Refund' }); if (ok) refund.mutate(o.id); }} disabled={refund.isPending} className="px-3 py-1.5 rounded-lg border border-red-300 text-red-600 text-xs font-medium disabled:opacity-50">{t('salesHistory.refund')}</button>
+                    )}
+                    {canRefund && o.status === 'COMPLETED' && o.items?.filter((i: any) => !i.isVoided).length > 1 && (
+                      <button onClick={() => setPartialRefundOrder(o)} className="px-3 py-1.5 rounded-lg border border-amber-300 text-amber-600 text-xs font-medium">Partial Refund</button>
                     )}
                   </div>
                   {/* Per-payment correction buttons when multiple tenders */}
@@ -375,6 +394,49 @@ export default function SalesHistoryPage() {
                 className="px-4 py-2 rounded-lg text-sm bg-amber-600 text-white font-medium disabled:opacity-50"
               >
                 {correctPayment.isPending ? '...' : t('salesHistory.confirmCorrection')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Partial Refund Modal */}
+      {partialRefundOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setPartialRefundOrder(null)}>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-md p-5 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-bold mb-1">Partial Refund</h3>
+            <p className="text-xs text-gray-500 mb-3">Select items to refund from order {partialRefundOrder.orderNo}</p>
+            <div className="space-y-2 mb-4">
+              {(partialRefundOrder.items || []).filter((i: any) => !i.isVoided).map((item: any) => (
+                <label key={item.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={partialRefundItems.has(item.id)}
+                    onChange={() => {
+                      setPartialRefundItems(prev => {
+                        const next = new Set(prev);
+                        if (next.has(item.id)) next.delete(item.id);
+                        else next.add(item.id);
+                        return next;
+                      });
+                    }}
+                    className="rounded"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium">{item.product?.name || 'Item'}</span>
+                    <span className="text-xs text-gray-400 ml-2">x{item.quantity}</span>
+                  </div>
+                  <span className="text-sm font-medium">{(item.unitPrice * item.quantity - item.discount).toFixed(2)}</span>
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => { setPartialRefundOrder(null); setPartialRefundItems(new Set()); }} className="px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-800 text-sm">Cancel</button>
+              <button
+                disabled={partialRefundItems.size === 0 || partialRefundMut.isPending}
+                onClick={() => partialRefundMut.mutate({ orderId: partialRefundOrder.id, itemIds: [...partialRefundItems] })}
+                className="px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-medium disabled:opacity-50"
+              >
+                {partialRefundMut.isPending ? 'Processing...' : `Refund ${partialRefundItems.size} item(s)`}
               </button>
             </div>
           </div>

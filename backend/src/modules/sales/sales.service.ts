@@ -11,6 +11,7 @@ import { PosSessionsService } from '../pos-sessions/pos-sessions.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ORDER_COMPLETED, OrderCompletedEvent } from '../../common/events/order-events';
 import { KDS_CHANGED } from '../kds/kds.gateway';
+import { ORDER_CHANGED } from '../../common/events/realtime-events';
 import {
   InventoryTxType,
   OrderChannel,
@@ -183,7 +184,7 @@ export class SalesService {
     });
   }
 
-  findAll(filters?: { branchId?: number; status?: OrderStatus; customerId?: number }) {
+  findAll(filters?: { branchId?: number; status?: OrderStatus; customerId?: number; skip?: number; take?: number }) {
     return this.prisma.order.findMany({
       where: {
         ...(filters?.branchId ? { branchId: filters.branchId } : {}),
@@ -192,7 +193,8 @@ export class SalesService {
       },
       include: this.orderInclude,
       orderBy: { createdAt: 'desc' },
-      take: 200,
+      skip: filters?.skip ?? 0,
+      take: Math.min(filters?.take ?? 200, 500),
     });
   }
 
@@ -464,6 +466,7 @@ export class SalesService {
 
     const res = await this.recompute(orderId);
     this.events.emit(KDS_CHANGED, { branchId: res.branchId });
+    this.events.emit(ORDER_CHANGED, { branchId: res.branchId, orderId, orderNo: res.orderNo, action: 'item_added', tableName: res.tableName });
     return res;
   }
 
@@ -1288,6 +1291,23 @@ export class SalesService {
           tx,
         );
 
+        // Finance journal: aggregator commission expense (Talabat/Snoonu/etc.)
+        if (commission.commissionAmount > 0) {
+          await this.finance.create(
+            {
+              type: FinanceEntryType.COMMISSION,
+              amount: -commission.commissionAmount, // expense is negative
+              branchId: pre.branchId,
+              sourceType: 'order',
+              sourceId: pre.id,
+              reference: pre.orderNo,
+              notes: `Aggregator commission (${pre.channel}) — ${commission.commissionAmount.toFixed(2)}`,
+              createdById: userId,
+            },
+            tx,
+          );
+        }
+
         return completed;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20_000 },
@@ -1321,6 +1341,7 @@ export class SalesService {
       completedAt: completed.completedAt ?? new Date(),
     };
     this.events.emit(ORDER_COMPLETED, evt);
+    this.events.emit(ORDER_CHANGED, { branchId: completed.branchId, orderId: completed.id, orderNo: completed.orderNo, action: 'completed', tableName: completed.tableName });
 
     // Post-commit: release the dine-in table (best-effort, non-blocking).
     await this.freeTable(completed.branchId, completed.tableName);

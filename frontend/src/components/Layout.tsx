@@ -8,8 +8,9 @@ import { useNotificationSounds } from '../lib/useNotificationSounds';
 import { unlockAudio } from '../lib/sound';
 import { toggleDarkMode, loadThemeLocal } from '../lib/theme';
 import ThemePanel from './ThemePanel';
+import CommandPalette from './CommandPalette';
 import {
-  Squares2X2Icon, ClipboardDocumentListIcon, ShoppingBagIcon, TrashIcon,
+  Squares2X2Icon, ClipboardDocumentListIcon, TrashIcon,
   BellAlertIcon, ChatBubbleLeftRightIcon, ArchiveBoxIcon, TruckIcon,
   DocumentTextIcon, CurrencyDollarIcon, ChartBarIcon, BuildingOffice2Icon,
   UsersIcon, TagIcon, ScaleIcon, Cog6ToothIcon, DocumentMagnifyingGlassIcon,
@@ -61,7 +62,6 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'menu',
     items: [
-      { key: 'catalog',    path: '/catalog',    icon: ShoppingBagIcon,    roles: [] },
       { key: 'categories', path: '/categories', icon: TagIcon,            roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
       { key: 'recipes',    path: '/recipes',    icon: BeakerIcon,         roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'KITCHEN', 'PASTRY'] },
       { key: 'modifiers',  path: '/modifiers',  icon: ClipboardDocumentCheckIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
@@ -93,7 +93,6 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { key: 'staffTasks', path: '/staff-tasks', icon: ClipboardDocumentCheckIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CLEANER', 'WAREHOUSE'] },
       { key: 'users',      path: '/users',       icon: UsersIcon,                  roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
-      { key: 'permissions', path: '/permissions', icon: ShieldCheckIcon,            roles: ['SUPER_ADMIN'] },
     ],
   },
   {
@@ -131,10 +130,11 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'admin',
     items: [
-      { key: 'branches', path: '/branches', icon: BuildingOffice2Icon, roles: ['SUPER_ADMIN'] },
-      { key: 'units',    path: '/units',    icon: ScaleIcon,           roles: ['SUPER_ADMIN'] },
-      { key: 'settings', path: '/settings', icon: Cog6ToothIcon,       roles: ['SUPER_ADMIN'] },
-      { key: 'admin',    path: '/admin',    icon: ShieldCheckIcon,     roles: ['SUPER_ADMIN'] },
+      { key: 'branches',    path: '/branches',    icon: BuildingOffice2Icon, roles: ['SUPER_ADMIN'] },
+      { key: 'permissions', path: '/permissions', icon: ShieldCheckIcon,     roles: ['SUPER_ADMIN'] },
+      { key: 'units',       path: '/units',       icon: ScaleIcon,           roles: ['SUPER_ADMIN'] },
+      { key: 'settings',    path: '/settings',    icon: Cog6ToothIcon,       roles: ['SUPER_ADMIN'] },
+      { key: 'admin',       path: '/admin',       icon: ShieldCheckIcon,     roles: ['SUPER_ADMIN'] },
     ],
   },
 ];
@@ -374,6 +374,7 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+      <CommandPalette />
 
       {/* Theme Panel */}
       {showThemePanel && <ThemePanel onClose={() => setShowThemePanel(false)} />}

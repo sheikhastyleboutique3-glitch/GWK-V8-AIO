@@ -14,6 +14,8 @@ import { useOnlineStatus } from '../lib/useOnlineStatus';
 import OfflineBanner from '../components/OfflineBanner';
 import { usePrompt } from '../lib/usePrompt';
 import { useConfirm } from '../lib/useConfirm';
+import { useDebounce } from '../lib/useDebounce';
+import { usePosKeyboard } from '../lib/usePosKeyboard';
 
 interface CartLine {
   itemId?: number; // present when the line lives on a persisted (loaded) order
@@ -77,6 +79,7 @@ export default function POSPage() {
 
   const [categoryId, setCategoryId] = useState<number | undefined>(undefined);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [comboCart, setComboCart] = useState<{ comboId: number; name: string; price: number; choiceIds: number[] }[]>([]);
   const [comboPick, setComboPick] = useState<{ combo: any; sel: Record<number, number> } | null>(null);
@@ -88,6 +91,7 @@ export default function POSPage() {
   const [payMethod, setPayMethod] = useState<PayMethod>('CASH');
   const [customer, setCustomer] = useState<any>(null);
   const [customerSearch, setCustomerSearch] = useState('');
+  const debouncedCustomerSearch = useDebounce(customerSearch, 300);
   const [giftCardCode, setGiftCardCode] = useState('');
   const [selectedTerminalId, setSelectedTerminalId] = useState<number | undefined>(undefined);
   const [tenderAmount, setTenderAmount] = useState('');
@@ -151,10 +155,10 @@ export default function POSPage() {
     
   });
   const { data: products, isLoading } = useQuery({
-    queryKey: ['pos-products', categoryId, search],
+    queryKey: ['pos-products', categoryId, debouncedSearch],
     queryFn: () =>
       api
-        .get('/products', { params: { sellable: true, available: true, productType: 'MENU', ...(categoryId && { categoryId }), ...(search && { search }) } })
+        .get('/products', { params: { sellable: true, available: true, productType: 'MENU', ...(categoryId && { categoryId }), ...(debouncedSearch && { search: debouncedSearch }) } })
         .then((r) => r.data.data),
     
   });
@@ -192,9 +196,9 @@ export default function POSPage() {
 
   // Customer search (for loyalty / store-credit redemption).
   const { data: customerResults } = useQuery({
-    queryKey: ['pos-customers', customerSearch],
-    queryFn: () => api.get('/customers', { params: { search: customerSearch } }).then((r) => r.data.data),
-    enabled: customerSearch.trim().length >= 2,
+    queryKey: ['pos-customers', debouncedCustomerSearch],
+    queryFn: () => api.get('/customers', { params: { search: debouncedCustomerSearch } }).then((r) => r.data.data),
+    enabled: debouncedCustomerSearch.trim().length >= 2,
   });
 
   // Open + held bills for this branch (waiter tickets waiting to be settled).
@@ -684,6 +688,26 @@ export default function POSPage() {
   const [selectedLineIdx, setSelectedLineIdx] = useState<number>(-1);
   const [numBuffer, setNumBuffer] = useState<string>('');
   const [numMode, setNumMode] = useState<'Qty' | '%Disc' | 'Price' | null>(null);
+
+  // ── POS Keyboard Shortcuts (F2=Pay, F3=Hold, F4=Print, F8=Clear, Esc) ──
+  usePosKeyboard({
+    onPay: () => setShowPayment(true),
+    onHold: () => {
+      if (mode === 'existing' && loadedOrderId) {
+        api.patch(`/sales/orders/${loadedOrderId}/hold`, {}).then(() => {
+          toast.success('Order held');
+          setLoadedOrderId(null);
+          setCart([]);
+        });
+      }
+    },
+    onPrint: () => { if (lastReceipt) printReceipt(lastReceipt, businessInfo); },
+    onClear: () => { setCart([]); setComboCart([]); setLoadedOrderId(null); setLastReceipt(null); setShowPayment(false); },
+    onOrders: () => setPosView('orders'),
+    onEscape: () => { if (showPayment) setShowPayment(false); else if (lastReceipt) setLastReceipt(null); },
+    onQtyUp: () => { if (selectedLineIdx >= 0 && selectedLineIdx < cart.length) setCart(p => p.map((l, i) => i === selectedLineIdx ? { ...l, quantity: l.quantity + 1 } : l)); },
+    onQtyDown: () => { if (selectedLineIdx >= 0 && selectedLineIdx < cart.length) setCart(p => p.map((l, i) => i === selectedLineIdx ? { ...l, quantity: Math.max(1, l.quantity - 1) } : l)); },
+  });
 
   // Open a table from the floor plan → switch to order view
   const openTableOrder = async (table: any) => {
@@ -1198,7 +1222,7 @@ export default function POSPage() {
                 >
                   <div className="h-20 bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden">
                     {p.imageUrl ? (
-                      <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                      <img src={p.imageUrl} alt={p.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     ) : (
                       <span className="text-3xl">{p.category?.icon || '🍽️'}</span>
                     )}
@@ -1972,7 +1996,22 @@ export default function POSPage() {
                   <div className="font-medium text-sm text-primary">👤 {activeCustomer.name}</div>
                 </div>
               )}
-              <button onClick={() => { /* TODO: generate invoice */ toast('Invoice feature coming soon'); }}
+              <button onClick={() => {
+                if (!lastReceipt) return;
+                import('../lib/pdf').then(({ downloadInvoicePdf }) => {
+                  downloadInvoicePdf({
+                    order: lastReceipt,
+                    businessName: businessInfo.businessName,
+                    branchName: businessInfo.branchName,
+                    address: businessInfo.address,
+                    phone: businessInfo.phone,
+                    taxId: businessInfo.taxId,
+                    email: businessInfo.email,
+                    currency: businessInfo.currency || 'QAR',
+                  });
+                  toast.success('Invoice generated');
+                });
+              }}
                 className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 mb-2">
                 🧾 Invoice
               </button>

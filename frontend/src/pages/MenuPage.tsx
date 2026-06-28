@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
@@ -9,6 +9,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import Modal from '../components/Modal';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtimeProducts } from '../lib/useRealtimeProducts';
+import { useDebounce } from '../lib/useDebounce';
 
 const EMPTY = {
   name: '', nameAr: '', sku: '', salePrice: '', costPrice: '', categoryId: '',
@@ -21,6 +22,7 @@ export default function MenuPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [catFilter, setCatFilter] = useState<number | ''>('');
   const [form, setForm] = useState({ ...EMPTY });
   const [editId, setEditId] = useState<number | null>(null);
@@ -33,9 +35,9 @@ export default function MenuPage() {
   useRealtimeProducts();
 
   const { data: products, isLoading } = useQuery({
-    queryKey: ['menu-items', search, catFilter],
+    queryKey: ['menu-items', debouncedSearch, catFilter],
     queryFn: () => api.get('/products', {
-      params: { sellable: true, ...(search && { search }), ...(catFilter && { categoryId: catFilter }) },
+      params: { sellable: true, ...(debouncedSearch && { search: debouncedSearch }), ...(catFilter && { categoryId: catFilter }) },
     }).then((r) => r.data.data),
   });
 
@@ -194,7 +196,7 @@ export default function MenuPage() {
                       {/* Image area */}
                       <div className="relative h-28 bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden group">
                         {p.imageUrl ? (
-                          <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                          <img src={p.imageUrl} alt={p.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                         ) : (
                           <span className="text-4xl">{p.category?.icon || '🍽️'}</span>
                         )}

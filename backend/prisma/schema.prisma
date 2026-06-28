@@ -1482,6 +1482,9 @@ model Order {
   @@index([sessionId])
   @@index([tableId])
   @@index([createdAt])
+  @@index([completedAt])
+  @@index([branchId, status, completedAt])
+  @@index([sessionId, status])
   @@map("orders")
 }
 
@@ -1517,6 +1520,8 @@ model OrderItem {
   @@index([orderId])
   @@index([productId])
   @@index([kdsStatus])
+  @@index([orderId, isVoided])
+  @@index([firedAt, kdsStatus])
   @@map("order_items")
 }
 

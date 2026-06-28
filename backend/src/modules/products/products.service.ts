@@ -35,6 +35,7 @@ export class ProductsService {
         supplier: { select: { id: true, name: true } },
       },
       orderBy: { name: 'asc' },
+      take: 500,
     });
     // allergens / allergenNotes are scalar columns and returned by default.
   }
