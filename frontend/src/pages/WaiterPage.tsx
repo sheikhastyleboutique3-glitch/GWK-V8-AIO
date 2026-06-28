@@ -10,9 +10,7 @@ import ModifierModal, { ModGroup, ChosenModifier } from '../components/ModifierM
 import { printKot } from '../lib/thermalPrint';
 import { useOnlineStatus } from '../lib/useOnlineStatus';
 import OfflineBanner from '../components/OfflineBanner';
-import { useSocket } from '../lib/useSocket';
-import PinSwitchModal from '../components/PinSwitchModal';
-import { playOrderSound } from '../lib/useOrderSound';
+import { useRealtimeFloor } from '../lib/useRealtimeFloor';
 
 interface TableRow { id: number; name: string; seats: number; status: string; branchId: number; isActive: boolean }
 interface OrderRow { id: number; orderNo: string; status: string; tableName?: string | null; total: number }
@@ -37,12 +35,6 @@ export default function WaiterPage() {
   const qc = useQueryClient();
   const branchId = activeBranch?.id;
 
-  // ─── Real-time sync: instant updates from POS/KDS/other waiters ───
-  useSocket({
-    onOrderChanged: (p) => { if (p.action === 'created' || p.action === 'fired') playOrderSound(); },
-  });
-
-  const [showPinSwitch, setShowPinSwitch] = useState(false);
   const [selectedTable, setSelectedTable] = useState<TableRow | null>(null);
   const [activeOrderId, setActiveOrderId] = useState<number | null>(null);
   const [categoryId, setCategoryId] = useState<number | undefined>(undefined);
@@ -58,20 +50,21 @@ export default function WaiterPage() {
 
   const waiterName = user ? `${user.firstName} ${user.lastName}` : undefined;
 
-  // ---- Floor-plan data ----
+  // Real-time floor updates via WebSocket (replaces 15s polling)
+  useRealtimeFloor(branchId);
+
+  // ---- Floor-plan data (slow fallback polling; WebSocket is primary) ----
   const { data: floors } = useQuery({
     queryKey: ['waiter-floors', branchId],
     queryFn: () => api.get('/floors', { params: { branchId } }).then((r) => r.data.data),
     enabled: !!branchId,
-    staleTime: 60_000,
-    refetchInterval: 120_000, // Fallback — WebSocket gives instant sync
+    refetchInterval: 120_000,
   });
   const { data: tables, isLoading: tablesLoading } = useQuery({
     queryKey: ['waiter-tables', branchId],
     queryFn: () => api.get('/tables', { params: { branchId } }).then((r) => r.data.data),
     enabled: !!branchId,
-    staleTime: 60_000,
-    refetchInterval: 120_000, // Fallback — WebSocket gives instant sync
+    refetchInterval: 120_000,
   });
   const [activeFloorId, setActiveFloorId] = useState<number | null>(null);
   // Filter tables by active floor (if selected)
@@ -90,7 +83,7 @@ export default function WaiterPage() {
       return [...(open || []), ...(held || [])] as OrderRow[];
     },
     enabled: !!branchId,
-    refetchInterval: 60_000, // Fallback — WebSocket gives instant sync
+    refetchInterval: 120_000,
   });
 
   const orderForTable = (name: string): OrderRow | undefined =>
@@ -155,7 +148,7 @@ export default function WaiterPage() {
     queryKey: ['waiter-order', activeOrderId],
     queryFn: () => api.get(`/sales/orders/${activeOrderId}`).then((r) => r.data.data),
     enabled: !!activeOrderId,
-    refetchInterval: 30_000, // Fallback — WebSocket gives instant KOT sync
+    refetchInterval: 5_000, // Sync KOT status: pick up fires made by POS or other waiters
   });
 
   const refreshTablesAndOrders = () => {
@@ -177,22 +170,10 @@ export default function WaiterPage() {
         setWaiterTablePicker({ table, orders: tableOrders });
         return null;
       }
-      if (tableOrders.length === 1) {
-        const existing = tableOrders[0];
-        if (existing.status === 'HELD') await api.patch(`/sales/orders/${existing.id}/resume`, {});
-        return existing.id;
-      }
-      // No orders — create new
-      const { data } = await api.post('/sales/orders', {
-        branchId,
-        channel: 'DINE_IN',
-        tableName: table.name,
-      });
-      // Mark the table occupied when a fresh ticket opens.
-      if (table.status === 'AVAILABLE' || table.status === 'RESERVED') {
-        await api.patch(`/tables/${table.id}`, { status: 'OCCUPIED' }).catch(() => {});
-      }
-      return data.data.id as number;
+      // Use atomic claim endpoint to prevent race conditions
+      // (two waiters tapping the same table simultaneously)
+      const { data } = await api.post(`/tables/${table.id}/claim`, { branchId });
+      return data.data.orderId as number;
     },
     onSuccess: (orderId, table) => {
       if (orderId === null) return; // picker is showing, don't navigate
@@ -370,34 +351,9 @@ export default function WaiterPage() {
   // ============ FLOOR PLAN ============
   if (!selectedTable) {
     return (
-      <div className="h-[100dvh] flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-950 p-3 md:p-4">
+      <div>
         <OfflineBanner />
-        {/* Minimal top bar (full-screen — no sidebar) */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => window.location.href = '/'}
-              className="px-3 py-2 rounded-lg bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-sm font-medium transition-colors"
-              title="Back to Dashboard"
-            >
-              ← Back
-            </button>
-            <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">{t('nav.waiter')}</h1>
-            <span className="text-sm text-gray-500 dark:text-gray-400">{activeBranch?.name}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-              <span>👤</span>
-              <span className="font-medium text-gray-700 dark:text-gray-200">{user?.firstName} {user?.lastName}</span>
-            </div>
-            <button
-              onClick={() => setShowPinSwitch(true)}
-              className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300 transition-colors"
-            >
-              🔄 Switch
-            </button>
-          </div>
-        </div>
+        <PageHeader title={t('nav.waiter')} subtitle={activeBranch?.name} />
         <div className="flex flex-wrap gap-3 mb-4 text-xs text-gray-500">
           {['AVAILABLE', 'OCCUPIED', 'BILL_REQUESTED', 'RESERVED'].map((s) => (
             <span key={s} className="inline-flex items-center gap-1.5">
@@ -498,14 +454,13 @@ export default function WaiterPage() {
             </div>
           </div>
         )}
-        <PinSwitchModal open={showPinSwitch} onClose={() => setShowPinSwitch(false)} branchId={branchId} onSwitched={() => window.location.reload()} />
       </div>
     );
   }
 
   // ============ ORDER VIEW ============
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-4">
+    <div>
       <OfflineBanner />
       <PageHeader title={`${t('waiter.table')} ${selectedTable.name}`} subtitle={order?.orderNo} />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -559,7 +514,7 @@ export default function WaiterPage() {
                   >
                     <div className="h-20 bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden">
                       {p.imageUrl ? (
-                        <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                        <img src={p.imageUrl} alt={p.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                       ) : (
                         <span className="text-2xl">🍽️</span>
                       )}

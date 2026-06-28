@@ -1,98 +1,131 @@
-/**
- * Breadcrumb navigation (Odoo-style).
- * Shows the current path: Dashboard > Inventory > Product X
- * Each segment is clickable to go back.
- */
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { ChevronRightIcon, HomeIcon } from '@heroicons/react/24/outline';
 
-// Route label mapping
-const ROUTE_LABELS: Record<string, string> = {
-  '': 'Dashboard',
-  'catalog': 'Products',
+/**
+ * Breadcrumbs — Shows navigation path for deep pages.
+ * Auto-generates crumbs from the current URL path. Supports:
+ * - Static segment labels from the nav i18n keys
+ * - Dynamic segments (IDs) shown as "#ID" or custom labels via props
+ * - Home icon for root
+ *
+ * Usage:
+ *   <Breadcrumbs />                     // Auto from URL
+ *   <Breadcrumbs items={[...]} />       // Custom override
+ */
+
+interface BreadcrumbItem {
+  label: string;
+  path?: string;
+}
+
+interface BreadcrumbsProps {
+  items?: BreadcrumbItem[];
+}
+
+// Map URL segments to human-readable labels
+const SEGMENT_LABELS: Record<string, string> = {
+  'pos': 'POS',
+  'kds': 'Kitchen Display',
+  'waiter': 'Waiter',
+  'menu': 'Menu / 86',
+  'catalog': 'Product Catalog',
   'inventory': 'Inventory',
-  'customers': 'Customers',
-  'suppliers': 'Suppliers',
-  'purchase-orders': 'Purchase Orders',
-  'requisitions': 'Requisitions',
-  'transfers': 'Transfers',
-  'wastage': 'Wastage',
-  'reports': 'Reports',
-  'pos-reports': 'POS Reports',
-  'pos-dashboard': 'POS Dashboard',
-  'sales-dashboard': 'Sales Dashboard',
-  'sales-orders': 'Sales Orders',
-  'sales-history': 'Sales History',
-  'sessions': 'Sessions',
-  'settings': 'Settings',
-  'branches': 'Branches',
-  'users': 'Users',
-  'categories': 'Categories',
-  'alerts': 'Alerts',
-  'audit-log': 'Audit Log',
-  'tables': 'Tables & Floors',
-  'bookings': 'Reservations',
-  'deliveries': 'Deliveries',
-  'promotions': 'Promotions',
-  'discount-rules': 'Discount Rules',
-  'printers': 'Printers',
-  'loyalty': 'Loyalty',
-  'recipes': 'Recipes',
-  'modifiers': 'Modifiers',
-  'combos': 'Combos',
-  'pricelists': 'Pricelists',
-  'menu': 'Menu',
   'stock-count': 'Stock Count',
   'production': 'Production',
+  'requisitions': 'Requisitions',
+  'purchase-orders': 'Purchase Orders',
+  'transfers': 'Transfers',
+  'wastage': 'Wastage',
+  'suppliers': 'Suppliers',
+  'customers': 'Customers',
+  'deliveries': 'Deliveries',
+  'sales-history': 'Order History',
+  'sales-orders': 'Sales Orders',
+  'sales-dashboard': 'Sales Dashboard',
+  'pos-reports': 'POS Reports',
+  'sessions': 'Sessions',
+  'reports': 'Reports',
+  'alerts': 'Alerts',
+  'notifications': 'Notifications',
+  'audit': 'Audit Log',
+  'settings': 'Settings',
+  'admin': 'Admin',
+  'branches': 'Branches',
+  'users': 'Users',
+  'permissions': 'Permissions',
+  'categories': 'Categories',
+  'recipes': 'Recipes',
+  'modifiers': 'Modifiers',
+  'promotions': 'Promotions',
+  'pricing': 'Pricing',
+  'tables': 'Tables',
+  'bookings': 'Bookings',
   'staff-tasks': 'Staff Tasks',
   'receivables': 'Receivables',
   'payables': 'Payables',
+  'loyalty': 'Loyalty',
+  'printers': 'Printers',
+  'discount-rules': 'Discount Rules',
   'delivery-platforms': 'Delivery Platforms',
   'order-presets': 'Order Presets',
   'payment-methods': 'Payment Methods',
   'payment-terminals': 'Payment Terminals',
-  'cash-roundings': 'Cash Roundings',
+  'cash-roundings': 'Cash Rounding',
   'fiscal-positions': 'Fiscal Positions',
+  'pricelists': 'Pricelists',
+  'combos': 'Combos',
+  'product-attributes': 'Attributes',
   'iot-devices': 'IoT Devices',
-  'self-order': 'Self-Order',
-  'product-attributes': 'Product Attributes',
-  'pricing': 'Pricing',
-  'notifications': 'Notifications',
+  'self-order': 'Self-Ordering',
+  'qr-codes': 'QR Codes',
+  'new': 'New',
 };
 
-export default function Breadcrumbs() {
-  const { t } = useTranslation();
+export default function Breadcrumbs({ items }: BreadcrumbsProps) {
   const location = useLocation();
-  const segments = location.pathname.split('/').filter(Boolean);
+  const { t } = useTranslation();
 
-  // Don't show breadcrumbs on dashboard or single-level pages
-  if (segments.length === 0) return null;
+  const crumbs: BreadcrumbItem[] = items || (() => {
+    const segments = location.pathname.split('/').filter(Boolean);
+    if (segments.length <= 1) return []; // Don't show for top-level pages
 
-  const crumbs: Array<{ label: string; path: string }> = [
-    { label: t('nav.dashboard', 'Dashboard'), path: '/' },
-  ];
+    const result: BreadcrumbItem[] = [];
+    let pathSoFar = '';
 
-  let pathSoFar = '';
-  segments.forEach((seg, i) => {
-    pathSoFar += `/${seg}`;
-    const label = ROUTE_LABELS[seg] || seg.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-    crumbs.push({ label, path: pathSoFar });
-  });
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      pathSoFar += `/${seg}`;
+
+      // Try to get a human label
+      const label = SEGMENT_LABELS[seg] ||
+        (seg.match(/^\d+$/) ? `#${seg}` : seg.replace(/-/g, ' '));
+
+      result.push({
+        label,
+        path: i < segments.length - 1 ? pathSoFar : undefined, // Last crumb is current (no link)
+      });
+    }
+
+    return result;
+  })();
+
+  if (!crumbs.length) return null;
 
   return (
-    <nav className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-3 overflow-x-auto">
+    <nav className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 mb-2 overflow-x-auto" aria-label="Breadcrumb">
+      <Link to="/" className="hover:text-gray-700 dark:hover:text-gray-200 flex-shrink-0">
+        <HomeIcon className="w-3.5 h-3.5" />
+      </Link>
       {crumbs.map((crumb, i) => (
-        <span key={crumb.path} className="flex items-center gap-1.5 whitespace-nowrap">
-          {i > 0 && <span className="text-gray-300 dark:text-gray-600">/</span>}
-          {i < crumbs.length - 1 ? (
-            <Link
-              to={crumb.path}
-              className="hover:text-primary transition-colors"
-            >
+        <span key={i} className="flex items-center gap-1 flex-shrink-0">
+          <ChevronRightIcon className="w-3 h-3 text-gray-300 dark:text-gray-600" />
+          {crumb.path ? (
+            <Link to={crumb.path} className="hover:text-gray-700 dark:hover:text-gray-200 capitalize">
               {crumb.label}
             </Link>
           ) : (
-            <span className="font-medium text-gray-700 dark:text-gray-200">{crumb.label}</span>
+            <span className="text-gray-700 dark:text-gray-200 font-medium capitalize">{crumb.label}</span>
           )}
         </span>
       ))}

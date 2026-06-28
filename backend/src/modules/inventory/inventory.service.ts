@@ -121,6 +121,7 @@ export class InventoryService {
         branch: { select: { id: true, name: true, nameAr: true } },
       },
       orderBy: { updatedAt: 'desc' },
+      take: 1000,
     });
   }
 

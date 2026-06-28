@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import api from '../lib/api';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { useRealtimeProducts } from '../lib/useRealtimeProducts';
 
 /**
  * Public self-order kiosk (no auth). Reached via QR / kiosk at /kiosk/:configId.
@@ -19,6 +20,9 @@ export default function KioskPage() {
   const [placed, setPlaced] = useState<string | null>(null);
   const [paymentStep, setPaymentStep] = useState(false);
   const [paymentApproved, setPaymentApproved] = useState(false);
+
+  // Live sync: menu updates instantly when staff toggles items (no 30s delay)
+  useRealtimeProducts({ joinPublic: true });
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['kiosk-menu', configId],
@@ -107,7 +111,7 @@ export default function KioskPage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {products.map((p: any) => (
               <button key={p.id} onClick={() => add(p)} className="rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden text-start hover:ring-2 hover:ring-primary">
-                {p.imageUrl ? <img src={p.imageUrl} alt="" className="w-full h-24 object-cover" /> : <div className="w-full h-24 bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-3xl">🍽️</div>}
+                {p.imageUrl ? <img src={p.imageUrl} alt="" loading="lazy" decoding="async" className="w-full h-24 object-cover" /> : <div className="w-full h-24 bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-3xl">🍽️</div>}
                 <div className="p-2">
                   <div className="text-sm font-medium line-clamp-2">{p.name}</div>
                   <div className="text-sm font-bold text-primary mt-1">{Number(p.salePrice || p.costPrice || 0).toFixed(2)}</div>

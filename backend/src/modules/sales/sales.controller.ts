@@ -119,19 +119,15 @@ export class SalesController {
     @Query('branchId') branchId?: string,
     @Query('status') status?: OrderStatus,
     @Query('customerId') customerId?: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-    @Query('search') search?: string,
-    @Query('dateFrom') dateFrom?: string,
+    @Query('skip') skip?: string,
+    @Query('take') take?: string,
   ) {
     return this.svc.findAll({
       branchId: branchId ? parseInt(branchId, 10) : undefined,
       status,
       customerId: customerId ? parseInt(customerId, 10) : undefined,
-      page: page ? parseInt(page, 10) : undefined,
-      limit: limit ? parseInt(limit, 10) : undefined,
-      search,
-      dateFrom,
+      skip: skip ? parseInt(skip, 10) : undefined,
+      take: take ? parseInt(take, 10) : undefined,
     });
   }
 
@@ -176,11 +172,6 @@ export class SalesController {
   @Patch(':id') @Roles(...POS_ROLES)
   updateOrder(@Param('id', ParseIntPipe) id: number, @Body() dto: { notes?: string; guestCount?: number; tableName?: string }) {
     return this.svc.updateOrder(id, dto);
-  }
-
-  @Patch(':id/tip') @Roles(...POS_ROLES)
-  setTip(@Param('id', ParseIntPipe) id: number, @Body() dto: { tip: number }) {
-    return this.svc.setTipAfterPayment(id, dto.tip ?? 0);
   }
 
   @Patch(':id/resume') @Roles(...POS_ROLES)

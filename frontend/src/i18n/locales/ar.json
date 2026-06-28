@@ -67,7 +67,8 @@
     "combos": "الوجبات المركبة",
     "productAttributes": "الخصائص والمتغيرات",
     "iotDevices": "الأجهزة الطرفية",
-    "selfOrder": "الطلب الذاتي"
+    "selfOrder": "الطلب الذاتي",
+    "qrCodes": "رموز QR"
   },
   "kiosk": {
     "title": "الطلب الذاتي",

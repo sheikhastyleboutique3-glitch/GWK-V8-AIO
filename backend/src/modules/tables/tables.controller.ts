@@ -148,6 +148,19 @@ export class TablesController {
     return this.svc.removeTable(id);
   }
 
+  /**
+   * Atomic table claim — prevents duplicate orders when multiple waiters
+   * tap the same table simultaneously. Returns the order ID to open.
+   */
+  @Post('tables/:id/claim') @Roles(...MANAGE)
+  claimTable(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { branchId: number },
+    @CurrentUser('sub') userId: number,
+  ) {
+    return this.svc.claimTable(id, body.branchId, userId);
+  }
+
   // ---- Reservations ----
   @Get('reservations')
   listReservations(

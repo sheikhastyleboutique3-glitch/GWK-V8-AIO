@@ -13,10 +13,9 @@ import { printReceipt, printKot } from '../lib/thermalPrint';
 import { useOnlineStatus } from '../lib/useOnlineStatus';
 import OfflineBanner from '../components/OfflineBanner';
 import { usePrompt } from '../lib/usePrompt';
-import { useSocket } from '../lib/useSocket';
-import { usePosHotkeys } from '../lib/usePosHotkeys';
-import PinSwitchModal from '../components/PinSwitchModal';
-import QrReview from '../components/QrReview';
+import { useConfirm } from '../lib/useConfirm';
+import { useDebounce } from '../lib/useDebounce';
+import { usePosKeyboard } from '../lib/usePosKeyboard';
 
 interface CartLine {
   itemId?: number; // present when the line lives on a persisted (loaded) order
@@ -47,15 +46,9 @@ export default function POSPage() {
   const branchId = activeBranch?.id;
   const { isOnline, isSyncing, pendingCount } = useOnlineStatus();
   const [prompt, PromptDialog] = usePrompt();
+  const [confirm, ConfirmDialog] = useConfirm();
   const canRefund = user?.role === 'SUPER_ADMIN' || user?.role === 'BRANCH_MANAGER';
-
-  // ─── Real-time sync: instant updates from Waiter/KDS/other POS terminals ───
-  useSocket();
   const canEditFloor = user?.role === 'SUPER_ADMIN' || user?.role === 'BRANCH_MANAGER' || user?.role === 'CASHIER';
-
-  // ─── PIN-based cashier switch (Odoo-style) ───
-  const [showPinSwitch, setShowPinSwitch] = useState(false);
-  const [showQrReview, setShowQrReview] = useState(false);
 
   // ─── TOP-LEVEL VIEW SWITCH (Odoo-style: Floor Plan / Order / Orders) ───
   const [posView, setPosView] = useState<'floor' | 'order' | 'orders'>('floor');
@@ -86,6 +79,7 @@ export default function POSPage() {
 
   const [categoryId, setCategoryId] = useState<number | undefined>(undefined);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [comboCart, setComboCart] = useState<{ comboId: number; name: string; price: number; choiceIds: number[] }[]>([]);
   const [comboPick, setComboPick] = useState<{ combo: any; sel: Record<number, number> } | null>(null);
@@ -97,6 +91,7 @@ export default function POSPage() {
   const [payMethod, setPayMethod] = useState<PayMethod>('CASH');
   const [customer, setCustomer] = useState<any>(null);
   const [customerSearch, setCustomerSearch] = useState('');
+  const debouncedCustomerSearch = useDebounce(customerSearch, 300);
   const [giftCardCode, setGiftCardCode] = useState('');
   const [selectedTerminalId, setSelectedTerminalId] = useState<number | undefined>(undefined);
   const [tenderAmount, setTenderAmount] = useState('');
@@ -132,48 +127,47 @@ export default function POSPage() {
   const { data: categories } = useQuery({
     queryKey: ['pos-categories'],
     queryFn: () => api.get('/categories', { params: { posVisible: true } }).then((r) => r.data.data),
-    staleTime: 5 * 60_000, // Categories rarely change mid-shift
+    
   });
   const { data: deliveryPlatforms } = useQuery({
     queryKey: ['delivery-platforms'],
     queryFn: () => api.get('/delivery-platforms').then((r) => r.data.data),
-    staleTime: 5 * 60_000,
+    
   });
   const { data: discountRules } = useQuery({
     queryKey: ['discount-rules-active'],
     queryFn: () => api.get('/discount-rules', { params: { activeOnly: true } }).then((r) => r.data.data),
-    staleTime: 5 * 60_000,
+    
   });
   const { data: presets } = useQuery({
     queryKey: ['order-presets-active'],
     queryFn: () => api.get('/order-presets', { params: { activeOnly: true } }).then((r) => r.data.data),
-    staleTime: 5 * 60_000,
     
   });
   const { data: combos } = useQuery({
     queryKey: ['combos'],
     queryFn: () => api.get('/combos').then((r) => r.data.data),
-    staleTime: 5 * 60_000,
+    
   });
   const { data: terminals } = useQuery({
     queryKey: ['payment-terminals'],
     queryFn: () => api.get('/payment-terminals').then((r) => r.data.data),
-    staleTime: 5 * 60_000,
+    
   });
   const { data: products, isLoading } = useQuery({
-    queryKey: ['pos-products', categoryId, search],
+    queryKey: ['pos-products', categoryId, debouncedSearch],
     queryFn: () =>
       api
-        .get('/products', { params: { sellable: true, available: true, productType: 'MENU', ...(categoryId && { categoryId }), ...(search && { search }) } })
+        .get('/products', { params: { sellable: true, available: true, productType: 'MENU', ...(categoryId && { categoryId }), ...(debouncedSearch && { search: debouncedSearch }) } })
         .then((r) => r.data.data),
-    staleTime: 2 * 60_000, // Products cached 2min — menu rarely changes mid-shift
+    
   });
 
   // Branding / business info for receipts (company name, logo, address…).
   const { data: settings } = useQuery({
     queryKey: ['settings-receipt'],
     queryFn: () => api.get('/settings').then((r) => r.data.data),
-    staleTime: 10 * 60_000, // Settings almost never change
+    
   });
   const businessInfo = useMemo(() => {
     const map: Record<string, string> = {};
@@ -197,14 +191,14 @@ export default function POSPage() {
     queryKey: ['pos-session-current', branchId],
     queryFn: () => api.get('/pos-sessions/current', { params: { branchId } }).then((r) => r.data.data),
     enabled: !!branchId,
-    refetchInterval: 120_000, // Fallback only — WebSocket pushes instant updates
+    refetchInterval: 30_000,
   });
 
   // Customer search (for loyalty / store-credit redemption).
   const { data: customerResults } = useQuery({
-    queryKey: ['pos-customers', customerSearch],
-    queryFn: () => api.get('/customers', { params: { search: customerSearch } }).then((r) => r.data.data),
-    enabled: customerSearch.trim().length >= 2,
+    queryKey: ['pos-customers', debouncedCustomerSearch],
+    queryFn: () => api.get('/customers', { params: { search: debouncedCustomerSearch } }).then((r) => r.data.data),
+    enabled: debouncedCustomerSearch.trim().length >= 2,
   });
 
   // Open + held bills for this branch (waiter tickets waiting to be settled).
@@ -218,14 +212,14 @@ export default function POSPage() {
       return [...(open || []), ...(held || [])];
     },
     enabled: !!branchId,
-    refetchInterval: 60_000, // Fallback — WebSocket gives instant sync
+    refetchInterval: 15_000,
   });
 
   const { data: loadedOrder } = useQuery({
     queryKey: ['pos-loaded', loadedOrderId],
     queryFn: () => api.get(`/sales/orders/${loadedOrderId}`).then((r) => r.data.data),
     enabled: !!loadedOrderId,
-    refetchInterval: 30_000, // Fallback — WebSocket gives instant KOT sync
+    refetchInterval: 5_000, // Sync KOT status: pick up fires made by Waiter
   });
 
   const refetchLoaded = () => {
@@ -591,9 +585,6 @@ export default function POSPage() {
       setLastReceipt(order);
       // Auto-print the customer receipt right after payment.
       printReceipt(order, businessInfo);
-      // Show QR review prompt (if configured)
-      const reviewUrl = (settings || []).find((s: any) => s.key === 'review_url')?.value;
-      if (reviewUrl) setTimeout(() => setShowQrReview(true), 1500);
       setCart([]);
       setComboCart([]);
       setTableName('');
@@ -632,8 +623,8 @@ export default function POSPage() {
     queryKey: ['pos-floors', branchId],
     queryFn: () => api.get('/floors', { params: { branchId } }).then((r) => r.data.data),
     enabled: !!branchId,
-    staleTime: 60_000, // Floors rarely change
-    refetchInterval: 120_000,
+    
+    refetchInterval: 15_000,
   });
   const [activeFloorIdx, setActiveFloorIdx] = useState(0);
   const activeFloor = (floors || [])[activeFloorIdx] || null;
@@ -653,7 +644,7 @@ export default function POSPage() {
     queryKey: ['pos-all-orders', branchId, orderStatusFilter],
     queryFn: () => api.get('/sales/orders', { params: { branchId, ...(orderStatusFilter !== 'all' ? { status: orderStatusFilter } : {}) } }).then((r) => r.data.data),
     enabled: posView === 'orders' && !!branchId,
-    refetchInterval: 60_000, // Fallback — WebSocket pushes instant updates
+    refetchInterval: 15_000,
   });
 
   const filteredOrders = useMemo(() => {
@@ -698,6 +689,26 @@ export default function POSPage() {
   const [numBuffer, setNumBuffer] = useState<string>('');
   const [numMode, setNumMode] = useState<'Qty' | '%Disc' | 'Price' | null>(null);
 
+  // ── POS Keyboard Shortcuts (F2=Pay, F3=Hold, F4=Print, F8=Clear, Esc) ──
+  usePosKeyboard({
+    onPay: () => setShowPayment(true),
+    onHold: () => {
+      if (mode === 'existing' && loadedOrderId) {
+        api.patch(`/sales/orders/${loadedOrderId}/hold`, {}).then(() => {
+          toast.success('Order held');
+          setLoadedOrderId(null);
+          setCart([]);
+        });
+      }
+    },
+    onPrint: () => { if (lastReceipt) printReceipt(lastReceipt, businessInfo); },
+    onClear: () => { setCart([]); setComboCart([]); setLoadedOrderId(null); setLastReceipt(null); setShowPayment(false); },
+    onOrders: () => setPosView('orders'),
+    onEscape: () => { if (showPayment) setShowPayment(false); else if (lastReceipt) setLastReceipt(null); },
+    onQtyUp: () => { if (selectedLineIdx >= 0 && selectedLineIdx < cart.length) setCart(p => p.map((l, i) => i === selectedLineIdx ? { ...l, quantity: l.quantity + 1 } : l)); },
+    onQtyDown: () => { if (selectedLineIdx >= 0 && selectedLineIdx < cart.length) setCart(p => p.map((l, i) => i === selectedLineIdx ? { ...l, quantity: Math.max(1, l.quantity - 1) } : l)); },
+  });
+
   // Open a table from the floor plan → switch to order view
   const openTableOrder = async (table: any) => {
     try {
@@ -739,60 +750,25 @@ export default function POSPage() {
     }
   };
 
-  // ─── Keyboard Shortcuts (Odoo POS style) ───
-  usePosHotkeys({
-    onPay: () => {
-      if (showPayment) return; // Already in payment
-      if (lines.length > 0 || comboCart.length > 0) setShowPayment(true);
-    },
-    onBack: () => {
-      if (showPayment) { setShowPayment(false); return; }
-      if (posView === 'order') { setPosView('floor'); return; }
-    },
-    onFloor: () => setPosView('floor'),
-    onOrders: () => setPosView('orders'),
-    onDelete: () => {
-      if (selectedLineIdx >= 0 && selectedLineIdx < lines.length) {
-        setQtyAt(selectedLineIdx, 0);
-      }
-    },
-    onQtyUp: () => {
-      if (selectedLineIdx >= 0 && selectedLineIdx < lines.length) {
-        setQtyAt(selectedLineIdx, lines[selectedLineIdx].quantity + 1);
-      }
-    },
-    onQtyDown: () => {
-      if (selectedLineIdx >= 0 && selectedLineIdx < lines.length) {
-        setQtyAt(selectedLineIdx, lines[selectedLineIdx].quantity - 1);
-      }
-    },
-    onSearch: () => {
-      const el = document.querySelector<HTMLInputElement>('[data-pos-search]');
-      el?.focus();
-    },
-    enabled: !showPinSwitch,
-  });
-
   return (
-    <div className="h-[100dvh] flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-950 p-3 md:p-4">
+    <div className="h-full flex flex-col">
       {/* Offline status banner */}
       <OfflineBanner />
       {/* ─── ODOO-STYLE TOP NAV BAR ─── */}
-      <div className="bg-gray-900 text-white px-3 md:px-4 py-2 flex items-center gap-2 md:gap-4 rounded-xl mb-2 no-print flex-shrink-0">
-        <button onClick={() => window.location.href = '/pos-dashboard'} className="text-xs text-gray-400 hover:text-white transition">← Back</button>
+      <div className="bg-gray-900 text-white px-3 md:px-4 py-2 flex items-center gap-2 md:gap-4 rounded-t-xl -mx-4 -mt-4 mb-0 no-print flex-shrink-0">
         <span className="font-bold text-sm whitespace-nowrap">{activeBranch?.name || 'POS'}</span>
         <div className="flex gap-1 ms-4">
           <button onClick={() => setPosView('floor')}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${posView === 'floor' ? 'bg-primary text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}>
-            🏠 Floor {(pendingBills?.length ?? 0) > 0 ? <span className="ms-1 px-1.5 py-0.5 rounded-full bg-white/20 text-[10px] font-bold">{pendingBills.length}</span> : ''}
+            🏠 Floor Plan
           </button>
           <button onClick={() => setPosView('order')}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${posView === 'order' ? 'bg-primary text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}>
-            🛒 Order {lines.length > 0 ? <span className="ms-1 px-1.5 py-0.5 rounded-full bg-white/20 text-[10px] font-bold">{lines.length}</span> : ''}
+            🛒 Order
           </button>
           <button onClick={() => setPosView('orders')}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${posView === 'orders' ? 'bg-primary text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}>
-            📋 Orders {(pendingBills?.length ?? 0) > 0 ? <span className="ms-1 px-1.5 py-0.5 rounded-full bg-white/20 text-[10px] font-bold">{pendingBills.length}</span> : ''}
+            📋 Orders {pendingBills?.length ? `(${pendingBills.length})` : ''}
           </button>
         </div>
         <div className="ms-auto flex items-center gap-2 text-xs text-gray-400">
@@ -800,23 +776,9 @@ export default function POSPage() {
           {isSyncing && <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold">SYNCING...</span>}
         </div>
       </div>
-      {/* Session bar */}
-      <div className="mb-2 no-print flex-shrink-0">
+      {/* Session bar — always fully visible below the nav, never clipped */}
+      <div className="-mx-4 mb-4 no-print">
         <PosSessionBar branchId={branchId} businessInfo={businessInfo} />
-      </div>
-      {/* Quick cashier info + PIN switch */}
-      <div className="flex items-center justify-between mb-2 no-print flex-shrink-0">
-        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-          <span>👤</span>
-          <span className="font-medium text-gray-700 dark:text-gray-200">{user?.firstName} {user?.lastName}</span>
-          <span className="text-gray-400">({user?.role?.replace('_', ' ')})</span>
-        </div>
-        <button
-          onClick={() => setShowPinSwitch(true)}
-          className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300 transition-colors"
-        >
-          🔄 Switch Cashier
-        </button>
       </div>
 
       {/* ─── FLOOR PLAN VIEW ─── */}
@@ -1217,15 +1179,14 @@ export default function POSPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0 overflow-hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Catalog */}
-        <div className="lg:col-span-2 flex flex-col min-h-0 overflow-hidden">
-          <div className="flex flex-wrap gap-2 mb-3 flex-shrink-0">
+        <div className="lg:col-span-2">
+          <div className="flex flex-wrap gap-2 mb-3">
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search products…"
-              data-pos-search
               className="flex-1 min-w-[160px] rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
             />
             <button
@@ -1252,34 +1213,18 @@ export default function POSPage() {
           {isLoading ? (
             <LoadingSpinner />
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 overflow-y-auto flex-1 min-h-0 pb-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {(products || []).map((p: any) => (
                 <button
                   key={p.id}
                   onClick={() => onProduct(p)}
-                  className="group text-left rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden hover:border-primary hover:shadow-sm active:scale-[0.96] transition-all duration-150 min-h-[120px]"
+                  className="text-left rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden hover:border-primary hover:shadow-sm active:scale-[0.96] transition-all duration-150 min-h-[120px]"
                 >
-                  <div className="h-20 bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden relative">
+                  <div className="h-20 bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden">
                     {p.imageUrl ? (
-                      <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                      <img src={p.imageUrl} alt={p.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     ) : (
                       <span className="text-3xl">{p.category?.icon || '🍽️'}</span>
-                    )}
-                    {/* 86 SOLD OUT toggle (manager only) */}
-                    {canEditFloor && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          api.patch(`/products/${p.id}/availability`, { isAvailable: false }).then(() => {
-                            toast.success(`${p.name} marked SOLD OUT`);
-                            qc.invalidateQueries({ queryKey: ['pos-products'] });
-                          }).catch(() => toast.error('Failed'));
-                        }}
-                        className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-600/80 hover:bg-red-600 text-white text-[9px] font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Mark as SOLD OUT (86)"
-                      >
-                        86
-                      </button>
                     )}
                   </div>
                   <div className="p-2">
@@ -1297,7 +1242,7 @@ export default function POSPage() {
         </div>
 
         {/* Cart / bill */}
-        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 flex flex-col min-h-0 overflow-hidden">
+        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 flex flex-col">
           {mode === 'existing' ? (
             <div className="mb-3">
               <div className="flex items-center justify-between rounded-lg bg-primary/10 px-3 py-2">
@@ -1413,7 +1358,7 @@ export default function POSPage() {
                 onDoubleClick={async () => {
                   // Double-click: add a note to this specific item (shows on KOT)
                   if (mode === 'existing' && l.itemId) {
-                    const note = await prompt({ title: `Note for "${l.name}"`, placeholder: 'Note printed on KOT', defaultValue: (l as any).notes || '' });
+                    const note = await prompt({ title: `Note for "${l.name}"`, description: 'Printed on KOT', defaultValue: (l as any).notes || '', placeholder: 'e.g. No ice, extra sauce' });
                     if (note !== null) {
                       try {
                         await api.patch(`/sales/orders/${loadedOrderId}/items/${l.itemId}`, { notes: note });
@@ -1443,7 +1388,7 @@ export default function POSPage() {
                       <span className="text-sm">×{l.quantity}</span>
                       <button onClick={async () => {
                         if (!l.itemId) return;
-                        const reason = await prompt({ title: `Cancel "${l.name}"?`, placeholder: 'Reason (sent to kitchen)' });
+                        const reason = await prompt({ title: `Cancel "${l.name}"?`, description: 'Reason (sent to kitchen):', placeholder: 'e.g. Customer changed mind' });
                         if (reason === null) return;
                         try {
                           await api.patch(`/sales/orders/${loadedOrderId}/items/${l.itemId}`, { isVoided: true, voidReason: reason || 'Cancelled' });
@@ -1544,26 +1489,6 @@ export default function POSPage() {
                         {c.name} <span className="text-xs text-gray-400">{c.phone || ''}</span>
                       </button>
                     ))}
-                  </div>
-                )}
-                {/* Quick-Create: no results found → offer to create inline */}
-                {customerSearch.trim().length >= 2 && (customerResults?.length ?? 0) === 0 && (
-                  <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-2">
-                    <button
-                      onClick={async () => {
-                        try {
-                          const res = await api.post('/customers', { name: customerSearch.trim() });
-                          const created = res.data?.data;
-                          setCustomer(created);
-                          setCustomerSearch('');
-                          toast.success(`Customer "${created.name}" created`);
-                          qc.invalidateQueries({ queryKey: ['pos-customers'] });
-                        } catch (e: any) { toast.error(e.response?.data?.message || 'Failed to create'); }
-                      }}
-                      className="w-full text-start px-3 py-2 text-sm rounded-lg bg-primary/10 hover:bg-primary/20 text-primary font-medium"
-                    >
-                      + Create "{customerSearch.trim()}"
-                    </button>
                   </div>
                 )}
               </div>
@@ -1692,8 +1617,8 @@ export default function POSPage() {
                 className="px-2 py-2 rounded-lg bg-orange-100 dark:bg-orange-500/10 text-orange-700 hover:bg-orange-200 dark:hover:bg-orange-500/20 text-center font-medium"
               >🔥 Kitchen</button>
               <button
-                onClick={() => {
-                  const note = await prompt({ title: 'Customer Note', placeholder: 'Note printed on receipt/KOT' });
+                onClick={async () => {
+                  const note = await prompt({ title: 'Customer Note', description: 'Printed on receipt/KOT', placeholder: 'e.g. Allergic to nuts' });
                   if (note != null && mode === 'existing' && loadedOrderId) {
                     api.patch(`/sales/orders/${loadedOrderId}`, { notes: note }).then(() => {
                       toast.success('Note saved');
@@ -1722,8 +1647,8 @@ export default function POSPage() {
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
               >🧾 Bill</button>
               <button
-                onClick={() => {
-                  const count = await prompt({ title: 'Number of guests', defaultValue: String(mode === 'existing' ? loadedOrder?.guestCount || 1 : 1), type: 'number' });
+                onClick={async () => {
+                  const count = await prompt({ title: 'Number of Guests', type: 'number', defaultValue: String(mode === 'existing' ? loadedOrder?.guestCount || 1 : 1) });
                   if (count && mode === 'existing' && loadedOrderId) {
                     api.patch(`/sales/orders/${loadedOrderId}`, { guestCount: parseInt(count, 10) || 1 });
                     toast.success(`Guests: ${count}`);
@@ -1732,8 +1657,8 @@ export default function POSPage() {
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
               >👥 Guests</button>
               <button
-                onClick={() => {
-                  const code = await prompt({ title: 'Coupon / Reward Code', placeholder: 'Enter code' });
+                onClick={async () => {
+                  const code = await prompt({ title: 'Coupon / Reward Code', placeholder: 'Enter code...' });
                   if (code?.trim()) { setCouponCode(code.trim()); onApplyCoupon(); }
                 }}
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
@@ -1750,8 +1675,8 @@ export default function POSPage() {
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
               >ℹ️ Info</button>
               <button
-                onClick={() => {
-                  const note = await prompt({ title: 'Internal Note', placeholder: 'Staff only — not printed on customer receipt' });
+                onClick={async () => {
+                  const note = await prompt({ title: 'Staff Note', description: 'Internal only — not printed on receipt or KOT', placeholder: 'e.g. VIP customer, special request' });
                   if (note != null) toast.success('Internal note saved');
                 }}
                 className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
@@ -1945,31 +1870,14 @@ export default function POSPage() {
               </div>
               {canRefund && lastReceipt.status === 'COMPLETED' && (
                 <button
-                  onClick={() => {
-                    if (window.confirm(t('pos.refundConfirm'))) refund.mutate(lastReceipt.id);
+                  onClick={async () => {
+                    const ok = await confirm({ title: t('pos.refundConfirm'), description: 'This will fully refund this order.', variant: 'danger', confirmLabel: 'Refund' });
+                    if (ok) refund.mutate(lastReceipt.id);
                   }}
                   disabled={refund.isPending}
                   className="w-full mt-2 py-2 rounded-xl border border-red-300 text-red-600 text-sm font-medium disabled:opacity-50"
                 >
                   {t('pos.refund')}
-                </button>
-              )}
-              {lastReceipt.status === 'COMPLETED' && (
-                <button
-                  onClick={async () => {
-                    const tipStr = await prompt({ title: 'Add Tip', placeholder: 'Tip amount', type: 'number', defaultValue: String(lastReceipt.tip || '') });
-                    if (tipStr === null) return;
-                    const tipAmt = parseFloat(tipStr) || 0;
-                    if (tipAmt >= 0) {
-                      api.patch(`/sales/orders/${lastReceipt.id}/tip`, { tip: tipAmt }).then(() => {
-                        toast.success(`Tip of ${tipAmt.toFixed(2)} added`);
-                        setLastReceipt({ ...lastReceipt, tip: tipAmt });
-                      }).catch(() => toast.error('Failed to add tip'));
-                    }
-                  }}
-                  className="w-full mt-2 py-2 rounded-xl border border-amber-300 text-amber-700 dark:text-amber-400 text-sm font-medium"
-                >
-                  💰 {lastReceipt.tip > 0 ? `Tip: ${Number(lastReceipt.tip).toFixed(2)} (change)` : 'Add Tip'}
                 </button>
               )}
             </div>
@@ -1995,19 +1903,8 @@ export default function POSPage() {
               <div className="p-4 flex-1">
                 <div className="text-xs font-semibold text-gray-400 uppercase mb-3">Payment Method</div>
                 <div className="space-y-2">
-                  {['CASH', 'CARD', 'TERMINAL', 'QR', 'GIFT_CARD', 'ON_ACCOUNT'].map((m) => (
+                  {['CASH', 'CARD', 'QR', 'GIFT_CARD', 'ON_ACCOUNT'].map((m) => (
                     <button key={m} onClick={() => {
-                      if (m === 'TERMINAL') {
-                        // Terminal payment: add tender and show waiting state
-                        const amt = payNumpad ? parseFloat(payNumpad) : remaining;
-                        if (remaining <= 0) { toast.error('Already paid'); return; }
-                        if (amt > 0) {
-                          setTenders((prev) => [...prev, { method: m as PayMethod, amount: +amt.toFixed(2), terminalId: selectedTerminalId }]);
-                          setPayNumpad('');
-                          toast.success('Terminal payment recorded — confirm on device');
-                        }
-                        return;
-                      }
                       const amt = payNumpad ? parseFloat(payNumpad) : remaining;
                       if (remaining <= 0) { toast.error('Already paid'); return; }
                       if (amt > 0) {
@@ -2015,22 +1912,9 @@ export default function POSPage() {
                         setPayNumpad('');
                       }
                     }} className="w-full text-left px-4 py-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm font-medium transition">
-                      {m === 'CASH' ? '💵 Cash' : m === 'CARD' ? '💳 Card' : m === 'TERMINAL' ? '🖥️ Payment Terminal' : m === 'QR' ? '📱 QR Pay' : m === 'GIFT_CARD' ? '🎁 Gift Card' : m === 'ON_ACCOUNT' ? '📋 Customer Account' : m}
+                      {m === 'CASH' ? '💵 Cash' : m === 'CARD' ? '💳 Card' : m === 'QR' ? '📱 QR Pay' : m === 'GIFT_CARD' ? '🎁 Gift Card' : m === 'ON_ACCOUNT' ? '📋 Customer Account' : m}
                     </button>
                   ))}
-                  {/* Terminal selector (if terminals are configured) */}
-                  {(terminals?.length ?? 0) > 0 && (
-                    <select
-                      value={selectedTerminalId ?? ''}
-                      onChange={(e) => setSelectedTerminalId(e.target.value ? parseInt(e.target.value, 10) : undefined)}
-                      className="w-full mt-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2"
-                    >
-                      <option value="">Select terminal...</option>
-                      {(terminals || []).map((term: any) => (
-                        <option key={term.id} value={term.id}>{term.name} ({term.provider})</option>
-                      ))}
-                    </select>
-                  )}
                 </div>
               </div>
 
@@ -2112,7 +1996,22 @@ export default function POSPage() {
                   <div className="font-medium text-sm text-primary">👤 {activeCustomer.name}</div>
                 </div>
               )}
-              <button onClick={() => { /* TODO: generate invoice */ toast('Invoice feature coming soon'); }}
+              <button onClick={() => {
+                if (!lastReceipt) return;
+                import('../lib/pdf').then(({ downloadInvoicePdf }) => {
+                  downloadInvoicePdf({
+                    order: lastReceipt,
+                    businessName: businessInfo.businessName,
+                    branchName: businessInfo.branchName,
+                    address: businessInfo.address,
+                    phone: businessInfo.phone,
+                    taxId: businessInfo.taxId,
+                    email: businessInfo.email,
+                    currency: businessInfo.currency || 'QAR',
+                  });
+                  toast.success('Invoice generated');
+                });
+              }}
                 className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 mb-2">
                 🧾 Invoice
               </button>
@@ -2163,18 +2062,7 @@ export default function POSPage() {
       )}
 
       <PromptDialog />
-      <PinSwitchModal
-        open={showPinSwitch}
-        onClose={() => setShowPinSwitch(false)}
-        branchId={branchId}
-        onSwitched={() => window.location.reload()}
-      />
-      <QrReview
-        show={showQrReview}
-        onClose={() => setShowQrReview(false)}
-        url={(settings || []).find((s: any) => s.key === 'review_url')?.value}
-        businessName={businessInfo.businessName}
-      />
+      <ConfirmDialog />
     </div>
   );
 }

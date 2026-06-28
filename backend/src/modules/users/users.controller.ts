@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '@prisma/client';
+import { CreateUserDto, UpdateUserDto, UpdatePreferencesDto } from './dto/user.dto';
 
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -28,11 +29,11 @@ export class UsersController {
 
   @Post()
   @Roles(Role.SUPER_ADMIN)
-  create(@Body() dto: any, @CurrentUser('sub') actorId: number) { return this.usersService.create(dto, actorId); }
+  create(@Body() dto: CreateUserDto, @CurrentUser('sub') actorId: number) { return this.usersService.create(dto, actorId); }
 
   @Patch(':id')
   @Roles(Role.SUPER_ADMIN)
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: any, @CurrentUser('sub') actorId: number) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateUserDto, @CurrentUser('sub') actorId: number) {
     return this.usersService.update(id, dto, actorId);
   }
 
@@ -47,7 +48,7 @@ export class UsersController {
   }
 
   @Patch('me/preferences')
-  updatePreferences(@CurrentUser('sub') userId: number, @Body() dto: any) {
+  updatePreferences(@CurrentUser('sub') userId: number, @Body() dto: UpdatePreferencesDto) {
     return this.usersService.updatePreferences(userId, dto);
   }
 }

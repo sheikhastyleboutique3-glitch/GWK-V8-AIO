@@ -9,8 +9,9 @@ import { FinanceService, FinanceEntryInput } from '../finance/finance.service';
 import { PromotionsService } from '../promotions/promotions.service';
 import { PosSessionsService } from '../pos-sessions/pos-sessions.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { ORDER_COMPLETED, ORDER_CREATED, ORDER_UPDATED, ORDER_FIRED, ORDER_VOIDED, OrderCompletedEvent, OrderChangedEvent } from '../../common/events/order-events';
+import { ORDER_COMPLETED, OrderCompletedEvent } from '../../common/events/order-events';
 import { KDS_CHANGED } from '../kds/kds.gateway';
+import { ORDER_CHANGED } from '../../common/events/realtime-events';
 import {
   InventoryTxType,
   OrderChannel,
@@ -183,25 +184,17 @@ export class SalesService {
     });
   }
 
-  findAll(filters?: { branchId?: number; status?: OrderStatus; customerId?: number; page?: number; limit?: number; search?: string; dateFrom?: string }) {
-    const take = filters?.limit || 100;
-    const skip = filters?.page && filters.page > 1 ? (filters.page - 1) * take : 0;
+  findAll(filters?: { branchId?: number; status?: OrderStatus; customerId?: number; skip?: number; take?: number }) {
     return this.prisma.order.findMany({
       where: {
         ...(filters?.branchId ? { branchId: filters.branchId } : {}),
         ...(filters?.status ? { status: filters.status } : {}),
         ...(filters?.customerId ? { customerId: filters.customerId } : {}),
-        ...(filters?.search ? { OR: [
-          { orderNo: { contains: filters.search, mode: 'insensitive' } },
-          { tableName: { contains: filters.search, mode: 'insensitive' } },
-          { customer: { name: { contains: filters.search, mode: 'insensitive' } } },
-        ] } : {}),
-        ...(filters?.dateFrom ? { createdAt: { gte: new Date(filters.dateFrom + 'T00:00:00.000Z') } } : {}),
       },
       include: this.orderInclude,
       orderBy: { createdAt: 'desc' },
-      take,
-      skip,
+      skip: filters?.skip ?? 0,
+      take: Math.min(filters?.take ?? 200, 500),
     });
   }
 
@@ -399,16 +392,6 @@ export class SalesService {
       });
     }
 
-    // Emit real-time event so POS/Waiter/KDS update instantly
-    this.events.emit(ORDER_CREATED, {
-      orderId: order.id,
-      orderNo: order.orderNo,
-      branchId: order.branchId,
-      channel: order.channel,
-      tableName: order.tableName,
-      action: 'created',
-    } as OrderChangedEvent);
-
     return order;
   }
 
@@ -483,7 +466,7 @@ export class SalesService {
 
     const res = await this.recompute(orderId);
     this.events.emit(KDS_CHANGED, { branchId: res.branchId });
-    this.events.emit(ORDER_UPDATED, { orderId, orderNo: res.orderNo, branchId: res.branchId, channel: res.channel, tableName: res.tableName, action: 'item_added' } as OrderChangedEvent);
+    this.events.emit(ORDER_CHANGED, { branchId: res.branchId, orderId, orderNo: res.orderNo, action: 'item_added', tableName: res.tableName });
     return res;
   }
 
@@ -492,9 +475,7 @@ export class SalesService {
     const item = await this.prisma.orderItem.findFirst({ where: { id: itemId, orderId } });
     if (!item) throw new NotFoundException(`Item ${itemId} not found on order ${orderId}`);
     await this.prisma.orderItem.delete({ where: { id: itemId } });
-    const res = await this.recompute(orderId);
-    this.events.emit(ORDER_UPDATED, { orderId, orderNo: res.orderNo, branchId: res.branchId, channel: res.channel, tableName: res.tableName, action: 'item_removed' } as OrderChangedEvent);
-    return res;
+    return this.recompute(orderId);
   }
 
   /** Update an individual order item (notes, void, seat, quantity). */
@@ -523,9 +504,7 @@ export class SalesService {
       data.voidedAt = new Date();
     }
     await this.prisma.orderItem.update({ where: { id: itemId }, data });
-    const branchRow = await this.prisma.order.findUnique({ where: { id: orderId }, select: { branchId: true, orderNo: true, channel: true, tableName: true } });
-    this.events.emit(KDS_CHANGED, { branchId: branchRow?.branchId });
-    this.events.emit(ORDER_UPDATED, { orderId, orderNo: branchRow?.orderNo, branchId: branchRow?.branchId, channel: branchRow?.channel, tableName: branchRow?.tableName, action: 'updated' } as OrderChangedEvent);
+    this.events.emit(KDS_CHANGED, { branchId: (await this.prisma.order.findUnique({ where: { id: orderId }, select: { branchId: true } }))?.branchId });
     return this.recompute(orderId);
   }
 
@@ -542,23 +521,6 @@ export class SalesService {
     if (dto.guestCount !== undefined) data.guestCount = dto.guestCount;
     if (dto.tableName !== undefined) data.tableName = dto.tableName;
     await this.prisma.order.update({ where: { id: orderId }, data });
-    return this.findOne(orderId);
-  }
-
-  /**
-   * Tip After Payment — allows setting/updating tip on a COMPLETED order.
-   * Odoo-style: receipt prints "Tip: ___", customer writes amount, cashier enters it later.
-   * Updates the order total to include the tip.
-   */
-  async setTipAfterPayment(orderId: number, tipAmount: number) {
-    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
-    if (!order) throw new NotFoundException(`Order ${orderId} not found`);
-    // Allow tip on both OPEN (before payment) and COMPLETED (after payment) orders
-    const newTotal = order.subtotal - order.discountTotal + order.taxTotal + order.serviceCharge + tipAmount;
-    await this.prisma.order.update({
-      where: { id: orderId },
-      data: { tip: tipAmount, total: newTotal },
-    });
     return this.findOne(orderId);
   }
 
@@ -656,7 +618,6 @@ export class SalesService {
         .catch(() => {});
     }
     this.events.emit(KDS_CHANGED, { branchId: order.branchId });
-    this.events.emit(ORDER_FIRED, { orderId, orderNo: order.orderNo, branchId: order.branchId, channel: order.channel, tableName: order.tableName, action: 'fired' } as OrderChangedEvent);
     return this.findOne(orderId);
   }
 
@@ -693,7 +654,6 @@ export class SalesService {
     });
 
     this.events.emit(KDS_CHANGED, { branchId: order.branchId });
-    this.events.emit(ORDER_FIRED, { orderId, orderNo: order.orderNo, branchId: order.branchId, channel: order.channel, tableName: order.tableName, action: 'fired' } as OrderChangedEvent);
     return this.findOne(orderId);
   }
 
@@ -823,8 +783,6 @@ export class SalesService {
       throw new BadRequestException('Completed orders cannot be voided; issue a refund instead.');
     }
     await this.prisma.order.update({ where: { id: orderId }, data: { status: OrderStatus.VOIDED } });
-    this.events.emit(ORDER_VOIDED, { orderId, orderNo: order.orderNo, branchId: order.branchId, channel: order.channel, tableName: order.tableName, action: 'voided' } as OrderChangedEvent);
-    this.events.emit(KDS_CHANGED, { branchId: order.branchId });
     return this.findOne(orderId);
   }
 
@@ -1333,6 +1291,23 @@ export class SalesService {
           tx,
         );
 
+        // Finance journal: aggregator commission expense (Talabat/Snoonu/etc.)
+        if (commission.commissionAmount > 0) {
+          await this.finance.create(
+            {
+              type: FinanceEntryType.COMMISSION,
+              amount: -commission.commissionAmount, // expense is negative
+              branchId: pre.branchId,
+              sourceType: 'order',
+              sourceId: pre.id,
+              reference: pre.orderNo,
+              notes: `Aggregator commission (${pre.channel}) — ${commission.commissionAmount.toFixed(2)}`,
+              createdById: userId,
+            },
+            tx,
+          );
+        }
+
         return completed;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20_000 },
@@ -1366,6 +1341,7 @@ export class SalesService {
       completedAt: completed.completedAt ?? new Date(),
     };
     this.events.emit(ORDER_COMPLETED, evt);
+    this.events.emit(ORDER_CHANGED, { branchId: completed.branchId, orderId: completed.id, orderNo: completed.orderNo, action: 'completed', tableName: completed.tableName });
 
     // Post-commit: release the dine-in table (best-effort, non-blocking).
     await this.freeTable(completed.branchId, completed.tableName);

@@ -9,6 +9,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import { printCustomerStatement } from '../lib/thermalPrint';
 import DataToolbar from '../components/DataToolbar';
 import { usePrompt } from '../lib/usePrompt';
+import { useDebounce } from '../lib/useDebounce';
 
 const blankForm = { name: '', phone: '', email: '', group: '', creditLimit: '0', notes: '' };
 
@@ -24,14 +25,15 @@ export default function CustomersPage() {
     return { businessName: m.company_name || undefined, branchName: activeBranch?.name, logoUrl: m.company_logo ? `${window.location.origin}${m.company_logo}` : undefined, address: m.company_address || undefined, phone: m.company_phone || undefined, email: m.company_email || undefined, taxId: m.company_tax_id || undefined, currency: m.default_currency || 'QAR' };
   }, [settings, activeBranch]);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState(blankForm);
 
   const { data: customers, isLoading } = useQuery({
-    queryKey: ['customers', search],
-    queryFn: () => api.get('/customers', { params: search ? { search } : {} }).then((r) => r.data.data),
+    queryKey: ['customers', debouncedSearch],
+    queryFn: () => api.get('/customers', { params: debouncedSearch ? { search: debouncedSearch } : {} }).then((r) => r.data.data),
   });
   const { data: detail } = useQuery({
     queryKey: ['customer', selectedId],

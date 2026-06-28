@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import api from '../lib/api';
 import { printSessionReport, BusinessInfo } from '../lib/thermalPrint';
 import Modal from './Modal';
+import { usePrompt } from '../lib/usePrompt';
 
 // Qatar denominations (QAR bills + coins)
 const DENOMINATIONS = [500, 200, 100, 50, 10, 5, 1, 0.5, 0.25];
@@ -20,6 +21,7 @@ export default function PosSessionBar({ branchId, businessInfo }: { branchId?: n
   const [showClose, setShowClose] = useState(false);
   const [openDenoms, setOpenDenoms] = useState<DenomRow[]>(emptyDenoms());
   const [closeDenoms, setCloseDenoms] = useState<DenomRow[]>(emptyDenoms());
+  const [prompt, PromptDialog] = usePrompt();
 
   const key = ['pos-session-current', branchId];
   const { data: session } = useQuery({
@@ -82,12 +84,18 @@ export default function PosSessionBar({ branchId, businessInfo }: { branchId?: n
 
   if (!branchId) return null;
 
-  const promptCash = (type: 'CASH_IN' | 'CASH_OUT') => {
-    const raw = window.prompt(type === 'CASH_IN' ? 'Cash In amount:' : 'Cash Out amount:');
+  const promptCash = async (type: 'CASH_IN' | 'CASH_OUT') => {
+    const raw = await prompt({
+      title: type === 'CASH_IN' ? 'Cash In' : 'Cash Out',
+      description: type === 'CASH_IN' ? 'Enter the amount to add to the drawer.' : 'Enter the amount to remove from the drawer.',
+      placeholder: '0.00',
+      type: 'number',
+      confirmLabel: type === 'CASH_IN' ? 'Add Cash' : 'Remove Cash',
+    });
     if (!raw) return;
     const amount = parseFloat(raw);
     if (!(amount > 0)) return toast.error('Invalid amount');
-    const reason = window.prompt('Reason (optional):') || undefined;
+    const reason = await prompt({ title: 'Reason (optional)', placeholder: 'e.g. Change for customer' }) || undefined;
     cashMut.mutate({ type, amount, reason });
   };
 
@@ -95,18 +103,42 @@ export default function PosSessionBar({ branchId, businessInfo }: { branchId?: n
     setList(list.map((r, i) => (i === index ? { ...r, count: Math.max(0, count) } : r)));
   };
 
-  // ---- NO SESSION: show Open button ----
+  // ---- NO SESSION: show guided opening wizard ----
   if (!session) {
     return (
       <>
-        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-500/10 p-3 flex flex-wrap items-center gap-3">
-          <span className="text-sm font-medium text-amber-700 dark:text-amber-300">{t('pos.session.closedNotice')}</span>
-          <button
-            onClick={() => setShowOpen(true)}
-            className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium"
-          >
-            {t('pos.session.open')}
-          </button>
+        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-500/10 p-4">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">💰</span>
+            <div className="flex-1">
+              <h3 className="text-sm font-bold text-amber-800 dark:text-amber-200">{t('pos.session.closedNotice')}</h3>
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                To start taking orders, open a POS session by counting the cash in your drawer.
+              </p>
+              <div className="flex items-center gap-2 mt-3">
+                <div className="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400">
+                  <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[9px] font-bold">1</span>
+                  Count cash
+                </div>
+                <span className="text-gray-300">→</span>
+                <div className="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400">
+                  <span className="w-5 h-5 rounded-full bg-gray-300 dark:bg-gray-600 text-white flex items-center justify-center text-[9px] font-bold">2</span>
+                  Enter denominations
+                </div>
+                <span className="text-gray-300">→</span>
+                <div className="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400">
+                  <span className="w-5 h-5 rounded-full bg-gray-300 dark:bg-gray-600 text-white flex items-center justify-center text-[9px] font-bold">3</span>
+                  Open session
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowOpen(true)}
+              className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition"
+            >
+              {t('pos.session.open')}
+            </button>
+          </div>
         </div>
 
         {/* Opening Cash Count Modal */}
@@ -126,6 +158,7 @@ export default function PosSessionBar({ branchId, businessInfo }: { branchId?: n
             </div>
           </div>
         </Modal>
+        <PromptDialog />
       </>
     );
   }
@@ -164,6 +197,7 @@ export default function PosSessionBar({ branchId, businessInfo }: { branchId?: n
           </div>
         </div>
       </Modal>
+      <PromptDialog />
     </>
   );
 }

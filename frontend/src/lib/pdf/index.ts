@@ -8,15 +8,18 @@ import SessionReportPdf, { SessionReportProps } from './SessionReportPdf';
 import DailySalesPdf, { DailySalesProps } from './DailySalesPdf';
 import ReceiptPdf, { ReceiptPdfProps } from './ReceiptPdf';
 import CreditNotePdf, { CreditNoteProps } from './CreditNotePdf';
+import InvoicePdf, { InvoicePdfProps } from './InvoicePdf';
 
 export { SessionReportPdf } from './SessionReportPdf';
 export { DailySalesPdf } from './DailySalesPdf';
 export { ReceiptPdf } from './ReceiptPdf';
 export { CreditNotePdf } from './CreditNotePdf';
+export { default as InvoicePdf } from './InvoicePdf';
 export type { SessionReportData, SessionReportProps } from './SessionReportPdf';
 export type { DailySalesOrder, DailySalesProps } from './DailySalesPdf';
 export type { ReceiptOrder, ReceiptPdfProps } from './ReceiptPdf';
 export type { CreditNoteProps } from './CreditNotePdf';
+export type { InvoiceOrder, InvoicePdfProps } from './InvoicePdf';
 
 /**
  * Generate a PDF blob from a React element and trigger browser download.
@@ -72,5 +75,17 @@ export async function downloadCreditNotePdf(props: CreditNoteProps) {
   const doc = createElement(CreditNotePdf, props) as unknown as ReactElement;
   const blob = await pdf(doc).toBlob();
   const filename = `Credit-Note_${props.order.orderNo}.pdf`;
+  await downloadBlob(blob, filename);
+}
+
+
+/**
+ * Download a Qatar VAT Simplified Tax Invoice PDF.
+ */
+export async function downloadInvoicePdf(props: InvoicePdfProps) {
+  const doc = createElement(InvoicePdf, props) as unknown as ReactElement;
+  const blob = await pdf(doc).toBlob();
+  const invNo = props.invoiceNo || `INV-${props.order.orderNo.replace('ORD-', '')}`;
+  const filename = `Invoice_${invNo}.pdf`;
   await downloadBlob(blob, filename);
 }

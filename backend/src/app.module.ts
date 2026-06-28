@@ -67,8 +67,8 @@ import { PricelistsModule } from './modules/pricelists/pricelists.module';
 import { UserViewsModule } from './modules/user-views/user-views.module';
 import { HealthModule } from './modules/health/health.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
-import { PosConfigsModule } from './modules/pos-configs/pos-configs.module';
-import { StaffPerformanceModule } from './modules/staff-performance/staff-performance.module';
+import { CurrencyModule } from './modules/currency/currency.module';
+import { ShiftsModule } from './modules/shifts/shifts.module';
 
 @Module({
   imports: [
@@ -146,8 +146,8 @@ import { StaffPerformanceModule } from './modules/staff-performance/staff-perfor
     UserViewsModule,
     HealthModule,
     RealtimeModule,
-    PosConfigsModule,
-    StaffPerformanceModule,
+    CurrencyModule,
+    ShiftsModule,
   ],
   providers: [
     // Apply rate limiting globally.

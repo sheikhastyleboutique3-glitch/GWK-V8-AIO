@@ -2,131 +2,94 @@ import {
   WebSocketGateway,
   WebSocketServer,
   SubscribeMessage,
-  MessageBody,
   ConnectedSocket,
-  OnGatewayConnection,
-  OnGatewayDisconnect,
+  MessageBody,
 } from '@nestjs/websockets';
 import { OnEvent } from '@nestjs/event-emitter';
 import { Server, Socket } from 'socket.io';
-import { KDS_CHANGED, KdsChangedEvent } from '../kds/kds.gateway';
+import { PRODUCT_CHANGED, ProductChangedEvent } from '../../common/events/product-events';
 import {
-  ORDER_CREATED,
-  ORDER_UPDATED,
-  ORDER_FIRED,
-  ORDER_COMPLETED,
-  ORDER_VOIDED,
-  OrderChangedEvent,
-  OrderCompletedEvent,
-} from '../../common/events/order-events';
+  TABLE_CHANGED, TableChangedEvent,
+  ORDER_CHANGED, OrderChangedEvent,
+  SESSION_CHANGED, SessionChangedEvent,
+} from '../../common/events/realtime-events';
 
 /**
- * Unified Real-Time Gateway
+ * General-purpose realtime gateway. Replaces polling with instant WebSocket
+ * pushes for: product changes, table status, order lifecycle, POS sessions.
  *
- * All POS, Waiter, and KDS clients connect to the `/realtime` namespace.
- * They join a branch room and receive instant push events for ALL order
- * changes — eliminating the need for polling.
- *
- * Events emitted to clients:
- *   - order:changed  → any order mutation (create/update/fire/complete/void)
- *   - kds:update     → kitchen board changed (redundant with order:changed but
- *                       allows KDS to subscribe to just kitchen events)
- *
- * This replaces the old polling-based sync (5-15s delays) with < 50ms pushes.
+ * Clients join a branch room via `join_branch` and receive targeted events
+ * scoped to their branch. Public clients join `public_menu` for menu updates.
  */
-@WebSocketGateway({
-  cors: { origin: '*' },
-  namespace: 'realtime',
-  path: '/socket.io',
-  transports: ['websocket', 'polling'],
-})
-export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
+@WebSocketGateway({ cors: { origin: '*' }, namespace: 'realtime', path: '/socket.io' })
+export class RealtimeGateway {
   @WebSocketServer() server: Server;
 
-  private connectedClients = 0;
-
-  handleConnection() {
-    this.connectedClients++;
-  }
-
-  handleDisconnect() {
-    this.connectedClients--;
-  }
-
-  @SubscribeMessage('join')
-  handleJoin(@ConnectedSocket() client: Socket, @MessageBody() data: { branchId: number | null }) {
+  @SubscribeMessage('join_branch')
+  joinBranch(@ConnectedSocket() client: Socket, @MessageBody() data: { branchId: number }) {
     if (data?.branchId != null) {
-      // Branch-specific: join only that branch room
       client.join(`branch_${data.branchId}`);
-    } else {
-      // All branches: join the global room (receives events from ALL branches)
-      client.join('global');
     }
-    return { ok: true, branch: data?.branchId ?? 'ALL' };
+    return { joined: data?.branchId };
   }
 
-  @SubscribeMessage('ping')
-  handlePing() {
-    return { pong: Date.now() };
+  @SubscribeMessage('join_public')
+  joinPublic(@ConnectedSocket() client: Socket) {
+    client.join('public_menu');
+    return { joined: 'public_menu' };
   }
 
-  // ─── Event listeners (from EventEmitter2) ─────────────────────────────
+  // ── Product Changes (86 toggle, price updates, new items) ─────────────────
 
-  @OnEvent(ORDER_CREATED)
-  onOrderCreated(evt: OrderChangedEvent) {
-    this.broadcast(evt);
-  }
-
-  @OnEvent(ORDER_UPDATED)
-  onOrderUpdated(evt: OrderChangedEvent) {
-    this.broadcast(evt);
-  }
-
-  @OnEvent(ORDER_FIRED)
-  onOrderFired(evt: OrderChangedEvent) {
-    this.broadcast(evt);
-  }
-
-  @OnEvent(ORDER_COMPLETED)
-  onOrderCompleted(evt: OrderCompletedEvent) {
-    if (!this.server || !evt?.branchId) return;
+  @OnEvent(PRODUCT_CHANGED)
+  onProductChanged(evt: ProductChangedEvent) {
+    if (!this.server) return;
     const payload = {
-      orderId: evt.orderId,
-      orderNo: evt.orderNo,
-      branchId: evt.branchId,
-      action: 'completed',
+      productId: evt.productId,
+      action: evt.action,
+      data: evt.data,
       at: Date.now(),
     };
-    this.server.to(`branch_${evt.branchId}`).emit('order:changed', payload);
-    this.server.to('global').emit('order:changed', payload);
+    this.server.emit('product_changed', payload);
   }
 
-  @OnEvent(ORDER_VOIDED)
-  onOrderVoided(evt: OrderChangedEvent) {
-    this.broadcast(evt);
+  // ── Table Status Changes (opened, closed, transferred) ────────────────────
+
+  @OnEvent(TABLE_CHANGED)
+  onTableChanged(evt: TableChangedEvent) {
+    if (!this.server || !evt.branchId) return;
+    this.server.to(`branch_${evt.branchId}`).emit('table_changed', {
+      tableId: evt.tableId,
+      tableName: evt.tableName,
+      status: evt.status,
+      action: evt.action,
+      at: Date.now(),
+    });
   }
 
-  @OnEvent(KDS_CHANGED)
-  onKdsChanged(evt: KdsChangedEvent) {
-    if (!this.server || evt?.branchId == null) return;
-    const payload = { branchId: evt.branchId, at: Date.now() };
-    this.server.to(`branch_${evt.branchId}`).emit('kds:update', payload);
-    this.server.to('global').emit('kds:update', payload);
-  }
+  // ── Order Lifecycle (created, updated, completed, voided) ─────────────────
 
-  private broadcast(evt: OrderChangedEvent) {
-    if (!this.server || !evt?.branchId) return;
-    const payload = {
+  @OnEvent(ORDER_CHANGED)
+  onOrderChanged(evt: OrderChangedEvent) {
+    if (!this.server || !evt.branchId) return;
+    this.server.to(`branch_${evt.branchId}`).emit('order_changed', {
       orderId: evt.orderId,
       orderNo: evt.orderNo,
-      branchId: evt.branchId,
       action: evt.action,
       tableName: evt.tableName,
-      channel: evt.channel,
       at: Date.now(),
-    };
-    // Emit to branch-specific room AND global room (for all-branch listeners like print agents)
-    this.server.to(`branch_${evt.branchId}`).emit('order:changed', payload);
-    this.server.to('global').emit('order:changed', payload);
+    });
+  }
+
+  // ── POS Session Changes (opened, closed, cash movements) ──────────────────
+
+  @OnEvent(SESSION_CHANGED)
+  onSessionChanged(evt: SessionChangedEvent) {
+    if (!this.server || !evt.branchId) return;
+    this.server.to(`branch_${evt.branchId}`).emit('session_changed', {
+      sessionId: evt.sessionId,
+      action: evt.action,
+      at: Date.now(),
+    });
   }
 }

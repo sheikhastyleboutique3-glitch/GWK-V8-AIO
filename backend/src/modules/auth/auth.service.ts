@@ -39,8 +39,9 @@ export class AuthService {
       branchIds: branchIds.length > 0 ? branchIds : (user.branchId ? [user.branchId] : []),
     };
     const accessToken = this.jwt.sign(payload);
+    const refreshSecret = this.config.get<string>('JWT_REFRESH_SECRET') || 'refresh_secret_dev_only';
     const refreshToken = this.jwt.sign(payload, {
-      secret: this.config.get('JWT_REFRESH_SECRET', 'refresh_secret'),
+      secret: refreshSecret,
       expiresIn: this.config.get('JWT_REFRESH_EXPIRES_IN', '7d'),
     });
 
@@ -94,8 +95,9 @@ export class AuthService {
       branchIds: branchIds.length > 0 ? branchIds : user.branchId ? [user.branchId] : [],
     };
     const accessToken = this.jwt.sign(payload);
+    const refreshSecret = this.config.get<string>('JWT_REFRESH_SECRET') || 'refresh_secret_dev_only';
     const refreshToken = this.jwt.sign(payload, {
-      secret: this.config.get('JWT_REFRESH_SECRET', 'refresh_secret'),
+      secret: refreshSecret,
       expiresIn: this.config.get('JWT_REFRESH_EXPIRES_IN', '7d'),
     });
     const { password: _, ...safeUser } = user;
@@ -125,8 +127,9 @@ export class AuthService {
 
   async refreshToken(token: string) {
     try {
+      const refreshSecret = this.config.get<string>('JWT_REFRESH_SECRET') || 'refresh_secret_dev_only';
       const payload = this.jwt.verify(token, {
-        secret: this.config.get('JWT_REFRESH_SECRET', 'refresh_secret'),
+        secret: refreshSecret,
       });
       const user = await this.prisma.user.findUnique({
         where: { id: payload.sub },

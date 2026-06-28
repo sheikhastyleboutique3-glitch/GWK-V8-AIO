@@ -1,17 +1,18 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { PRODUCT_CHANGED, ProductChangedEvent } from '../../common/events/product-events';
 
 @Injectable()
 export class ProductsService {
   constructor(
     private prisma: PrismaService,
     private audit: AuditService,
+    private eventEmitter: EventEmitter2,
   ) {}
 
-  async findAll(categoryId?: number, search?: string, includeArchived?: boolean, sellable?: boolean, availableOnly?: boolean, productType?: string, page?: number, limit?: number) {
-    const take = limit || 200; // Default 200 products per page (enough for POS grid)
-    const skip = page && page > 1 ? (page - 1) * take : 0;
+  async findAll(categoryId?: number, search?: string, includeArchived?: boolean, sellable?: boolean, availableOnly?: boolean, productType?: string) {
     return this.prisma.product.findMany({
       where: {
         isActive: true,
@@ -34,8 +35,7 @@ export class ProductsService {
         supplier: { select: { id: true, name: true } },
       },
       orderBy: { name: 'asc' },
-      take,
-      skip,
+      take: 500,
     });
     // allergens / allergenNotes are scalar columns and returned by default.
   }
@@ -60,6 +60,12 @@ export class ProductsService {
     this.audit.create({
       userId, action: 'UPDATE', entity: 'product', entityId: String(id), newValues: { isAvailable },
     }).catch(() => {});
+    // Broadcast live to all connected clients (POS, menu, KDS)
+    this.eventEmitter.emit(PRODUCT_CHANGED, {
+      productId: id,
+      action: 'availability',
+      data: { isAvailable, name: product.name },
+    } as ProductChangedEvent);
     return product;
   }
 
@@ -127,6 +133,12 @@ export class ProductsService {
       oldValues: before ?? undefined,
       newValues: { name: product.name, costPrice: product.costPrice },
     }).catch(() => {});
+    // Broadcast product update live
+    this.eventEmitter.emit(PRODUCT_CHANGED, {
+      productId: id,
+      action: 'update',
+      data: { name: product.name, salePrice: product.salePrice, categoryId: product.categoryId, isAvailable: product.isAvailable },
+    } as ProductChangedEvent);
     return product;
   }
 
@@ -155,6 +167,11 @@ export class ProductsService {
       entityId: String(id),
       newValues: { isArchived: false, isActive: true },
     }).catch(() => {});
+    this.eventEmitter.emit(PRODUCT_CHANGED, {
+      productId: id,
+      action: 'restore',
+      data: { isAvailable: product.isAvailable, name: product.name },
+    } as ProductChangedEvent);
     return product;
   }
 
@@ -170,6 +187,11 @@ export class ProductsService {
       entityId: String(id),
       newValues: { isArchived: true },
     }).catch(() => {});
+    this.eventEmitter.emit(PRODUCT_CHANGED, {
+      productId: id,
+      action: 'archive',
+      data: { isAvailable: false },
+    } as ProductChangedEvent);
     return product;
   }
 

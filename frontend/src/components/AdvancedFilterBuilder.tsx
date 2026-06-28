@@ -18,6 +18,7 @@
  */
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { usePrompt } from '../lib/usePrompt';
 
 export type FieldType = 'text' | 'number' | 'date' | 'select' | 'boolean';
 
@@ -89,6 +90,7 @@ interface Props {
 
 export default function AdvancedFilterBuilder({ fields, onApply, presets, onSavePreset, onDeletePreset }: Props) {
   const { t } = useTranslation();
+  const [promptFn, PromptDialog] = usePrompt();
   const [rules, setRules] = useState<FilterRule[]>([]);
   const [open, setOpen] = useState(false);
   const [logic, setLogic] = useState<'AND' | 'OR'>('AND');
@@ -166,9 +168,9 @@ export default function AdvancedFilterBuilder({ fields, onApply, presets, onSave
     setOpen(true);
   };
 
-  const saveCurrentAsPreset = () => {
+  const saveCurrentAsPreset = async () => {
     if (!rules.length) return;
-    const name = window.prompt('Save filter as:', '');
+    const name = await promptFn({ title: 'Save filter as', placeholder: 'Filter name...' });
     if (name?.trim() && onSavePreset) {
       onSavePreset(name.trim(), rules);
     }
@@ -176,6 +178,7 @@ export default function AdvancedFilterBuilder({ fields, onApply, presets, onSave
 
   return (
     <div className="mb-3">
+      <PromptDialog />
       {/* Compact bar */}
       <div className="flex flex-wrap items-center gap-2">
         <button onClick={addRule} className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-800">

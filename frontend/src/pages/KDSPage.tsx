@@ -1,16 +1,27 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
-import { useSocket } from '../lib/useSocket';
+import { connectKds } from '../lib/kdsSocket';
 import { stationForItem } from '../lib/thermalPrint';
-import { playKitchenBell } from '../lib/useOrderSound';
 import PageHeader from '../components/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 type KdsStatus = 'QUEUED' | 'PREPARING' | 'READY' | 'SERVED' | 'CANCELLED';
+
+// ── Force dark mode on KDS page (kitchen screens need high contrast) ──────
+function useKdsDarkMode() {
+  useEffect(() => {
+    const root = document.documentElement;
+    const wasDark = root.classList.contains('dark');
+    root.classList.add('dark');
+    return () => {
+      if (!wasDark) root.classList.remove('dark');
+    };
+  }, []);
+}
 
 const NEXT: Record<string, { label: string; status: KdsStatus }> = {
   QUEUED: { label: 'Start', status: 'PREPARING' },
@@ -29,34 +40,8 @@ export default function KDSPage() {
   const qc = useQueryClient();
   const [station, setStation] = useState<string | null>(null); // null = ALL stations
 
-  // Time threshold for alerts (10 minutes default)
-  const ALERT_THRESHOLD_MS = 10 * 60 * 1000;
-  // Force re-render every 30s to update elapsed times
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const timer = setInterval(() => setTick((t) => t + 1), 30_000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Elapsed time helper
-  const elapsedStr = (firedAt: string | null | undefined): string => {
-    if (!firedAt) return '';
-    const ms = Date.now() - new Date(firedAt).getTime();
-    const mins = Math.floor(ms / 60000);
-    if (mins < 1) return '<1m';
-    if (mins < 60) return `${mins}m`;
-    return `${Math.floor(mins / 60)}h${mins % 60}m`;
-  };
-  const isOverdue = (firedAt: string | null | undefined): boolean => {
-    if (!firedAt) return false;
-    return Date.now() - new Date(firedAt).getTime() > ALERT_THRESHOLD_MS;
-  };
-
-  // ─── Real-time sync: instant ticket arrival from POS/Waiter fires ───
-  useSocket({
-    onKdsUpdate: () => playKitchenBell(),
-    onOrderChanged: (p) => { if (p.action === 'fired') playKitchenBell(); },
-  });
+  // Force dark mode on KDS (kitchen visibility)
+  useKdsDarkMode();
 
   const { data: board, isLoading } = useQuery({
     queryKey: ['kds-board', activeBranch?.id ?? 'all'],
@@ -64,7 +49,7 @@ export default function KDSPage() {
       api
         .get('/kds/board', { params: activeBranch?.id ? { branchId: activeBranch.id } : {} })
         .then((r) => r.data.data),
-    refetchInterval: 60_000, // Fallback — WebSocket gives instant updates
+    refetchInterval: 20_000,
   });
 
   // Floor data for table→floor lookup
@@ -72,7 +57,6 @@ export default function KDSPage() {
     queryKey: ['kds-floors', activeBranch?.id],
     queryFn: () => api.get('/floors', { params: { branchId: activeBranch?.id } }).then((r) => r.data.data),
     enabled: !!activeBranch?.id,
-    staleTime: 120_000,
   });
   const floorForTable = (tableName: string): string | null => {
     if (!floors || !tableName) return null;
@@ -80,6 +64,70 @@ export default function KDSPage() {
       if ((f.tables || []).some((t: any) => t.name === tableName)) return f.name;
     }
     return null;
+  };
+
+  // Real-time push: refresh the board instantly on kitchen changes (polling is the fallback).
+  useEffect(() => {
+    const disconnect = connectKds(activeBranch?.id, () =>
+      qc.invalidateQueries({ queryKey: ['kds-board'] }),
+    );
+    return disconnect;
+  }, [activeBranch?.id, qc]);
+
+  // ── KDS Sound Alert: play a bell/chime when new items arrive ──────────
+  const prevQueuedCount = useRef<number>(0);
+  const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('kds_sound') !== 'false');
+
+  useEffect(() => {
+    const queuedItems = board?.QUEUED ?? [];
+    const currentCount = queuedItems.length;
+    if (currentCount > prevQueuedCount.current && prevQueuedCount.current > 0 && soundEnabled) {
+      // Play alert sound for new items arriving
+      try {
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = 880; // A5 note — audible bell
+        osc.type = 'sine';
+        gain.gain.value = 0.3;
+        osc.start();
+        // Two short beeps
+        setTimeout(() => { gain.gain.value = 0; }, 150);
+        setTimeout(() => { gain.gain.value = 0.3; }, 250);
+        setTimeout(() => { osc.stop(); ctx.close(); }, 400);
+      } catch { /* audio not available */ }
+    }
+    prevQueuedCount.current = currentCount;
+  }, [board?.QUEUED?.length, soundEnabled]);
+
+  // ── Prep Time Targets (configurable per station) ──────────────────────
+  // Default targets in seconds; can be overridden via Settings
+  const PREP_TARGETS: Record<string, number> = {
+    'BAR / DRINKS': 120,      // 2 min
+    'PASTRY / BAKERY': 480,   // 8 min
+    'HOT KITCHEN': 720,       // 12 min
+    'DEFAULT': 600,           // 10 min fallback
+  };
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const getElapsed = (firedAt: string | null) => {
+    if (!firedAt) return 0;
+    return Math.floor((now - new Date(firedAt).getTime()) / 1000);
+  };
+  const formatTime = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  };
+  const getTargetForStation = (item: any) => {
+    const st = stationForItem(item) || 'DEFAULT';
+    return PREP_TARGETS[st] ?? PREP_TARGETS['DEFAULT'];
   };
 
   const advance = useMutation({
@@ -92,18 +140,11 @@ export default function KDSPage() {
   const columns: KdsStatus[] = ['QUEUED', 'PREPARING', 'READY'];
 
   return (
-    <div className="h-[100dvh] flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-950 p-3 md:p-4">
-      {/* Top bar */}
-      <div className="flex items-center justify-between mb-3 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <button onClick={() => window.location.href = '/'} className="px-3 py-2 rounded-lg bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-sm font-medium transition-colors">← Back</button>
-          <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">{t('nav.kds')}</h1>
-          <span className="text-sm text-gray-500">{activeBranch?.name}</span>
-        </div>
-      </div>
+    <div>
+      <PageHeader title={t('nav.kds')} subtitle={activeBranch?.name} />
 
-      {/* Station tabs */}
-      <div className="flex gap-2 mb-3 overflow-x-auto pb-1 flex-shrink-0">
+      {/* Station tabs + Sound toggle */}
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-1 items-center">
         <button onClick={() => setStation(null)} className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap ${!station ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200'}`}>
           🍽️ All Stations
         </button>
@@ -116,12 +157,20 @@ export default function KDSPage() {
         <button onClick={() => setStation('BAR / DRINKS')} className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap ${station === 'BAR / DRINKS' ? 'bg-amber-600 text-white' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200'}`}>
           ☕ Bar / Drinks
         </button>
+        {/* Sound toggle */}
+        <button
+          onClick={() => { const next = !soundEnabled; setSoundEnabled(next); localStorage.setItem('kds_sound', String(next)); }}
+          className={`ms-auto px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap ${soundEnabled ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}
+          title={soundEnabled ? 'Sound alerts ON' : 'Sound alerts OFF'}
+        >
+          {soundEnabled ? '🔔 Sound ON' : '🔕 Sound OFF'}
+        </button>
       </div>
 
       {isLoading ? (
         <LoadingSpinner />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1 min-h-0 overflow-hidden">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {columns.map((col) => {
             const rawItems = board?.[col] ?? [];
             // Filter by station if one is selected
@@ -146,32 +195,17 @@ export default function KDSPage() {
             const orders = Array.from(orderMap.values());
 
             return (
-              <div key={col} className={`rounded-xl border-t-4 ${COLUMN_STYLE[col]} bg-gray-50 dark:bg-gray-900/50 p-3 flex flex-col min-h-0 overflow-hidden`}>
-                <h3 className="font-semibold text-sm mb-3 flex justify-between flex-shrink-0">
+              <div key={col} className={`rounded-xl border-t-4 ${COLUMN_STYLE[col]} bg-gray-50 dark:bg-gray-900/50 p-3`}>
+                <h3 className="font-semibold text-sm mb-3 flex justify-between">
                   <span>{col}</span>
                   <span className="text-gray-400">{orders.length} order{orders.length !== 1 ? 's' : ''} · {items.length} item{items.length !== 1 ? 's' : ''}</span>
                 </h3>
-                <div className="space-y-3 overflow-y-auto flex-1 min-h-0">
-                  {orders.map((order) => {
-                    // Earliest firedAt determines when order hit the kitchen
-                    const earliestFired = order.items.reduce((min: string | null, it: any) => {
-                      if (!it.firedAt) return min;
-                      if (!min) return it.firedAt;
-                      return it.firedAt < min ? it.firedAt : min;
-                    }, null as string | null);
-                    const overdue = isOverdue(earliestFired);
-                    return (
-                    <div key={order.orderNo} className={`rounded-lg bg-white dark:bg-gray-900 border ${overdue ? 'border-red-500 ring-2 ring-red-500/30 animate-pulse' : 'border-gray-200 dark:border-gray-800'} p-3`}>
+                <div className="space-y-3">
+                  {orders.map((order) => (
+                    <div key={order.orderNo} className="rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-3">
                       {/* Order header */}
                       <div className="flex justify-between items-center mb-2 pb-2 border-b border-gray-100 dark:border-gray-800">
-                        <div className="flex items-center gap-2">
-                          <div className="font-bold text-sm text-gray-900 dark:text-gray-100">{order.orderNo}</div>
-                          {earliestFired && (
-                            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${overdue ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400 font-bold' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
-                              {overdue ? '⚠️ ' : '⏱ '}{elapsedStr(earliestFired)}
-                            </span>
-                          )}
-                        </div>
+                        <div className="font-bold text-sm text-gray-900 dark:text-gray-100">{order.orderNo}</div>
                         <div className="flex items-center gap-1.5 text-xs">
                           {order.channel === 'DELIVERY' && <span className="px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 font-bold">🚗 DELIVERY</span>}
                           {order.channel === 'TAKEAWAY' && <span className="px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 font-bold">🥡 TAKEAWAY</span>}
@@ -195,6 +229,17 @@ export default function KDSPage() {
                                 </div>
                               )}
                               {it.notes && <div className="text-[11px] text-gray-500 italic">* {it.notes}</div>}
+                              {/* Prep time elapsed */}
+                              {it.firedAt && col !== 'READY' && (() => {
+                                const elapsed = getElapsed(it.firedAt);
+                                const target = getTargetForStation(it);
+                                const overdue = elapsed > target;
+                                return (
+                                  <div className={`text-[10px] font-mono mt-0.5 ${overdue ? 'text-red-600 font-bold animate-pulse' : elapsed > target * 0.75 ? 'text-amber-600' : 'text-gray-400'}`}>
+                                    ⏱ {formatTime(elapsed)}{overdue ? ' OVERDUE' : ''}
+                                  </div>
+                                );
+                              })()}
                             </div>
                             {NEXT[col] && (
                               <button
@@ -222,7 +267,7 @@ export default function KDSPage() {
                         </button>
                       )}
                     </div>
-                  ); })}
+                  ))}
                   {!orders.length && <p className="text-xs text-gray-400 text-center py-6">Empty</p>}
                 </div>
               </div>

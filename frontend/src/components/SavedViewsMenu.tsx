@@ -14,6 +14,7 @@ import {
   SavedView, getViews, saveView, deleteView, setDefaultView, persistViews,
 } from '../lib/savedViews';
 import api from '../lib/api';
+import { usePrompt } from '../lib/usePrompt';
 
 interface Props {
   pageId: string;
@@ -33,6 +34,7 @@ export default function SavedViewsMenu({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [views, setViews] = useState<SavedView[]>(getViews(pageId));
+  const [promptFn, PromptDialog] = usePrompt();
 
   // Sync from backend on mount (best-effort — falls back to localStorage)
   useEffect(() => {
@@ -57,8 +59,8 @@ export default function SavedViewsMenu({
 
   const refresh = () => setViews(getViews(pageId));
 
-  const handleSave = () => {
-    const name = window.prompt('View name:', '');
+  const handleSave = async () => {
+    const name = await promptFn({ title: 'Save View', placeholder: 'View name...' });
     if (!name?.trim()) return;
     const view = saveView(pageId, name.trim(), {
       filters: currentFilters,
@@ -96,6 +98,7 @@ export default function SavedViewsMenu({
 
   return (
     <div className="relative inline-block">
+      <PromptDialog />
       <button
         onClick={() => setOpen(!open)}
         className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${

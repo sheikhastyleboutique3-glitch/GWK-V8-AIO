@@ -367,4 +367,54 @@ export class NotificationsService {
     });
     return config?.value || null;
   }
+
+  // ---- Rich transactional WhatsApp messages ----
+
+  /**
+   * Send a formatted order receipt via WhatsApp.
+   */
+  async sendReceipt(phoneNumber: string, order: {
+    orderNo: string;
+    items: { name: string; qty: number; unitPrice: number }[];
+    total: number;
+    currency?: string;
+    businessName?: string;
+  }): Promise<boolean> {
+    const cur = order.currency || 'QAR';
+    const lines = order.items.map(i => `  ${i.qty}x ${i.name} — ${cur} ${(i.qty * i.unitPrice).toFixed(2)}`);
+    const message = [
+      `🧾 *Receipt — ${order.orderNo}*`,
+      order.businessName ? `_${order.businessName}_` : '',
+      '',
+      ...lines,
+      '─'.repeat(28),
+      `*Total: ${cur} ${order.total.toFixed(2)}*`,
+      '',
+      'Thank you for your order! 🙏',
+    ].filter(Boolean).join('\n');
+    return this.sendWhatsApp(phoneNumber, message);
+  }
+
+  /**
+   * Send an order status update via WhatsApp.
+   */
+  async sendOrderStatus(phoneNumber: string, data: {
+    orderNo: string;
+    status: string;
+    estimatedMinutes?: number;
+    businessName?: string;
+  }): Promise<boolean> {
+    const statusEmojis: Record<string, string> = {
+      CONFIRMED: '✅', PREPARING: '👨‍🍳', READY: '🔔', DELIVERED: '🚗', COMPLETED: '🎉',
+    };
+    const emoji = statusEmojis[data.status] || '📋';
+    const message = [
+      `${emoji} *Order Update — ${data.orderNo}*`,
+      data.businessName ? `_${data.businessName}_` : '',
+      '',
+      `Status: *${data.status.replace(/_/g, ' ')}*`,
+      data.estimatedMinutes ? `Estimated time: ~${data.estimatedMinutes} min` : '',
+    ].filter(Boolean).join('\n');
+    return this.sendWhatsApp(phoneNumber, message);
+  }
 }

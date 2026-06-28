@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import Breadcrumbs from './Breadcrumbs';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
@@ -9,8 +8,9 @@ import { useNotificationSounds } from '../lib/useNotificationSounds';
 import { unlockAudio } from '../lib/sound';
 import { toggleDarkMode, loadThemeLocal } from '../lib/theme';
 import ThemePanel from './ThemePanel';
+import CommandPalette from './CommandPalette';
 import {
-  Squares2X2Icon, ClipboardDocumentListIcon, ShoppingBagIcon, TrashIcon,
+  Squares2X2Icon, ClipboardDocumentListIcon, TrashIcon,
   BellAlertIcon, ChatBubbleLeftRightIcon, ArchiveBoxIcon, TruckIcon,
   DocumentTextIcon, CurrencyDollarIcon, ChartBarIcon, BuildingOffice2Icon,
   UsersIcon, TagIcon, ScaleIcon, Cog6ToothIcon, DocumentMagnifyingGlassIcon,
@@ -49,12 +49,12 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'pos',
     items: [
-      { key: 'posDashboard', path: '/pos-dashboard', icon: BuildingStorefrontIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER'] },
       { key: 'pos',    path: '/pos',    icon: BuildingStorefrontIcon,    roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER'] },
       { key: 'waiter', path: '/waiter', icon: UserGroupIcon,             roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'WAITER'] },
       { key: 'bookings', path: '/bookings', icon: CalendarDaysIcon,       roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'WAITER'] },
       { key: 'deliveries', path: '/deliveries', icon: TruckIcon,         roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'DRIVER'] },
       { key: 'customers', path: '/customers', icon: IdentificationIcon,   roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER'] },
+      { key: 'loyalty', path: '/loyalty', icon: ReceiptPercentIcon,       roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER'] },
       { key: 'kds',    path: '/kds',    icon: ClipboardDocumentListIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'KITCHEN', 'PASTRY', 'BARISTA'] },
       { key: 'menu',   path: '/menu',   icon: BeakerIcon,                roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'WAITER', 'KITCHEN', 'BARISTA', 'PASTRY'] },
     ],
@@ -62,7 +62,6 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'menu',
     items: [
-      { key: 'catalog',    path: '/catalog',    icon: ShoppingBagIcon,    roles: [] },
       { key: 'categories', path: '/categories', icon: TagIcon,            roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
       { key: 'recipes',    path: '/recipes',    icon: BeakerIcon,         roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'KITCHEN', 'PASTRY'] },
       { key: 'modifiers',  path: '/modifiers',  icon: ClipboardDocumentCheckIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
@@ -93,20 +92,18 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'team',
     items: [
       { key: 'staffTasks', path: '/staff-tasks', icon: ClipboardDocumentCheckIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CLEANER', 'WAREHOUSE'] },
-      { key: 'staffPerformance', path: '/staff-performance', icon: ChartBarIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
       { key: 'users',      path: '/users',       icon: UsersIcon,                  roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
-      { key: 'permissions', path: '/permissions', icon: ShieldCheckIcon,            roles: ['SUPER_ADMIN'] },
     ],
   },
   {
     label: 'insights',
     items: [
       { key: 'reports',       path: '/reports',       icon: ChartBarIcon,                roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'PROCUREMENT'] },
+      { key: 'advancedAnalytics', path: '/advanced-analytics', icon: ChartBarIcon,      roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
       { key: 'posReports',    path: '/pos-reports',   icon: ChartBarIcon,                roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
       { key: 'salesHistory',  path: '/sales-history', icon: DocumentTextIcon,            roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER'] },
       { key: 'sessions',      path: '/sessions',      icon: CurrencyDollarIcon,          roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER'] },
       { key: 'receivables',   path: '/receivables',   icon: DocumentTextIcon,            roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'PROCUREMENT', 'CASHIER'] },
-      { key: 'deliveryPlatforms', path: '/delivery-platforms', icon: TruckIcon,           roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'PROCUREMENT'] },
       { key: 'alerts',        path: '/alerts',        icon: BellAlertIcon,               roles: [] },
       { key: 'notifications', path: '/notifications', icon: ChatBubbleLeftRightIcon,     roles: [] },
       { key: 'audit',         path: '/audit',         icon: DocumentMagnifyingGlassIcon, roles: ['SUPER_ADMIN'] },
@@ -115,25 +112,30 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'configuration',
     items: [
-      { key: 'orderPresets',      path: '/order-presets',      icon: ReceiptPercentIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
-      { key: 'paymentMethods',    path: '/payment-methods',    icon: CurrencyDollarIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
-      { key: 'paymentTerminals',  path: '/payment-terminals',  icon: CurrencyDollarIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
-      { key: 'pricelists',        path: '/pricelists',         icon: ReceiptPercentIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
-      { key: 'combos',            path: '/combos',             icon: TagIcon,            roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
-      { key: 'productAttributes', path: '/product-attributes', icon: TagIcon,            roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'printers',          path: '/printers',           icon: PrinterIcon,            roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'discountRules',     path: '/discount-rules',     icon: ReceiptPercentIcon,     roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'deliveryPlatforms', path: '/delivery-platforms', icon: TruckIcon,              roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'PROCUREMENT'] },
+      { key: 'orderPresets',      path: '/order-presets',      icon: ReceiptPercentIcon,     roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'paymentMethods',    path: '/payment-methods',    icon: CurrencyDollarIcon,     roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'paymentTerminals',  path: '/payment-terminals',  icon: CurrencyDollarIcon,     roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'cashRoundings',     path: '/cash-roundings',     icon: CurrencyDollarIcon,     roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'fiscalPositions',   path: '/fiscal-positions',   icon: ReceiptPercentIcon,     roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'pricelists',        path: '/pricelists',         icon: ReceiptPercentIcon,     roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'combos',            path: '/combos',             icon: TagIcon,                roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'productAttributes', path: '/product-attributes', icon: TagIcon,                roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'iotDevices',        path: '/iot-devices',        icon: PrinterIcon,            roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
       { key: 'selfOrder',         path: '/self-order',         icon: BuildingStorefrontIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'qrCodes',           path: '/qr-codes',           icon: GlobeAltIcon,           roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
     ],
   },
   {
     label: 'admin',
     items: [
-      { key: 'branches', path: '/branches', icon: BuildingOffice2Icon, roles: ['SUPER_ADMIN'] },
-      { key: 'discountRules', path: '/discount-rules', icon: ReceiptPercentIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
-      { key: 'printers', path: '/printers', icon: PrinterIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
-      { key: 'loyalty', path: '/loyalty', icon: ReceiptPercentIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER'] },
-      { key: 'units',    path: '/units',    icon: ScaleIcon,           roles: ['SUPER_ADMIN'] },
-      { key: 'settings', path: '/settings', icon: Cog6ToothIcon,       roles: ['SUPER_ADMIN'] },
-      { key: 'admin',    path: '/admin',    icon: ShieldCheckIcon,     roles: ['SUPER_ADMIN'] },
+      { key: 'branches',    path: '/branches',    icon: BuildingOffice2Icon, roles: ['SUPER_ADMIN'] },
+      { key: 'permissions', path: '/permissions', icon: UsersIcon,            roles: ['SUPER_ADMIN'] },
+      { key: 'units',       path: '/units',       icon: ScaleIcon,           roles: ['SUPER_ADMIN'] },
+      { key: 'settings',    path: '/settings',    icon: Cog6ToothIcon,       roles: ['SUPER_ADMIN'] },
+      { key: 'admin',       path: '/admin',       icon: ShieldCheckIcon,     roles: ['SUPER_ADMIN'] },
     ],
   },
 ];
@@ -165,14 +167,13 @@ export default function Layout() {
   const [showThemePanel, setShowThemePanel] = useState(false);
 
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
-  const isBranchManager = user?.role === 'BRANCH_MANAGER';
   const { data: allBranchesList } = useQuery({
     queryKey: ['branches-switcher'],
     queryFn: () => api.get('/branches').then(r => r.data.data),
-    enabled: isSuperAdmin || isBranchManager,
-    staleTime: 5 * 60_000, // branches rarely change — cache for 5min
+    enabled: isSuperAdmin,
+    
   });
-  const switcherBranches = (isSuperAdmin || isBranchManager) ? (allBranchesList || user?.assignedBranches || []) : (user?.assignedBranches || []);
+  const switcherBranches = isSuperAdmin ? (allBranchesList || []) : (user?.assignedBranches || []);
 
   const { data: alertsData } = useQuery({
     queryKey: ['alerts-count', activeBranch?.id ?? 'all'],
@@ -371,10 +372,10 @@ export default function Layout() {
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-          <Breadcrumbs />
           <Outlet />
         </main>
       </div>
+      <CommandPalette />
 
       {/* Theme Panel */}
       {showThemePanel && <ThemePanel onClose={() => setShowThemePanel(false)} />}
