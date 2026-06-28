@@ -43,4 +43,10 @@ export class LoyaltyController {
   redeem(@Param('code') code: string, @Body() dto: { points?: number; amount?: number }) {
     return this.svc.redeem(code, dto?.points ?? 0, dto?.amount ?? 0);
   }
+
+  /** Scan/lookup a loyalty card by barcode or NFC code. Returns card + customer info. */
+  @Get('cards/:code/lookup') @Roles(...POS_ROLES)
+  lookupCard(@Param('code') code: string) {
+    return this.svc.lookupCard(code);
+  }
 }

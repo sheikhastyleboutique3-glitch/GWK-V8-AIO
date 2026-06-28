@@ -232,17 +232,34 @@ export class TablesService {
   async setReservationStatus(id: number, status: ReservationStatus) {
     const r = await this.prisma.reservation.findUnique({ where: { id } });
     if (!r) throw new NotFoundException(`Reservation ${id} not found`);
-    // Reflect onto the table where it makes sense.
+    // Auto-seat: reflect reservation status onto the physical table + emit real-time event
     if (r.tableId && (status === ReservationStatus.SEATED || status === ReservationStatus.BOOKED)) {
+      const newTableStatus = status === ReservationStatus.SEATED ? TableStatus.OCCUPIED : TableStatus.RESERVED;
       await this.prisma.restaurantTable.update({
         where: { id: r.tableId },
-        data: { status: status === ReservationStatus.SEATED ? TableStatus.OCCUPIED : TableStatus.RESERVED },
+        data: { status: newTableStatus },
+      });
+      const table = await this.prisma.restaurantTable.findUnique({ where: { id: r.tableId }, select: { name: true } });
+      this.events.emit(TABLE_CHANGED, {
+        branchId: r.branchId,
+        tableId: r.tableId,
+        tableName: table?.name || '',
+        status: newTableStatus,
+        action: status === ReservationStatus.SEATED ? 'opened' : 'status_changed',
       });
     }
     if (r.tableId && (status === ReservationStatus.COMPLETED || status === ReservationStatus.CANCELLED || status === ReservationStatus.NO_SHOW)) {
       await this.prisma.restaurantTable.update({
         where: { id: r.tableId },
         data: { status: TableStatus.AVAILABLE },
+      });
+      const table = await this.prisma.restaurantTable.findUnique({ where: { id: r.tableId }, select: { name: true } });
+      this.events.emit(TABLE_CHANGED, {
+        branchId: r.branchId,
+        tableId: r.tableId,
+        tableName: table?.name || '',
+        status: 'AVAILABLE',
+        action: 'closed',
       });
     }
     return this.prisma.reservation.update({ where: { id }, data: { status } });
