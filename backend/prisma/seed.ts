@@ -1,12 +1,21 @@
 /**
  * GWK V8 — Full Demo Seed
  *
+ * Demo for Gaimer w Kahi (قيمر وكاهي) + Shai bu Hamed (شاي بو حامد)
+ * Qatar restaurant group across 5 locations.
+ *
  * Covers every module with realistic data:
- *   • 3 branches (warehouse + 2 restaurant branches)
+ *   • 6 branches:
+ *     - Central Warehouse (Industrial Area)
+ *     - Gaimer w Kahi — West Walk, Lusail (Main Branch)
+ *     - Gaimer w Kahi — Doha Port (Second Branch)
+ *     - Gaimer w Kahi Express — Lusail (Express format)
+ *     - Shai bu Hamad — Gulf Mall (Main Branch)
+ *     - Shai bu Hamad — West Walk (Second Branch)
  *   • 4 units, 8 categories, 4 suppliers
  *   • 20 products (with allergens on relevant items)
- *   • 10 users (all 8 roles, Arabic names, bilingual)
- *   • Inventory at all 3 locations
+ *   • 10 users (all roles, Arabic names, bilingual)
+ *   • Inventory at all locations
  *   • 12 requisitions covering every workflow status
  *   • Dispatch records with driver/recipient details
  *   • 8 purchase orders (all statuses)
@@ -55,26 +64,49 @@ async function main() {
     where: { id: 1 }, update: { cashFloat: 0 },
     create: {
       id: 1, name: 'Central Warehouse', nameAr: 'المستودع الرئيسي',
-      isWarehouse: true, address: 'Industrial Area, Zone 81, Doha', phone: '+974-4000-0001', cashFloat: 0,
+      isWarehouse: true, address: 'Industrial Area, Zone 81, Doha, Qatar', phone: '+974-4000-0001', cashFloat: 0,
     },
   });
-  const branchDoha = await prisma.branch.upsert({
+  // ── Gaimer w Kahi (قيمر وكاهي) ─────────────────────────────────────────────
+  const branchGwkWestWalk = await prisma.branch.upsert({
     where: { id: 2 }, update: { cashFloat: 5000 },
     create: {
-      id: 2, name: 'Branch — Doha (West Bay)', nameAr: 'فرع الدوحة — الخليج الغربي',
-      address: 'West Bay, Diplomatic Area, Doha', phone: '+974-4000-0002', cashFloat: 5000,
+      id: 2, name: 'Gaimer w Kahi — West Walk (Main)', nameAr: 'قيمر وكاهي — ويست ووك (الرئيسي)',
+      address: 'West Walk, Lusail Boulevard, Lusail, Qatar', phone: '+974-4000-0002', cashFloat: 5000,
     },
   });
-  const branchWakra = await prisma.branch.upsert({
+  const branchGwkDohaPort = await prisma.branch.upsert({
     where: { id: 3 }, update: { cashFloat: 3000 },
     create: {
-      id: 3, name: 'Branch — Al Wakra', nameAr: 'فرع الوكرة',
-      address: 'Al Wakra Mall, Al Wakra', phone: '+974-4000-0003', cashFloat: 3000,
+      id: 3, name: 'Gaimer w Kahi — Doha Port', nameAr: 'قيمر وكاهي — ميناء الدوحة',
+      address: 'Doha Port, Old Doha, Qatar', phone: '+974-4000-0003', cashFloat: 3000,
     },
   });
-  console.log('✅ Branches (3)');
+  const branchGwkExpress = await prisma.branch.upsert({
+    where: { id: 4 }, update: { cashFloat: 2000 },
+    create: {
+      id: 4, name: 'Gaimer w Kahi Express — Lusail', nameAr: 'قيمر وكاهي اكسبرس — لوسيل',
+      address: 'Lusail Marina, Lusail, Qatar', phone: '+974-4000-0004', cashFloat: 2000,
+    },
+  });
+  // ── Shai bu Hamad (شاي بو حمد) ────────────────────────────────────────────
+  const branchSbhGulfMall = await prisma.branch.upsert({
+    where: { id: 5 }, update: { cashFloat: 4000 },
+    create: {
+      id: 5, name: 'Shai bu Hamad — Gulf Mall (Main)', nameAr: 'شاي بو حمد — جلف مول (الرئيسي)',
+      address: 'Gulf Mall, Al Gharafa, Qatar', phone: '+974-4000-0005', cashFloat: 4000,
+    },
+  });
+  const branchSbhWestWalk = await prisma.branch.upsert({
+    where: { id: 6 }, update: { cashFloat: 3500 },
+    create: {
+      id: 6, name: 'Shai bu Hamad — West Walk', nameAr: 'شاي بو حمد — ويست ووك',
+      address: 'West Walk, Lusail Boulevard, Lusail, Qatar', phone: '+974-4000-0006', cashFloat: 3500,
+    },
+  });
+  console.log('✅ Branches (6): Warehouse + Gaimer w Kahi (3) + Shai bu Hamad (2)');
 
-  const branches = { warehouse, doha: branchDoha, wakra: branchWakra };
+  const branches = { warehouse, gwkWestWalk: branchGwkWestWalk, gwkDohaPort: branchGwkDohaPort, gwkExpress: branchGwkExpress, sbhGulfMall: branchSbhGulfMall, sbhWestWalk: branchSbhWestWalk };
 
   // ==========================================================================
   // DELIVERY PLATFORMS (third-party aggregators)

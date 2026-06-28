@@ -18,6 +18,10 @@
 
 **60+ Backend Modules** | **63 Pages** | **30 Components** | **12 User Roles** | **Real-time WebSocket**
 
+---
+
+> **Demo Brands:** This system powers **Gaimer w Kahi** (قيمر وكاهي) — Traditional Qatari Breakfast & Café — and **Shai bu Hamad** (شاي بو حمد) — Qatari Tea House — across 5 locations in Qatar: West Walk (Lusail), Doha Port, Lusail Marina, and Gulf Mall.
+
 </div>
 
 ---
@@ -739,7 +743,13 @@ After seeding (`npx prisma db seed`), use these accounts:
 > **PIN Login**: Use the numeric PIN at the POS terminal for fast cashier switching (no email/password needed).
 
 ### Demo Data Included
-- 3 branches (Warehouse + Doha + Al Wakra)
+- **6 branches:**
+  - Central Warehouse (Industrial Area, Doha)
+  - **Gaimer w Kahi — West Walk** (Main Branch, Lusail)
+  - **Gaimer w Kahi — Doha Port** (Second Branch)
+  - **Gaimer w Kahi Express — Lusail** (Express format)
+  - **Shai bu Hamad — Gulf Mall** (Main Branch, Al Gharafa)
+  - **Shai bu Hamad — West Walk** (Second Branch, Lusail)
 - 20+ menu products with images, categories, and recipes
 - 4 suppliers with price history
 - Sample orders, requisitions, and inventory
