@@ -3,6 +3,8 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { PRODUCT_CHANGED, ProductChangedEvent } from '../../common/events/product-events';
+import { NotificationsService } from '../notifications/notifications.service';
+import { Role } from '@prisma/client';
 
 /**
  * MenuSchedulerService — Two automated jobs:
@@ -26,6 +28,7 @@ export class MenuSchedulerService {
   constructor(
     private prisma: PrismaService,
     private eventEmitter: EventEmitter2,
+    private notifications: NotificationsService,
   ) {}
 
   // ─── TIME-BASED SCHEDULING (every minute) ──────────────────────────────
@@ -183,6 +186,19 @@ export class MenuSchedulerService {
             data: { isAvailable: false, name: mp.name },
           } as ProductChangedEvent);
           this.logger.warn(`Auto-86: ${mp.name} (${missingIngredient} out of stock)`);
+
+          // Push notification to branch managers when auto-86 triggers
+          this.notifications.emit({
+            eventType: 'PRODUCT_AUTO_86',
+            entityType: 'alert',
+            entityId: mp.id,
+            link: `/menu`,
+            title: `Auto-86: ${mp.name}`,
+            titleAr: `إيقاف تلقائي: ${mp.name}`,
+            message: `${mp.name} has been automatically marked unavailable due to low stock of ${missingIngredient}.`,
+            messageAr: `تم إيقاف ${mp.name} تلقائيًا بسبب نفاد مخزون ${missingIngredient}.`,
+            roles: [Role.SUPER_ADMIN, Role.BRANCH_MANAGER, Role.PROCUREMENT],
+          }).catch(() => {});
         } else if (!outOfStock && mp.autoEightySixed) {
           // Auto-re-enable the menu item (stock replenished)
           await this.prisma.product.update({

@@ -228,4 +228,37 @@ export class PosSessionsService {
     });
     return s?.id ?? null;
   }
+
+  /**
+   * Force-close a POS session with manager override. Auto-voids all remaining
+   * OPEN/HELD orders on the session, then closes it with the counted amount.
+   * Requires manager PIN verification (done at the controller level).
+   * Use case: end-of-day when staff left orders open.
+   */
+  async forceClose(
+    sessionId: number,
+    closingCounted: number,
+    userId: number,
+    denominations?: { denomination: number; count: number }[],
+  ) {
+    const session = await this.prisma.posSession.findUnique({ where: { id: sessionId } });
+    if (!session) throw new NotFoundException(`Session ${sessionId} not found`);
+    if (session.status !== PosSessionStatus.OPEN) throw new BadRequestException('Session is already closed.');
+
+    // Auto-void all OPEN/HELD orders on this session
+    const openOrders = await this.prisma.order.findMany({
+      where: { sessionId, status: { in: [OrderStatus.OPEN, OrderStatus.HELD] } },
+      select: { id: true, orderNo: true },
+    });
+
+    if (openOrders.length) {
+      await this.prisma.order.updateMany({
+        where: { id: { in: openOrders.map((o) => o.id) } },
+        data: { status: OrderStatus.VOIDED },
+      });
+    }
+
+    // Now close normally (no open orders to block it)
+    return this.close(sessionId, closingCounted, userId, denominations);
+  }
 }

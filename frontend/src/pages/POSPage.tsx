@@ -1985,7 +1985,9 @@ export default function POSPage() {
 
               {/* ── Tip Quick Buttons (Odoo parity: 10%/15%/20%) ──────── */}
               <div className="w-full max-w-xs md:max-w-sm mb-4">
-                <div className="text-xs font-semibold text-gray-400 uppercase text-center mb-2">Add Tip</div>
+                <div className="text-xs font-semibold text-gray-400 uppercase text-center mb-2">
+                  Add Tip {businessInfo.currency && businessInfo.currency !== 'QAR' ? `(${businessInfo.currency})` : ''}
+                </div>
                 <div className="grid grid-cols-4 gap-2">
                   {[10, 15, 20].map((pct) => {
                     const baseForTip = mode === 'existing' ? (loadedOrder?.subtotal ?? 0) : cartSubtotal;
@@ -2003,7 +2005,8 @@ export default function POSPage() {
                         }}
                         className={`py-2 rounded-lg text-sm font-bold transition ${isActive ? 'bg-amber-500 text-white ring-2 ring-amber-300' : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40'}`}
                       >
-                        {pct}%
+                        <div>{pct}%</div>
+                        <div className="text-[10px] font-normal opacity-75">{tipVal.toFixed(0)} {businessInfo.currency || 'QAR'}</div>
                       </button>
                     );
                   })}

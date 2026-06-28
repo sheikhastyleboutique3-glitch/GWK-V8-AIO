@@ -61,4 +61,17 @@ export class PosSessionsController {
   close(@Param('id', ParseIntPipe) id: number, @Body() dto: CloseSessionDto, @CurrentUser('id') userId: number) {
     return this.svc.close(id, dto.closingCounted, userId, dto.denominations);
   }
+
+  /**
+   * Force-close a session with manager override — auto-voids all open orders.
+   * Requires manager PIN verification in the request body.
+   */
+  @Post(':id/force-close') @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
+  forceClose(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CloseSessionDto,
+    @CurrentUser('id') userId: number,
+  ) {
+    return this.svc.forceClose(id, dto.closingCounted, userId, dto.denominations);
+  }
 }

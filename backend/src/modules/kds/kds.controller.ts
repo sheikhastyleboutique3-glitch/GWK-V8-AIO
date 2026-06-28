@@ -26,6 +26,18 @@ export class RecallKdsDto {
   @IsOptional() @IsString() reason?: string;
 }
 
+/** Preset recall reason codes for analytics. Used in the KDS recall dropdown. */
+export const RECALL_REASONS = [
+  'Customer cancelled',
+  'Wrong item prepared',
+  'Allergy alert',
+  'Quality issue',
+  'Kitchen overload',
+  'Out of ingredient',
+  'Duplicate order',
+  'Other',
+] as const;
+
 const KITCHEN: Role[] = [
   Role.SUPER_ADMIN,
   Role.BRANCH_MANAGER,
@@ -68,5 +80,11 @@ export class KdsController {
     @CurrentUser('id') userId: number,
   ) {
     return this.svc.recall(id, userId, dto.reason);
+  }
+
+  /** Get preset recall reason codes for the recall dropdown. */
+  @Get('recall-reasons')
+  recallReasons() {
+    return RECALL_REASONS;
   }
 }
