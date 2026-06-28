@@ -33,6 +33,7 @@ import PosDashboardPage from './pages/PosDashboardPage';
 import CustomerDisplayPage from './pages/CustomerDisplayPage';
 import TablePayPage from './pages/TablePayPage';
 import ReservationWidgetPage from './pages/ReservationWidgetPage';
+import DigitalMenuPage from './pages/DigitalMenuPage';
 import POSPage from './pages/POSPage';
 import KDSPage from './pages/KDSPage';
 import SalesDashboardPage from './pages/SalesDashboardPage';
@@ -126,6 +127,7 @@ export default function App() {
       <Route path="/customer-display" element={<CustomerDisplayPage />} />
       <Route path="/pay/:orderId" element={<TablePayPage />} />
       <Route path="/book" element={<ReservationWidgetPage />} />
+      <Route path="/menu/:branchId" element={<DigitalMenuPage />} />
       {/* Full-screen POS & Waiter — no sidebar */}
       <Route
         path="/pos"
