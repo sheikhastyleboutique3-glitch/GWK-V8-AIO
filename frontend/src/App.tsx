@@ -57,6 +57,7 @@ const TablesPage = lazy(() => import('./pages/TablesPage'));
 
 // Finance & Insights
 const ReportsPage = lazy(() => import('./pages/ReportsPage'));
+const AdvancedAnalyticsPage = lazy(() => import('./pages/AdvancedAnalyticsPage'));
 const ReceivablesPage = lazy(() => import('./pages/ReceivablesPage'));
 const PayablesPage = lazy(() => import('./pages/PayablesPage'));
 const AlertsPage = lazy(() => import('./pages/AlertsPage'));
@@ -420,6 +421,14 @@ export default function App() {
           element={
             <ProtectedRoute roles={REPORT_ROLES}>
               <ReportsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="advanced-analytics"
+          element={
+            <ProtectedRoute roles={MANAGER_ROLES}>
+              <AdvancedAnalyticsPage />
             </ProtectedRoute>
           }
         />

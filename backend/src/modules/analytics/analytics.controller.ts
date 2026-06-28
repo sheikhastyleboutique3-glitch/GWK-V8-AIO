@@ -127,4 +127,60 @@ export class AnalyticsController {
   sendEodEmail(@Query('date') date?: string) {
     return this.eod.sendEodEmail(date);
   }
+
+  // ── Advanced Analytics ────────────────────────────────────────────────────
+
+  @Get('abc-analysis')
+  @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER, Role.PROCUREMENT)
+  abcAnalysis(
+    @Query('branchId') branchId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.svc.abcAnalysis({
+      branchId: branchId ? +branchId : undefined,
+      from, to,
+    });
+  }
+
+  @Get('waste-ratio')
+  @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
+  wasteVsSalesRatio(
+    @Query('branchId') branchId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.svc.wasteVsSalesRatio({
+      branchId: branchId ? +branchId : undefined,
+      from, to,
+    });
+  }
+
+  @Get('peak-hours')
+  @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
+  peakHourHeatmap(
+    @Query('branchId') branchId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.svc.peakHourHeatmap({
+      branchId: branchId ? +branchId : undefined,
+      from, to,
+    });
+  }
+
+  @Get('customer-clv')
+  @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
+  customerLifetimeValue(
+    @Query('branchId') branchId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.svc.customerLifetimeValue({
+      branchId: branchId ? +branchId : undefined,
+      from, to,
+      limit: limit ? +limit : undefined,
+    });
+  }
 }
