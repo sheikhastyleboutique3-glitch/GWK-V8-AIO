@@ -3,7 +3,7 @@
 Durable knowledge about the system: architecture, key decisions, and conventions.
 Keep this current so anyone (human or AI) can ramp up fast.
 
-> **Snapshot:** Production-ready v1.0 · overall **~99/100** · feature parity ~95% Odoo 19 POS + ERP · fully operational on live PostgreSQL.
+> **Snapshot:** Production-ready v1.0 · overall **~99/100** · feature parity ~98% Odoo 19 POS + ERP · fully operational on live PostgreSQL.
 
 ## What it is
 All-in-one Restaurant ERP + POS targeting **Odoo 19.0 POS (Bar/Restaurant) parity**.
@@ -13,6 +13,7 @@ Multi-branch, bilingual EN/AR. One TypeScript stack end-to-end.
 - **Backend:** NestJS 10, modular (one module per domain) under `backend/src/modules/` (~43 modules).
 - **ORM/DB:** Prisma 5 + PostgreSQL. Schema at `backend/prisma/schema.prisma` (~97 models).
 - **Frontend:** React 18 + Vite + Tailwind + React Query (TanStack) + i18next (`frontend/src/`).
+- **POS Architecture:** POSPage is a thin orchestrator composing 6 focused sub-components (`frontend/src/pages/pos/`): FloorPlanView, OrdersListView, PaymentScreen, CartPanel, ProductCatalog, BatchSelectionDrawer. Each wrapped in `React.memo` with progressive product virtualization (60/page).
 - **Realtime:** Socket.IO gateway for KDS / table state (`KDS_CHANGED` event).
 - **Printing:** Category → Printer routing in DB; on-prem `agent/print-agent.mjs` pushes ESC/POS. Frontend `thermalPrint.ts` renders HTML for browser `window.print()`.
 - **PDF Exports:** `@react-pdf/renderer` client-side (Z-Report, Daily Sales, Receipt).
@@ -78,4 +79,3 @@ auth, users, branches, categories, units, products, suppliers, inventory, requis
 - Cash machine drivers (Cashdro/Glory) — needs vendor SDK
 - QR-code bank payment — needs banking API
 - Self-order online payment — needs Stripe
-- Serial/lot full selection drawer UI

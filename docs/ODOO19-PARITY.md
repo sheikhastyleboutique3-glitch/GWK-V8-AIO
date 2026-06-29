@@ -137,5 +137,3 @@ Summary: Everything built except 🔴 hardware-only items (cash machines, QR ban
 - Cash machine drivers (Cashdro/Glory) — needs vendor SDK
 - QR-code bank payment / online payment provider — needs banking API
 - Self-order online payment — needs Stripe wiring
-- Serial/lot full selection drawer UI
-- Ship-later (delayed fulfillment flag)
