@@ -4,6 +4,25 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from './contexts/AuthContext';
 import api from './lib/api';
 import { applyTheme, saveThemeLocal, themeFromSettings } from './lib/theme';
+
+/**
+ * Lazy import with retry — if a chunk fails to load (stale hash after deploy),
+ * forces a page refresh to get the new index.html with updated chunk references.
+ */
+function lazyRetry(importFn: () => Promise<any>) {
+  return lazyRetry(() => importFn().catch(() => {
+    // Chunk failed — likely stale cache. Reload the page once.
+    const hasReloaded = sessionStorage.getItem('chunk_reload');
+    if (!hasReloaded) {
+      sessionStorage.setItem('chunk_reload', '1');
+      window.location.reload();
+      return { default: () => null }; // Never rendered — page reloads
+    }
+    sessionStorage.removeItem('chunk_reload');
+    // If already reloaded once, show the original error
+    return importFn();
+  }));
+}
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -12,84 +31,84 @@ import LoadingSpinner from './components/LoadingSpinner';
 
 // ── Lazy-loaded pages (code-split into separate chunks) ─────────────────────
 // Heavy front-of-house pages
-const POSPage = lazy(() => import('./pages/POSPage'));
-const WaiterPage = lazy(() => import('./pages/WaiterPage'));
-const KDSPage = lazy(() => import('./pages/KDSPage'));
-const KioskPage = lazy(() => import('./pages/KioskPage'));
-const PublicMenuPage = lazy(() => import('./pages/PublicMenuPage'));
-const CustomerDisplayPage = lazy(() => import('./pages/CustomerDisplayPage'));
+const POSPage = lazyRetry(() => import('./pages/POSPage'));
+const WaiterPage = lazyRetry(() => import('./pages/WaiterPage'));
+const KDSPage = lazyRetry(() => import('./pages/KDSPage'));
+const KioskPage = lazyRetry(() => import('./pages/KioskPage'));
+const PublicMenuPage = lazyRetry(() => import('./pages/PublicMenuPage'));
+const CustomerDisplayPage = lazyRetry(() => import('./pages/CustomerDisplayPage'));
 
 // Sales & Analytics
-const SalesDashboardPage = lazy(() => import('./pages/SalesDashboardPage'));
-const SalesHistoryPage = lazy(() => import('./pages/SalesHistoryPage'));
-const SalesOrdersPage = lazy(() => import('./pages/SalesOrdersPage'));
-const PosReportsPage = lazy(() => import('./pages/PosReportsPage'));
-const SessionsPage = lazy(() => import('./pages/SessionsPage'));
-const ReturnWithoutReceiptPage = lazy(() => import('./pages/ReturnWithoutReceiptPage'));
+const SalesDashboardPage = lazyRetry(() => import('./pages/SalesDashboardPage'));
+const SalesHistoryPage = lazyRetry(() => import('./pages/SalesHistoryPage'));
+const SalesOrdersPage = lazyRetry(() => import('./pages/SalesOrdersPage'));
+const PosReportsPage = lazyRetry(() => import('./pages/PosReportsPage'));
+const SessionsPage = lazyRetry(() => import('./pages/SessionsPage'));
+const ReturnWithoutReceiptPage = lazyRetry(() => import('./pages/ReturnWithoutReceiptPage'));
 
 // Inventory & Supply Chain
-const InventoryPage = lazy(() => import('./pages/InventoryPage'));
-const RequisitionsPage = lazy(() => import('./pages/RequisitionsPage'));
-const NewRequisitionPage = lazy(() => import('./pages/NewRequisitionPage'));
-const RequisitionDetailPage = lazy(() => import('./pages/RequisitionDetailPage'));
-const WastagePage = lazy(() => import('./pages/WastagePage'));
-const SuppliersPage = lazy(() => import('./pages/SuppliersPage'));
-const PurchaseOrdersPage = lazy(() => import('./pages/PurchaseOrdersPage'));
-const TransfersPage = lazy(() => import('./pages/TransfersPage'));
-const StockCountPage = lazy(() => import('./pages/StockCountPage'));
-const ProductionPage = lazy(() => import('./pages/ProductionPage'));
+const InventoryPage = lazyRetry(() => import('./pages/InventoryPage'));
+const RequisitionsPage = lazyRetry(() => import('./pages/RequisitionsPage'));
+const NewRequisitionPage = lazyRetry(() => import('./pages/NewRequisitionPage'));
+const RequisitionDetailPage = lazyRetry(() => import('./pages/RequisitionDetailPage'));
+const WastagePage = lazyRetry(() => import('./pages/WastagePage'));
+const SuppliersPage = lazyRetry(() => import('./pages/SuppliersPage'));
+const PurchaseOrdersPage = lazyRetry(() => import('./pages/PurchaseOrdersPage'));
+const TransfersPage = lazyRetry(() => import('./pages/TransfersPage'));
+const StockCountPage = lazyRetry(() => import('./pages/StockCountPage'));
+const ProductionPage = lazyRetry(() => import('./pages/ProductionPage'));
 
 // Menu & Pricing
-const MenuPage = lazy(() => import('./pages/MenuPage'));
-const CategoriesPage = lazy(() => import('./pages/CategoriesPage'));
-const RecipesPage = lazy(() => import('./pages/RecipesPage'));
-const ModifiersPage = lazy(() => import('./pages/ModifiersPage'));
-const PromotionsPage = lazy(() => import('./pages/PromotionsPage'));
-const PricingPage = lazy(() => import('./pages/PricingPage'));
+const MenuPage = lazyRetry(() => import('./pages/MenuPage'));
+const CategoriesPage = lazyRetry(() => import('./pages/CategoriesPage'));
+const RecipesPage = lazyRetry(() => import('./pages/RecipesPage'));
+const ModifiersPage = lazyRetry(() => import('./pages/ModifiersPage'));
+const PromotionsPage = lazyRetry(() => import('./pages/PromotionsPage'));
+const PricingPage = lazyRetry(() => import('./pages/PricingPage'));
 
 // Team & Operations
-const StaffTasksPage = lazy(() => import('./pages/StaffTasksPage'));
-const UsersPage = lazy(() => import('./pages/UsersPage'));
-const PermissionsPage = lazy(() => import('./pages/PermissionsPage'));
-const DeliveriesPage = lazy(() => import('./pages/DeliveriesPage'));
-const CustomersPage = lazy(() => import('./pages/CustomersPage'));
-const BookingsPage = lazy(() => import('./pages/BookingsPage'));
-const TablesPage = lazy(() => import('./pages/TablesPage'));
+const StaffTasksPage = lazyRetry(() => import('./pages/StaffTasksPage'));
+const UsersPage = lazyRetry(() => import('./pages/UsersPage'));
+const PermissionsPage = lazyRetry(() => import('./pages/PermissionsPage'));
+const DeliveriesPage = lazyRetry(() => import('./pages/DeliveriesPage'));
+const CustomersPage = lazyRetry(() => import('./pages/CustomersPage'));
+const BookingsPage = lazyRetry(() => import('./pages/BookingsPage'));
+const TablesPage = lazyRetry(() => import('./pages/TablesPage'));
 
 // Finance & Insights
-const ReportsPage = lazy(() => import('./pages/ReportsPage'));
-const AdvancedAnalyticsPage = lazy(() => import('./pages/AdvancedAnalyticsPage'));
-const ReceivablesPage = lazy(() => import('./pages/ReceivablesPage'));
-const PayablesPage = lazy(() => import('./pages/PayablesPage'));
-const AlertsPage = lazy(() => import('./pages/AlertsPage'));
-const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
-const AuditLogPage = lazy(() => import('./pages/AuditLogPage'));
+const ReportsPage = lazyRetry(() => import('./pages/ReportsPage'));
+const AdvancedAnalyticsPage = lazyRetry(() => import('./pages/AdvancedAnalyticsPage'));
+const ReceivablesPage = lazyRetry(() => import('./pages/ReceivablesPage'));
+const PayablesPage = lazyRetry(() => import('./pages/PayablesPage'));
+const AlertsPage = lazyRetry(() => import('./pages/AlertsPage'));
+const NotificationsPage = lazyRetry(() => import('./pages/NotificationsPage'));
+const AuditLogPage = lazyRetry(() => import('./pages/AuditLogPage'));
 
 // Configuration & Admin
-const BranchesPage = lazy(() => import('./pages/BranchesPage'));
-const SettingsPage = lazy(() => import('./pages/SettingsPage'));
-const AdminPage = lazy(() => import('./pages/AdminPage'));
-const UnitsPage = lazy(() => import('./pages/UnitsPage'));
-const PrintersPage = lazy(() => import('./pages/PrintersPage'));
-const DiscountRulesPage = lazy(() => import('./pages/DiscountRulesPage'));
-const DeliveryPlatformsPage = lazy(() => import('./pages/DeliveryPlatformsPage'));
-const LoyaltyPage = lazy(() => import('./pages/LoyaltyPage'));
-const OrderPresetsPage = lazy(() => import('./pages/OrderPresetsPage'));
-const PaymentMethodsPage = lazy(() => import('./pages/PaymentMethodsPage'));
-const PaymentTerminalsPage = lazy(() => import('./pages/PaymentTerminalsPage'));
-const CashRoundingsPage = lazy(() => import('./pages/CashRoundingsPage'));
-const FiscalPositionsPage = lazy(() => import('./pages/FiscalPositionsPage'));
-const IotDevicesPage = lazy(() => import('./pages/IotDevicesPage'));
-const SelfOrderConfigsPage = lazy(() => import('./pages/SelfOrderConfigsPage'));
-const QrCodesPage = lazy(() => import('./pages/QrCodesPage'));
-const ProductAttributesPage = lazy(() => import('./pages/ProductAttributesPage'));
-const CombosPage = lazy(() => import('./pages/CombosPage'));
-const PricelistsPage = lazy(() => import('./pages/PricelistsPage'));
-const StaffPerformancePage = lazy(() => import('./pages/StaffPerformancePage'));
-const DigitalMenuPage = lazy(() => import('./pages/DigitalMenuPage'));
-const PosDashboardPage = lazy(() => import('./pages/PosDashboardPage'));
-const ReservationWidgetPage = lazy(() => import('./pages/ReservationWidgetPage'));
-const TablePayPage = lazy(() => import('./pages/TablePayPage'));
+const BranchesPage = lazyRetry(() => import('./pages/BranchesPage'));
+const SettingsPage = lazyRetry(() => import('./pages/SettingsPage'));
+const AdminPage = lazyRetry(() => import('./pages/AdminPage'));
+const UnitsPage = lazyRetry(() => import('./pages/UnitsPage'));
+const PrintersPage = lazyRetry(() => import('./pages/PrintersPage'));
+const DiscountRulesPage = lazyRetry(() => import('./pages/DiscountRulesPage'));
+const DeliveryPlatformsPage = lazyRetry(() => import('./pages/DeliveryPlatformsPage'));
+const LoyaltyPage = lazyRetry(() => import('./pages/LoyaltyPage'));
+const OrderPresetsPage = lazyRetry(() => import('./pages/OrderPresetsPage'));
+const PaymentMethodsPage = lazyRetry(() => import('./pages/PaymentMethodsPage'));
+const PaymentTerminalsPage = lazyRetry(() => import('./pages/PaymentTerminalsPage'));
+const CashRoundingsPage = lazyRetry(() => import('./pages/CashRoundingsPage'));
+const FiscalPositionsPage = lazyRetry(() => import('./pages/FiscalPositionsPage'));
+const IotDevicesPage = lazyRetry(() => import('./pages/IotDevicesPage'));
+const SelfOrderConfigsPage = lazyRetry(() => import('./pages/SelfOrderConfigsPage'));
+const QrCodesPage = lazyRetry(() => import('./pages/QrCodesPage'));
+const ProductAttributesPage = lazyRetry(() => import('./pages/ProductAttributesPage'));
+const CombosPage = lazyRetry(() => import('./pages/CombosPage'));
+const PricelistsPage = lazyRetry(() => import('./pages/PricelistsPage'));
+const StaffPerformancePage = lazyRetry(() => import('./pages/StaffPerformancePage'));
+const DigitalMenuPage = lazyRetry(() => import('./pages/DigitalMenuPage'));
+const PosDashboardPage = lazyRetry(() => import('./pages/PosDashboardPage'));
+const ReservationWidgetPage = lazyRetry(() => import('./pages/ReservationWidgetPage'));
+const TablePayPage = lazyRetry(() => import('./pages/TablePayPage'));
 
 type Role = string;
 

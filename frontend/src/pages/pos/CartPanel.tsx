@@ -258,9 +258,11 @@ const CartPanel = React.memo(function CartPanel(props: CartPanelProps) {
 
 
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 flex flex-col min-h-0 overflow-hidden">
+    <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 flex flex-col min-h-0 overflow-hidden max-h-full">
+      {/* Scrollable cart body — everything except the fixed payment button */}
+      <div className="flex-1 overflow-y-auto min-h-0 space-y-0">
       {mode === 'existing' ? (
-        <div className="mb-3">
+        <div className="mb-3 flex-shrink-0">
           <div className="flex items-center justify-between rounded-lg bg-primary/10 px-3 py-2">
             <div className="text-sm font-medium text-primary">
               {t('pos.settling')}: {loadedOrder?.tableName ? `${t('pos.table')} ${loadedOrder.tableName}` : loadedOrder?.orderNo}
@@ -337,7 +339,7 @@ const CartPanel = React.memo(function CartPanel(props: CartPanelProps) {
 
 
       {/* Line items */}
-      <div className="flex-1 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800 -mx-1 min-h-[6rem]">
+      <div className="divide-y divide-gray-100 dark:divide-gray-800 -mx-1 min-h-[4rem]">
         {lines.map((l, i) => (
           <div key={l.itemId ?? `${l.productId}-${i}`} className={`px-1 py-2 cursor-pointer rounded ${selectedLineIdx === i ? 'bg-emerald-50 dark:bg-emerald-900/30 ring-2 ring-emerald-500 dark:ring-emerald-400' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}
             onClick={() => setSelectedLineIdx(i)}
@@ -530,14 +532,16 @@ const CartPanel = React.memo(function CartPanel(props: CartPanelProps) {
       )}
 
 
-      {/* Totals + Payment button */}
-      <div className="border-t border-gray-200 dark:border-gray-800 mt-3 pt-3">
-        <div className="flex justify-between text-sm text-gray-500"><span>Subtotal</span><span>{subtotal.toFixed(2)}</span></div>
-        {discount > 0 && <div className="flex justify-between text-sm text-green-600"><span>Coupon {appliedCouponCode}</span><span>-{discount.toFixed(2)}</span></div>}
-        {(() => { const itemDisc = lines.reduce((s, l) => s + (l.discount ?? 0), 0); return itemDisc > 0 ? <div className="flex justify-between text-sm text-green-600"><span>Item discounts</span><span>-{itemDisc.toFixed(2)}</span></div> : null; })()}
-        <div className="flex justify-between text-lg font-bold my-2"><span>Total</span><span>{total.toFixed(2)}</span></div>
+      </div>{/* end scrollable cart body */}
+
+      {/* Totals + Payment button — sticky at bottom */}
+      <div className="border-t border-gray-200 dark:border-gray-800 pt-2 flex-shrink-0 mt-auto">
+        <div className="flex justify-between text-xs text-gray-500"><span>Subtotal</span><span>{subtotal.toFixed(2)}</span></div>
+        {discount > 0 && <div className="flex justify-between text-xs text-green-600"><span>Coupon {appliedCouponCode}</span><span>-{discount.toFixed(2)}</span></div>}
+        {(() => { const itemDisc = lines.reduce((s, l) => s + (l.discount ?? 0), 0); return itemDisc > 0 ? <div className="flex justify-between text-xs text-green-600"><span>Item discounts</span><span>-{itemDisc.toFixed(2)}</span></div> : null; })()}
+        <div className="flex justify-between text-base font-bold my-1"><span>Total</span><span>{total.toFixed(2)}</span></div>
         <button disabled={(!lines.length && !comboCart.length) || !posSession} onClick={() => setShowPayment(true)}
-          className="w-full py-3 rounded-xl bg-emerald-600 text-white font-bold text-lg disabled:opacity-50 active:scale-[0.97] transition-transform">
+          className="w-full py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm disabled:opacity-50 active:scale-[0.97] transition-transform">
           {!posSession ? t('pos.session.openSessionFirst') : `💳 Payment${total > 0 ? ` · ${total.toFixed(2)}` : ''}`}
         </button>
       </div>
