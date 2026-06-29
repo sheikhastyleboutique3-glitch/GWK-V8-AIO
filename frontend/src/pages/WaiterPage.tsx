@@ -483,9 +483,9 @@ export default function WaiterPage() {
     <div className="h-screen flex flex-col overflow-hidden">
       <OfflineBanner />
       <PageHeader title={`${t('waiter.table')} ${selectedTable.name}`} subtitle={order?.orderNo} />
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Menu grid */}
-        <div className="lg:col-span-2">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 overflow-hidden p-4">
+        {/* Menu grid — scrolls independently */}
+        <div className="lg:col-span-2 overflow-y-auto min-h-0">
           <div className="flex flex-wrap gap-2 mb-3">
             <button onClick={backToFloor} className="px-3 py-2 rounded-lg text-sm bg-gray-100 dark:bg-gray-800">
               ← {t('waiter.floor')}
@@ -558,8 +558,8 @@ export default function WaiterPage() {
           )}
         </div>
 
-        {/* Order ticket */}
-        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 flex flex-col">
+        {/* Order ticket — bounded to viewport, items scroll inside */}
+        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 flex flex-col min-h-0 overflow-hidden">
           <h3 className="text-sm font-semibold mb-3">{t('waiter.ticket')}</h3>
           <div className="flex-1 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800 -mx-1 min-h-[8rem]">
             {orderLoading ? (
