@@ -26,7 +26,7 @@ export class SelfOrderPublicController {
       this.prisma.category.findMany({ where: { isActive: true, isPosVisible: true }, orderBy: { sortOrder: 'asc' } }),
       this.prisma.product.findMany({
         where: { isActive: true, isArchived: false, isSellable: true, isAvailable: true, productType: 'MENU' },
-        select: { id: true, name: true, nameAr: true, salePrice: true, costPrice: true, categoryId: true, imageUrl: true },
+        select: { id: true, name: true, nameAr: true, salePrice: true, costPrice: true, categoryId: true, imageUrl: true, category: { select: { id: true, name: true, nameAr: true, icon: true } } },
         orderBy: { name: 'asc' },
       }),
     ]);
@@ -68,7 +68,7 @@ export class SelfOrderPublicController {
       this.prisma.category.findMany({ where: { isActive: true, isPosVisible: true }, orderBy: { sortOrder: 'asc' } }),
       this.prisma.product.findMany({
         where: { isActive: true, isArchived: false, isSellable: true, isAvailable: true, productType: 'MENU' },
-        select: { id: true, name: true, nameAr: true, salePrice: true, costPrice: true, categoryId: true, imageUrl: true, description: true, descriptionAr: true },
+        select: { id: true, name: true, nameAr: true, salePrice: true, costPrice: true, categoryId: true, imageUrl: true, description: true, descriptionAr: true, category: { select: { id: true, name: true, nameAr: true, icon: true } } },
         orderBy: { name: 'asc' },
       }),
     ]);
