@@ -486,11 +486,15 @@ export default function POSPage() {
           </div>
 
           <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 overflow-hidden p-4">
-            {/* Product Catalog */}
-            <ProductCatalog onProductSelect={onProduct} />
+            {/* On mobile: show products full-width, cart accessible via bottom sheet/tab */}
+            {/* On desktop/tablet: side-by-side layout */}
+            <div className="lg:col-span-2 overflow-hidden flex flex-col min-h-0">
+              <ProductCatalog onProductSelect={onProduct} />
+            </div>
 
-            {/* Cart Panel */}
-            <CartPanel
+            {/* Cart Panel — on mobile it's a fixed bottom bar with expand, on desktop it's the right column */}
+            <div className="hidden lg:flex lg:flex-col min-h-0">
+              <CartPanel
               branchId={branchId} mode={mode} lines={lines} comboCart={comboCart}
               cart={cart} setCart={setCart} setComboCart={setComboCart}
               channel={channel} setChannel={setChannel}
@@ -513,6 +517,21 @@ export default function POSPage() {
               refetchLoaded={refetchLoaded} canRefund={canRefund}
               shipLater={shipLater} setShipLater={setShipLater}
             />
+            </div>
+
+            {/* Mobile bottom cart bar — shows on phones (lg:hidden) */}
+            <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 shadow-lg safe-area-bottom">
+              <div className="flex items-center gap-2 px-4 py-2">
+                <div className="flex-1">
+                  <div className="text-xs text-gray-500">{lines.length} item{lines.length !== 1 ? 's' : ''}</div>
+                  <div className="text-lg font-bold">{total.toFixed(2)}</div>
+                </div>
+                <button onClick={() => setShowPayment(true)} disabled={!lines.length || !posSession}
+                  className="px-6 py-3 rounded-xl bg-emerald-600 text-white font-bold text-sm disabled:opacity-50 active:scale-[0.97]">
+                  💳 Pay
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -353,6 +353,37 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* Mobile safe area bottom padding (for fixed bottom bars on iPhone) */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Use dvh for full-screen POS pages (respects mobile keyboard + nav bars) */
+.h-screen {
+  height: 100dvh;
+}
+
+/* Phone-specific POS tweaks */
+@media (max-width: 1023px) {
+  /* Add bottom padding on POS order view so content isn't hidden behind mobile cart bar */
+  .lg\\:grid-cols-3 {
+    padding-bottom: 80px !important;
+  }
+}
+
+/* Landscape phone (POS optimized) */
+@media (max-height: 500px) and (orientation: landscape) {
+  /* Compact header in landscape */
+  [class*="py-2"][class*="bg-gray-900"] {
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+  }
+  /* Smaller product cards in landscape */
+  [class*="grid-cols-2"][class*="gap-3"] > * {
+    min-height: auto !important;
+  }
+}
+
 
 /* =============================================================================
    RTL (Right-to-Left) FIXES
