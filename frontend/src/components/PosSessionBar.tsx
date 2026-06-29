@@ -186,23 +186,20 @@ export default function PosSessionBar({ branchId, businessInfo }: { branchId?: n
         </div>
       </div>
 
-      {/* Closing Cash Count Modal */}
-      <Modal open={showClose} onClose={() => setShowClose(false)} title="Closing Cash Count" size="md">
-        <p className="text-xs text-gray-500 mb-3">Count all cash in the drawer by denomination. The system will compare against expected.</p>
-        <DenomGrid rows={closeDenoms} onChange={(i, c) => updateDenom(closeDenoms, setCloseDenoms, i, c)} />
-        <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-200 dark:border-gray-800">
-          <span className="text-lg font-bold">Counted: {denomTotal(closeDenoms).toFixed(2)}</span>
-          <div className="flex gap-2">
-            <button onClick={() => setShowClose(false)} className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm">Cancel</button>
-            <button
-              onClick={() => closeMut.mutate()}
-              disabled={closeMut.isPending}
-              className="px-5 py-2 rounded-lg bg-red-600 text-white text-sm font-medium disabled:opacity-50"
-            >
-              {closeMut.isPending ? 'Closing...' : 'Close & Print Z-Report'}
-            </button>
-          </div>
-        </div>
+      {/* Closing Session Panel (Odoo-style with payment method breakdown) */}
+      <Modal open={showClose} onClose={() => setShowClose(false)} title="Closing Session" size="lg">
+        {/* Payment Method Summary (fetched from X-Report) */}
+        <ClosingPanel
+          sessionId={session.id}
+          branchId={branchId!}
+          closeDenoms={closeDenoms}
+          setCloseDenoms={(denoms) => setCloseDenoms(denoms)}
+          onUpdateDenom={(i, c) => updateDenom(closeDenoms, setCloseDenoms, i, c)}
+          onClose={() => closeMut.mutate()}
+          onDiscard={() => setShowClose(false)}
+          onBackend={() => { setShowClose(false); navigate('/'); }}
+          isClosing={closeMut.isPending}
+        />
       </Modal>
       <PromptDialog />
     </>
@@ -243,6 +240,140 @@ function DenomGrid({ rows, onChange }: { rows: DenomRow[]; onChange: (index: num
           </span>
         </div>
       ))}
+    </div>
+  );
+}
+
+
+/** Odoo-style Closing Session Panel — shows payment method breakdown + cash count */
+function ClosingPanel({
+  sessionId,
+  branchId,
+  closeDenoms,
+  onUpdateDenom,
+  onClose,
+  onDiscard,
+  onBackend,
+  isClosing,
+}: {
+  sessionId: number;
+  branchId: number;
+  closeDenoms: DenomRow[];
+  setCloseDenoms: (v: DenomRow[]) => void;
+  onUpdateDenom: (i: number, c: number) => void;
+  onClose: () => void;
+  onDiscard: () => void;
+  onBackend: () => void;
+  isClosing: boolean;
+}) {
+  // Fetch the X-Report data for payment breakdown
+  const { data: report } = useQuery({
+    queryKey: ['pos-session-report', sessionId],
+    queryFn: () => api.get(`/pos-sessions/${sessionId}/report`).then((r) => r.data.data),
+    enabled: !!sessionId,
+  });
+
+  const counted = denomTotal(closeDenoms);
+  const expectedCash = report?.expectedCash ?? 0;
+  const difference = +(counted - expectedCash).toFixed(2);
+
+  return (
+    <div className="space-y-4">
+      {/* Header: Total orders + revenue */}
+      <div className="flex justify-between items-center text-sm">
+        <span className="font-medium text-gray-600 dark:text-gray-400">Total {report?.orderCount ?? 0} orders</span>
+        <span className="font-bold text-lg">{(report?.salesTotal ?? 0).toFixed(2)} QAR</span>
+      </div>
+
+      {/* Payment Method Breakdown (Odoo-style table) */}
+      <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 dark:bg-gray-800">
+            <tr>
+              <th className="text-left px-4 py-2 font-medium text-gray-600 dark:text-gray-400">Payment Method</th>
+              <th className="text-right px-4 py-2 font-medium text-gray-600 dark:text-gray-400">Expected</th>
+              <th className="text-right px-4 py-2 font-medium text-gray-600 dark:text-gray-400">Counted</th>
+              <th className="text-right px-4 py-2 font-medium text-gray-600 dark:text-gray-400">Difference</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+            {/* Cash row — editable */}
+            <tr className="bg-white dark:bg-gray-900">
+              <td className="px-4 py-3 font-medium">Cash</td>
+              <td className="px-4 py-3 text-right">{expectedCash.toFixed(2)}</td>
+              <td className="px-4 py-3 text-right font-bold">{counted.toFixed(2)}</td>
+              <td className={`px-4 py-3 text-right font-bold ${difference < 0 ? 'text-red-600' : difference > 0 ? 'text-emerald-600' : ''}`}>
+                {difference !== 0 ? `${difference > 0 ? '+' : ''}${difference.toFixed(2)}` : '—'}
+              </td>
+            </tr>
+            {/* Sub-detail: Opening float */}
+            <tr className="bg-gray-50/50 dark:bg-gray-800/30 text-xs text-gray-500">
+              <td className="px-4 py-1.5 ps-8">Opening</td>
+              <td className="px-4 py-1.5 text-right">{(report?.session?.openingFloat ?? 0).toFixed(2)}</td>
+              <td></td>
+              <td></td>
+            </tr>
+            {/* Sub-detail: Cash difference note */}
+            {difference !== 0 && (
+              <tr className="bg-gray-50/50 dark:bg-gray-800/30 text-xs">
+                <td className="px-4 py-1.5 ps-8 text-gray-500">+ Cash difference observed during counting ({difference > 0 ? 'Profit' : 'Loss'})</td>
+                <td className="px-4 py-1.5 text-right">{Math.abs(difference).toFixed(2)}</td>
+                <td></td>
+                <td></td>
+              </tr>
+            )}
+            {/* Other payment methods */}
+            {Object.entries(report?.paymentsByMethod ?? {}).filter(([m]) => m !== 'CASH').map(([method, amount]) => (
+              <tr key={method} className="bg-white dark:bg-gray-900">
+                <td className="px-4 py-3">{method.replace(/_/g, ' ')}</td>
+                <td className="px-4 py-3 text-right">{Number(amount).toFixed(2)}</td>
+                <td className="px-4 py-3 text-right text-gray-400">—</td>
+                <td className="px-4 py-3 text-right text-gray-400">—</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Cash Denomination Grid (collapsible) */}
+      <details className="group">
+        <summary className="cursor-pointer text-xs font-medium text-primary hover:underline">
+          Count by denomination ▾
+        </summary>
+        <div className="mt-2">
+          <DenomGrid rows={closeDenoms} onChange={onUpdateDenom} />
+        </div>
+      </details>
+
+      {/* Closing note */}
+      <textarea
+        placeholder="Add a closing note..."
+        className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm resize-none"
+        rows={2}
+      />
+
+      {/* Action buttons (Odoo-style: Close Session / Backend / Discard) */}
+      <div className="flex items-center gap-3 pt-2 border-t border-gray-200 dark:border-gray-800">
+        <button
+          onClick={onClose}
+          disabled={isClosing}
+          className="px-5 py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-bold disabled:opacity-50 hover:bg-emerald-700 transition"
+        >
+          {isClosing ? 'Closing...' : 'Close Session'}
+        </button>
+        <button
+          onClick={onBackend}
+          className="px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+        >
+          Backend
+        </button>
+        <button
+          onClick={onDiscard}
+          className="px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+        >
+          Discard
+        </button>
+      </div>
     </div>
   );
 }
