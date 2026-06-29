@@ -138,6 +138,33 @@ export default function App() {
       <Route path="/kiosk/:configId" element={<KioskPage />} />
       <Route path="/order/:branchId" element={<PublicMenuPage />} />
       <Route path="/display/:branchId" element={<CustomerDisplayPage />} />
+
+      {/* ── Full-screen workspaces (Odoo-style: no sidebar, no top bar) ── */}
+      <Route
+        path="/pos"
+        element={
+          <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER']}>
+            <POSPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/waiter"
+        element={
+          <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'WAITER']}>
+            <WaiterPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/kds"
+        element={
+          <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'KITCHEN', 'PASTRY', 'BARISTA']}>
+            <KDSPage />
+          </ProtectedRoute>
+        }
+      />
+
       <Route
         path="/"
         element={
@@ -155,23 +182,7 @@ export default function App() {
         <Route path="wastage" element={<WastagePage />} />
         <Route path="alerts" element={<AlertsPage />} />
 
-        {/* Restaurant POS / Kitchen / Sales — front-of-house */}
-        <Route
-          path="pos"
-          element={
-            <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER']}>
-              <POSPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="kds"
-          element={
-            <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'KITCHEN', 'PASTRY', 'BARISTA']}>
-              <KDSPage />
-            </ProtectedRoute>
-          }
-        />
+        {/* Restaurant POS / Kitchen / Sales — front-of-house (full-screen routes above) */}
         <Route
           path="sales-dashboard"
           element={
@@ -201,14 +212,6 @@ export default function App() {
           element={
             <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'WAITER']}>
               <BookingsPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="waiter"
-          element={
-            <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'WAITER']}>
-              <WaiterPage />
             </ProtectedRoute>
           }
         />
