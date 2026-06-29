@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../lib/api';
 import { printSessionReport, BusinessInfo } from '../lib/thermalPrint';
@@ -17,6 +18,8 @@ const denomTotal = (rows: DenomRow[]) => rows.reduce((s, r) => s + r.denominatio
 export default function PosSessionBar({ branchId, businessInfo }: { branchId?: number; businessInfo: BusinessInfo }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [showOpen, setShowOpen] = useState(false);
   const [showClose, setShowClose] = useState(false);
   const [openDenoms, setOpenDenoms] = useState<DenomRow[]>(emptyDenoms());
@@ -45,6 +48,10 @@ export default function PosSessionBar({ branchId, businessInfo }: { branchId?: n
       setShowOpen(false);
       setOpenDenoms(emptyDenoms());
       await qc.refetchQueries({ queryKey: ['pos-session-current', branchId] });
+      // Odoo behavior: auto-navigate to POS after opening session
+      if (!location.pathname.startsWith('/pos')) {
+        navigate('/pos');
+      }
     },
     onError: (e: any) => toast.error(e.response?.data?.message || 'Failed'),
   });
