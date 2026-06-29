@@ -532,7 +532,7 @@ export default function POSPage() {
                   </div>
                   <div className="divide-y divide-gray-100 dark:divide-gray-800">
                     {lines.map((l, i) => (
-                      <div key={l.itemId ?? `${l.productId}-${i}`} className="flex items-center justify-between py-2">
+                      <div key={l.itemId ?? `${l.productId}-${i}`} className="flex items-center justify-between py-2.5">
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{l.name}</div>
                           {l.modifiers && l.modifiers.length > 0 && (
@@ -540,18 +540,33 @@ export default function POSPage() {
                           )}
                         </div>
                         <div className="flex items-center gap-2 ms-2">
-                          <button onClick={() => setCart(prev => prev.map((c, idx) => idx === i ? { ...c, quantity: Math.max(1, c.quantity - 1) } : c))}
-                            className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm font-bold flex items-center justify-center">−</button>
-                          <span className="text-sm font-semibold w-5 text-center">{l.quantity}</span>
-                          <button onClick={() => setCart(prev => prev.map((c, idx) => idx === i ? { ...c, quantity: c.quantity + 1 } : c))}
-                            className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm font-bold flex items-center justify-center">+</button>
+                          <button onClick={() => {
+                            if (mode === 'new') {
+                              setCart(prev => prev.flatMap((c, idx) => idx === i ? (c.quantity <= 1 ? [] : [{ ...c, quantity: c.quantity - 1 }]) : [c]));
+                            } else if (l.itemId && l.quantity > 1) {
+                              api.patch(`/sales/orders/${loadedOrderId}/items/${l.itemId}`, { quantity: l.quantity - 1 }).then(() => refetchLoaded());
+                            }
+                          }} className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-800 text-base font-bold flex items-center justify-center active:scale-90">−</button>
+                          <span className="text-sm font-bold w-5 text-center">{l.quantity}</span>
+                          <button onClick={() => {
+                            if (mode === 'new') {
+                              setCart(prev => prev.map((c, idx) => idx === i ? { ...c, quantity: c.quantity + 1 } : c));
+                            } else if (l.itemId) {
+                              api.patch(`/sales/orders/${loadedOrderId}/items/${l.itemId}`, { quantity: l.quantity + 1 }).then(() => refetchLoaded());
+                            }
+                          }} className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-800 text-base font-bold flex items-center justify-center active:scale-90">+</button>
                           <span className="text-sm font-semibold w-14 text-end">{(l.unitPrice * l.quantity).toFixed(2)}</span>
-                          <button onClick={() => setCart(prev => prev.filter((_, idx) => idx !== i))}
-                            className="w-6 h-6 rounded-full bg-red-100 text-red-600 text-xs flex items-center justify-center">✕</button>
+                          <button onClick={() => {
+                            if (mode === 'new') {
+                              setCart(prev => prev.filter((_, idx) => idx !== i));
+                            } else if (l.itemId) {
+                              api.patch(`/sales/orders/${loadedOrderId}/items/${l.itemId}`, { isVoided: true, voidReason: 'Removed from mobile' }).then(() => refetchLoaded());
+                            }
+                          }} className="w-7 h-7 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 text-xs font-bold flex items-center justify-center active:scale-90">✕</button>
                         </div>
                       </div>
                     ))}
-                    {!lines.length && <p className="text-sm text-gray-400 text-center py-4">No items yet</p>}
+                    {!lines.length && <p className="text-sm text-gray-400 text-center py-4">No items yet — tap products to add</p>}
                   </div>
                 </div>
               )}
