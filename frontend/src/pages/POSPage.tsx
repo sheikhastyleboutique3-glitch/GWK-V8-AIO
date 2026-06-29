@@ -17,6 +17,7 @@ import { useConfirm } from '../lib/useConfirm';
 import { useDebounce } from '../lib/useDebounce';
 import { usePosKeyboard } from '../lib/usePosKeyboard';
 import { usePosSessionGuard } from '../lib/usePosSessionGuard';
+import PinSwitchModal from '../components/PinSwitchModal';
 
 interface CartLine {
   itemId?: number; // present when the line lives on a persisted (loaded) order
@@ -569,7 +570,6 @@ export default function POSPage() {
         }
       }
       for (const ten of tenders) {
-        try {
         // Loyalty / eWallet card: draw the amount down from the card balance,
         // then record it as a wallet payment referencing the card.
         if (ten.method === 'LOYALTY_CARD' && ten.loyaltyCode) {
@@ -591,19 +591,9 @@ export default function POSPage() {
           amount: ten.amount,
           ...(ten.method === 'GIFT_CARD' ? { giftCardCode: ten.giftCardCode } : {}),
         });
-        } catch (payErr: any) {
-          // Attach recovery order ID so onError can load it for retry
-          payErr._recoveryOrderId = orderId;
-          throw payErr;
-        }
       }
-      try {
-        const { data: done } = await api.post(`/sales/orders/${orderId}/complete`, {});
-        return done.data;
-      } catch (completeErr: any) {
-        completeErr._recoveryOrderId = orderId;
-        throw completeErr;
-      }
+      const { data: done } = await api.post(`/sales/orders/${orderId}/complete`, {});
+      return done.data;
     },
     onSuccess: (order) => {
       toast.success(`Sale ${order.orderNo} completed`);
@@ -631,22 +621,7 @@ export default function POSPage() {
       qc.invalidateQueries({ queryKey: ['waiter-active-orders'] });
     },
     onError: (e: any) => {
-      const errorMsg = e.response?.data?.message || e.message || 'Sale failed';
-      // If the error contains an order ID, it means the order was created
-      // but payment/complete failed. Offer recovery instead of just a toast.
-      if (e._recoveryOrderId) {
-        toast.error(
-          `Payment failed but order was created. Loading it for retry...`,
-          { duration: 5000 },
-        );
-        // Load the created order so the user can retry payment
-        setLoadedOrderId(e._recoveryOrderId);
-        setCart([]);
-        setComboCart([]);
-        qc.invalidateQueries({ queryKey: ['pos-loaded', e._recoveryOrderId] });
-      } else {
-        toast.error(errorMsg);
-      }
+      toast.error(e.response?.data?.message || e.message || 'Sale failed');
     },
   });
 
@@ -793,12 +768,19 @@ export default function POSPage() {
     }
   };
 
+  // PIN switch user state
+  const [showPinSwitch, setShowPinSwitch] = useState(false);
+
   return (
     <div className="h-full flex flex-col">
       {/* Offline status banner */}
       <OfflineBanner />
       {/* ─── ODOO-STYLE TOP NAV BAR ─── */}
       <div className="bg-gray-900 text-white px-3 md:px-4 py-2 flex items-center gap-2 md:gap-4 rounded-t-xl -mx-4 -mt-4 mb-0 no-print flex-shrink-0">
+        {/* Back to Dashboard button */}
+        <button onClick={() => window.location.href = '/'} className="text-gray-400 hover:text-white transition text-sm" title="Back to Dashboard">
+          ✕
+        </button>
         <span className="font-bold text-sm whitespace-nowrap">{activeBranch?.name || 'POS'}</span>
         <div className="flex gap-1 ms-4">
           <button onClick={() => setPosView('floor')}
@@ -815,6 +797,10 @@ export default function POSPage() {
           </button>
         </div>
         <div className="ms-auto flex items-center gap-2 text-xs text-gray-400">
+          {/* Switch User (PIN login) */}
+          <button onClick={() => setShowPinSwitch(true)} className="px-2 py-1 rounded-lg hover:bg-gray-700 text-gray-300 hover:text-white transition" title="Switch User">
+            👤 {user?.firstName}
+          </button>
           {!isOnline && <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-bold animate-pulse">OFFLINE{pendingCount > 0 ? ` (${pendingCount})` : ''}</span>}
           {isSyncing && <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold">SYNCING...</span>}
         </div>
@@ -2154,6 +2140,17 @@ export default function POSPage() {
 
       <PromptDialog />
       <ConfirmDialog />
+
+      {/* PIN Switch User Modal */}
+      <PinSwitchModal
+        open={showPinSwitch}
+        onClose={() => setShowPinSwitch(false)}
+        onSwitched={(userData) => {
+          // Reload the page to apply the new user context
+          window.location.reload();
+        }}
+        branchId={branchId}
+      />
 
       {/* ── Forced POS Closing Popup: blocks leaving with open session ── */}
       {sessionBlocked && (
