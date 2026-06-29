@@ -71,6 +71,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'inventory',
     items: [
+      { key: 'warehouseItems', path: '/warehouse-items', icon: ArchiveBoxIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'PROCUREMENT', 'WAREHOUSE'] },
       { key: 'inventory',    path: '/inventory',    icon: ArchiveBoxIcon,            roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'PROCUREMENT', 'WAREHOUSE'] },
       { key: 'stockCount',   path: '/stock-count',  icon: ClipboardDocumentCheckIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'WAREHOUSE'] },
       { key: 'production',   path: '/production',   icon: FireIcon,                  roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'KITCHEN', 'PASTRY', 'WAREHOUSE'] },
