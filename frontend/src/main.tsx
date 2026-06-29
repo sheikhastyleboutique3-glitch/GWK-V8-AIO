@@ -31,23 +31,22 @@ initSyncManager();
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 3,
-      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
-      staleTime: 30_000, // 30s — general queries don't refetch if fresh
-      gcTime: 10 * 60_000, // 10min — keep in cache even if unused
-      refetchOnWindowFocus: false, // Disabled — WebSocket handles real-time sync
+      retry: 1, // Single retry (was 3 — too slow on flaky networks)
+      retryDelay: 1000, // 1s flat (was exponential up to 10s)
+      staleTime: 5 * 60_000, // 5 MINUTES — data is considered fresh much longer
+      gcTime: 30 * 60_000, // 30min — keep in cache even if unused
+      refetchOnWindowFocus: false, // WebSocket handles real-time sync
       refetchOnReconnect: true,
-      // Keep previous data visible while refetching — prevents "flash of empty"
+      // Show previous data instantly while background refetch happens
       placeholderData: (prev: any) => prev,
     },
     mutations: {
-      // Mutations should not retry by default (avoid double-charge, etc.)
       retry: false,
     },
   },
 });
 
-// ─── Prefetch critical POS data on app boot (products/categories load instantly) ───
+// ─── Prefetch critical data on app boot (pages load instantly from cache) ───
 const token = localStorage.getItem('token');
 if (token) {
   // Preload ALL critical data into cache (survives offline for entire shift)
@@ -58,16 +57,42 @@ if (token) {
       // Seed React Query cache with the preloaded data (instant page loads)
       if (data.categories?.length) {
         queryClient.setQueryData(['pos-categories'], data.categories);
+        queryClient.setQueryData(['all-categories'], data.categories);
+        queryClient.setQueryData(['catalog-categories'], data.categories);
       }
       if (data.products?.length) {
         queryClient.setQueryData(['pos-products', undefined, ''], data.products);
         queryClient.setQueryData(['menu-items', '', ''], data.products);
+        queryClient.setQueryData(['warehouse-items', '', ''], data.products);
       }
       if (data.modifierGroups?.length) {
         queryClient.setQueryData(['modifier-groups'], data.modifierGroups);
       }
+      if (data.branches?.length) {
+        queryClient.setQueryData(['branches-switcher'], data.branches);
+        queryClient.setQueryData(['branches-qr'], data.branches);
+      }
     });
   });
+
+  // Prefetch common API data in background (non-blocking)
+  setTimeout(() => {
+    import('./lib/api').then(({ default: api }) => {
+      const branchRaw = localStorage.getItem('activeBranch');
+      const branchId = branchRaw ? JSON.parse(branchRaw)?.id : undefined;
+      // Prefetch suppliers, units, customers — common across many pages
+      api.get('/suppliers').then(r => queryClient.setQueryData(['suppliers'], r.data.data)).catch(() => {});
+      api.get('/units').then(r => queryClient.setQueryData(['units'], r.data.data)).catch(() => {});
+      api.get('/delivery-platforms').then(r => queryClient.setQueryData(['delivery-platforms'], r.data.data)).catch(() => {});
+      api.get('/discount-rules', { params: { activeOnly: true } }).then(r => queryClient.setQueryData(['discount-rules-active'], r.data.data)).catch(() => {});
+      if (branchId) {
+        api.get('/floors', { params: { branchId } }).then(r => {
+          queryClient.setQueryData(['pos-floors', branchId], r.data.data);
+          queryClient.setQueryData(['waiter-floors', branchId], r.data.data);
+        }).catch(() => {});
+      }
+    });
+  }, 500); // 500ms delay — let the UI render first
 
   // Also sync local stock estimates (for offline stock warnings)
   import('./lib/offlineCache').then(({ syncLocalStock }) => {
