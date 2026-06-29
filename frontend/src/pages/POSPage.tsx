@@ -1216,7 +1216,7 @@ export default function POSPage() {
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 overflow-hidden p-4">
         {/* Catalog — scrolls independently */}
-        <div className="lg:col-span-2 overflow-y-auto">
+        <div className="lg:col-span-2 overflow-y-auto min-h-0">
           <div className="flex flex-wrap gap-2 mb-3">
             <input
               value={search}
@@ -1276,8 +1276,8 @@ export default function POSPage() {
           )}
         </div>
 
-        {/* Cart / bill */}
-        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 flex flex-col overflow-y-auto">
+        {/* Cart / bill — bounded to viewport, items scroll inside */}
+        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 flex flex-col min-h-0 overflow-hidden">
           {mode === 'existing' ? (
             <div className="mb-3">
               <div className="flex items-center justify-between rounded-lg bg-primary/10 px-3 py-2">
