@@ -82,10 +82,12 @@ export default function DashboardPage() {
 
   // Check if there's an active POS session for the current branch (for Continue Session banner)
   const canSeePOS = ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER'].includes(user?.role || '');
+  const isKitchenRole = ['KITCHEN', 'PASTRY', 'BARISTA'].includes(user?.role || '');
+  const isWaiterRole = user?.role === 'WAITER';
   const { data: activeSession } = useQuery({
     queryKey: ['pos-session-current', effectiveBranchId],
     queryFn: () => api.get('/pos-sessions/current', { params: { branchId: effectiveBranchId } }).then(r => r.data.data),
-    enabled: canSeePOS && !!effectiveBranchId,
+    enabled: (canSeePOS || isKitchenRole || isWaiterRole) && !!effectiveBranchId,
     ...QUERY_OPTS,
   });
 
@@ -132,7 +134,7 @@ export default function DashboardPage() {
       {showOnboarding && <OnboardingWizard onDismiss={() => setShowOnboarding(false)} />}
 
       {/* ── Continue POS Session Banner (Odoo-style) ── */}
-      {activeSession && (
+      {activeSession && canSeePOS && (
         <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 rounded-2xl p-5 text-white flex items-center justify-between gap-4 shadow-lg">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center text-2xl">💳</div>
@@ -148,6 +150,48 @@ export default function DashboardPage() {
             className="px-6 py-3 rounded-xl bg-white text-emerald-700 font-bold text-sm hover:bg-emerald-50 transition shadow-md"
           >
             Continue Session →
+          </button>
+        </div>
+      )}
+
+      {/* ── Kitchen Display Banner (for kitchen roles) ── */}
+      {isKitchenRole && (
+        <div className="bg-gradient-to-r from-orange-600 to-red-500 rounded-2xl p-5 text-white flex items-center justify-between gap-4 shadow-lg">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center text-2xl">🍳</div>
+            <div>
+              <h3 className="font-bold text-lg">Kitchen Display</h3>
+              <p className="text-orange-100 text-sm">
+                {activeSession ? 'Orders are coming in — get to your station!' : 'View and manage kitchen orders'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/kds')}
+            className="px-6 py-3 rounded-xl bg-white text-orange-700 font-bold text-sm hover:bg-orange-50 transition shadow-md"
+          >
+            Open KDS →
+          </button>
+        </div>
+      )}
+
+      {/* ── Waiter Station Banner (for waiter role) ── */}
+      {isWaiterRole && (
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-500 rounded-2xl p-5 text-white flex items-center justify-between gap-4 shadow-lg">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center text-2xl">🍽️</div>
+            <div>
+              <h3 className="font-bold text-lg">Waiter Station</h3>
+              <p className="text-blue-100 text-sm">
+                {activeSession ? 'Session is open — tables are waiting!' : 'Manage tables and take orders'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/waiter')}
+            className="px-6 py-3 rounded-xl bg-white text-blue-700 font-bold text-sm hover:bg-blue-50 transition shadow-md"
+          >
+            Open Floor Plan →
           </button>
         </div>
       )}
