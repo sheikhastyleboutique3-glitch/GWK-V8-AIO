@@ -217,7 +217,7 @@ export default function KDSPage() {
     <div className="h-screen flex flex-col overflow-hidden p-4">
       {/* Top bar with back button */}
       <div className="flex items-center gap-3 mb-3 flex-shrink-0">
-        <button onClick={() => window.location.href = '/'} className="text-gray-400 hover:text-gray-700 dark:hover:text-white transition text-lg" title="Back to Dashboard">✕</button>
+        <button onClick={() => window.location.replace('/')} className="text-gray-400 hover:text-gray-700 dark:hover:text-white transition text-lg" title="Back to Dashboard">✕</button>
         <h1 className="font-bold text-lg">{t('nav.kds')}</h1>
         {activeBranch?.name && <span className="text-sm text-gray-500">{activeBranch.name}</span>}
       </div>

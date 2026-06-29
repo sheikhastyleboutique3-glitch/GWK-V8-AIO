@@ -778,7 +778,7 @@ export default function POSPage() {
       {/* ─── ODOO-STYLE TOP NAV BAR ─── */}
       <div className="bg-gray-900 text-white px-4 py-2 flex items-center gap-3 flex-shrink-0">
         {/* Back to Dashboard button */}
-        <button onClick={() => window.location.href = '/'} className="text-gray-400 hover:text-white transition text-lg" title="Back to Dashboard">
+        <button onClick={() => window.location.replace('/')} className="text-gray-400 hover:text-white transition text-lg" title="Back to Dashboard">
           ✕
         </button>
         <span className="font-bold text-sm whitespace-nowrap">{activeBranch?.name || 'POS'}</span>

@@ -364,7 +364,7 @@ export default function WaiterPage() {
         <OfflineBanner />
         {/* Top nav bar (full-screen mode) */}
         <div className="bg-gray-900 text-white px-4 py-2 flex items-center gap-3 flex-shrink-0">
-          <button onClick={() => window.location.href = '/'} className="text-gray-400 hover:text-white transition text-lg" title="Back">✕</button>
+          <button onClick={() => window.location.replace('/')} className="text-gray-400 hover:text-white transition text-lg" title="Back">✕</button>
           <span className="font-bold text-sm">{activeBranch?.name || t('nav.waiter')}</span>
           <span className="text-xs text-gray-400">Waiter · {user?.firstName}</span>
           <div className="ms-auto flex items-center gap-2">
@@ -482,7 +482,15 @@ export default function WaiterPage() {
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       <OfflineBanner />
-      <PageHeader title={`${t('waiter.table')} ${selectedTable.name}`} subtitle={order?.orderNo} />
+      {/* Top nav bar */}
+      <div className="bg-gray-900 text-white px-4 py-2 flex items-center gap-3 flex-shrink-0">
+        <button onClick={() => window.location.replace('/')} className="text-gray-400 hover:text-white transition text-lg" title="Back">✕</button>
+        <span className="font-bold text-sm">{activeBranch?.name || t('nav.waiter')}</span>
+        <span className="text-xs text-gray-400">Table {selectedTable.name} · {user?.firstName}</span>
+        <div className="ms-auto flex items-center gap-2">
+          <button onClick={() => setShowPinSwitch(true)} className="px-2 py-1 rounded-lg hover:bg-gray-700 text-gray-300 hover:text-white transition text-xs">👤 Switch</button>
+        </div>
+      </div>
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 overflow-hidden p-4">
         {/* Menu grid — scrolls independently */}
         <div className="lg:col-span-2 overflow-y-auto min-h-0">
