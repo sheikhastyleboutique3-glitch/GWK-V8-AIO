@@ -207,7 +207,7 @@ export default function QrCodesPage() {
               />
               {/* Label */}
               <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{qr.label}</div>
-              <div className="text-xs text-gray-400 mt-0.5 truncate">{qr.sublabel}</div>
+              <div className="text-[10px] text-blue-600 dark:text-blue-400 mt-0.5 break-all select-all cursor-text" title="Click to select">{qr.url}</div>
               {/* Actions */}
               <div className="flex gap-1 mt-3 justify-center">
                 <button
@@ -218,8 +218,34 @@ export default function QrCodesPage() {
                   ⬇️ SVG
                 </button>
                 <button
-                  onClick={() => { navigator.clipboard.writeText(qr.url).then(() => { import('react-hot-toast').then(m => m.default.success('Link copied!')); }).catch(() => { const ta = document.createElement('textarea'); ta.value = qr.url; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); import('react-hot-toast').then(m => m.default.success('Link copied!')); }); }}
-                  className="px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs hover:bg-gray-200 dark:hover:bg-gray-700"
+                  onClick={() => {
+                    const url = qr.url;
+                    // Try modern clipboard API first
+                    if (navigator.clipboard && window.isSecureContext) {
+                      navigator.clipboard.writeText(url).then(() => {
+                        import('react-hot-toast').then(m => m.default.success(`Copied: ${url}`));
+                      });
+                    } else {
+                      // Fallback for HTTP: create a temporary input, select, and copy
+                      const input = document.createElement('input');
+                      input.style.position = 'fixed';
+                      input.style.left = '-9999px';
+                      input.value = url;
+                      document.body.appendChild(input);
+                      input.focus();
+                      input.select();
+                      input.setSelectionRange(0, url.length);
+                      try {
+                        document.execCommand('copy');
+                        import('react-hot-toast').then(m => m.default.success(`Copied: ${url}`));
+                      } catch {
+                        // Last resort: show the URL in a prompt so user can copy manually
+                        window.prompt('Copy this URL:', url);
+                      }
+                      document.body.removeChild(input);
+                    }
+                  }}
+                  className="px-2 py-1 rounded-lg bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-200 text-xs hover:bg-blue-200 dark:hover:bg-blue-700 font-medium"
                   title="Copy link"
                 >
                   📋 Copy

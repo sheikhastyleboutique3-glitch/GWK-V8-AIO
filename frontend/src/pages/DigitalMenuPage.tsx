@@ -101,27 +101,20 @@ export default function DigitalMenuPage() {
     };
   }, [settings]);
 
-  // ─── Fetch Categories ───────────────────────────────────────────────────
-  const { data: categories } = useQuery({
-    queryKey: ['menu-categories'],
-    queryFn: () => fetch('/api/categories?posVisible=true').then(r => r.json()).then(d => d.data),
-    staleTime: 2 * 60_000,
+  // ─── Fetch Categories + Products from PUBLIC self-order endpoint ──────
+  const { data: menuData, isLoading } = useQuery({
+    queryKey: ['digital-menu-data', bid],
+    queryFn: () => fetch(`/api/self-order/branch/${bid}/menu`).then(r => {
+      if (!r.ok) throw new Error('Branch not found');
+      return r.json();
+    }).then(d => d.data),
+    staleTime: 60_000,
+    refetchInterval: 30_000,
   });
 
-  // ─── Fetch Products (only available + sellable) ─────────────────────────
-  const { data: products, isLoading } = useQuery({
-    queryKey: ['menu-products', bid],
-    queryFn: () => fetch(`/api/products?sellable=true&available=true&productType=MENU`).then(r => r.json()).then(d => d.data),
-    staleTime: 60_000,
-    refetchInterval: 30_000, // Catch 86'd items within 30s
-  });
-
-  // ─── Fetch Branch (check if open) ──────────────────────────────────────
-  const { data: branch } = useQuery({
-    queryKey: ['menu-branch', bid],
-    queryFn: () => fetch(`/api/branches/${bid}`).then(r => r.json()).then(d => d.data).catch(() => null),
-    staleTime: 60_000,
-  });
+  const categories = menuData?.categories || [];
+  const products = menuData?.products || [];
+  const branch = menuData?.branch || null;
 
   // Filter products
   const filtered = useMemo(() => {
