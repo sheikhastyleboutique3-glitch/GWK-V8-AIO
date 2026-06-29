@@ -110,6 +110,7 @@ async function main() {
 
   // Alias for backward compatibility (referenced throughout the seed)
   const branchDoha = branchGwkDohaPort;
+  const branchWakra = branchGwkWestWalk; // Legacy name — West Walk is the main branch
 
   // ==========================================================================
   // DELIVERY PLATFORMS (third-party aggregators)
