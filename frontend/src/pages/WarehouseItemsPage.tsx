@@ -39,13 +39,18 @@ export default function WarehouseItemsPage() {
     queryFn: () => api.get('/products', {
       params: {
         search: debouncedSearch || undefined,
+        // When a specific type filter is selected, pass it to backend
+        // Otherwise fetch ALL products and filter client-side
         ...(typeFilter ? { productType: typeFilter } : {}),
+        // Don't pass sellable=true — warehouse items are NOT sellable
       },
     }).then(r => r.data.data),
   });
 
-  // Filter to show only RAW + SEMI_FINISHED
-  const items = (products || []).filter((p: any) => p.productType === 'RAW' || p.productType === 'SEMI_FINISHED');
+  // Filter to show only RAW + SEMI_FINISHED (exclude MENU items)
+  const items = (products || []).filter((p: any) =>
+    p.productType === 'RAW' || p.productType === 'SEMI_FINISHED'
+  );
 
   const { data: categories } = useQuery({
     queryKey: ['all-categories'],
@@ -181,8 +186,18 @@ export default function WarehouseItemsPage() {
                 </tr>
               ))}
               {!items.length && (
-                <tr><td colSpan={8} className="px-4 py-12 text-center text-gray-400">
-                  No warehouse items found. Click "+ Add Item" to create your first ingredient or supply.
+                <tr><td colSpan={8} className="px-4 py-12 text-center">
+                  <div className="text-4xl mb-3">📦</div>
+                  <p className="text-gray-600 dark:text-gray-300 font-medium mb-1">No warehouse items yet</p>
+                  <p className="text-gray-400 text-xs mb-4">
+                    Warehouse items are your ingredients and supplies (flour, milk, coffee beans, cups, etc.).<br/>
+                    They are used in recipes and requisitions — NOT sold directly to customers.
+                  </p>
+                  {canWrite && (
+                    <button onClick={openNew} className="px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold">
+                      + Add Your First Warehouse Item
+                    </button>
+                  )}
                 </td></tr>
               )}
             </tbody>
