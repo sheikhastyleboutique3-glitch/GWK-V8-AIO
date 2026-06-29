@@ -38,7 +38,7 @@ export default function RequisitionDetailPage() {
   const { data: req, isLoading } = useQuery({
     queryKey: ['requisition', id],
     queryFn: () => api.get(`/requisitions/${id}`).then(r => r.data.data),
-    refetchInterval: 15000,
+    refetchInterval: 60_000,
   });
 
   // Active drivers for the dispatch picker.

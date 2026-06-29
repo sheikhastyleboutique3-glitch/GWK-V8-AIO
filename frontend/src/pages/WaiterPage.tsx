@@ -157,7 +157,7 @@ export default function WaiterPage() {
     queryKey: ['waiter-order', activeOrderId],
     queryFn: () => api.get(`/sales/orders/${activeOrderId}`).then((r) => r.data.data),
     enabled: !!activeOrderId,
-    refetchInterval: 5_000, // Sync KOT status: pick up fires made by POS or other waiters
+    refetchInterval: 60_000, // Sync KOT status: pick up fires made by POS or other waiters
   });
 
   const refreshTablesAndOrders = () => {

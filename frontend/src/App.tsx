@@ -85,6 +85,11 @@ const QrCodesPage = lazy(() => import('./pages/QrCodesPage'));
 const ProductAttributesPage = lazy(() => import('./pages/ProductAttributesPage'));
 const CombosPage = lazy(() => import('./pages/CombosPage'));
 const PricelistsPage = lazy(() => import('./pages/PricelistsPage'));
+const StaffPerformancePage = lazy(() => import('./pages/StaffPerformancePage'));
+const DigitalMenuPage = lazy(() => import('./pages/DigitalMenuPage'));
+const PosDashboardPage = lazy(() => import('./pages/PosDashboardPage'));
+const ReservationWidgetPage = lazy(() => import('./pages/ReservationWidgetPage'));
+const TablePayPage = lazy(() => import('./pages/TablePayPage'));
 
 type Role = string;
 
@@ -138,6 +143,10 @@ export default function App() {
       <Route path="/kiosk/:configId" element={<KioskPage />} />
       <Route path="/order/:branchId" element={<PublicMenuPage />} />
       <Route path="/display/:branchId" element={<CustomerDisplayPage />} />
+      {/* Public pages (no auth required) */}
+      <Route path="/menu/:branchId" element={<DigitalMenuPage />} />
+      <Route path="/book" element={<ReservationWidgetPage />} />
+      <Route path="/pay/:orderId" element={<TablePayPage />} />
 
       {/* ── Full-screen workspaces (Odoo-style: no sidebar, no top bar) ── */}
       <Route
@@ -260,6 +269,22 @@ export default function App() {
           element={
             <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER']}>
               <ReturnWithoutReceiptPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="staff-performance"
+          element={
+            <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER']}>
+              <StaffPerformancePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="pos-dashboard"
+          element={
+            <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER']}>
+              <PosDashboardPage />
             </ProtectedRoute>
           }
         />

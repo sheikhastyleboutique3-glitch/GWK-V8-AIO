@@ -50,7 +50,7 @@ export default function CustomerDisplayPage() {
       }
       return null;
     },
-    refetchInterval: 10_000, // Slow fallback
+    refetchInterval: 60_000, // Slow fallback
   });
 
   // WebSocket: listen for order changes to refetch instantly

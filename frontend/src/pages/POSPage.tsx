@@ -222,14 +222,14 @@ export default function POSPage() {
       return [...(open || []), ...(held || [])];
     },
     enabled: !!branchId,
-    refetchInterval: 15_000,
+    refetchInterval: 60_000,
   });
 
   const { data: loadedOrder } = useQuery({
     queryKey: ['pos-loaded', loadedOrderId],
     queryFn: () => api.get(`/sales/orders/${loadedOrderId}`).then((r) => r.data.data),
     enabled: !!loadedOrderId,
-    refetchInterval: 5_000, // Sync KOT status: pick up fires made by Waiter
+    refetchInterval: 60_000, // Sync KOT status: pick up fires made by Waiter
   });
 
   const refetchLoaded = () => {
@@ -642,7 +642,7 @@ export default function POSPage() {
     queryFn: () => api.get('/floors', { params: { branchId } }).then((r) => r.data.data),
     enabled: !!branchId,
     
-    refetchInterval: 15_000,
+    refetchInterval: 60_000,
   });
   const [activeFloorIdx, setActiveFloorIdx] = useState(0);
   const activeFloor = (floors || [])[activeFloorIdx] || null;
@@ -662,7 +662,7 @@ export default function POSPage() {
     queryKey: ['pos-all-orders', branchId, orderStatusFilter],
     queryFn: () => api.get('/sales/orders', { params: { branchId, ...(orderStatusFilter !== 'all' ? { status: orderStatusFilter } : {}) } }).then((r) => r.data.data),
     enabled: posView === 'orders' && !!branchId,
-    refetchInterval: 15_000,
+    refetchInterval: 60_000,
   });
 
   const filteredOrders = useMemo(() => {

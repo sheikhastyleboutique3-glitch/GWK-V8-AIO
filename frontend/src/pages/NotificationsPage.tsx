@@ -49,7 +49,7 @@ export default function NotificationsPage() {
   const { data: inbox, isLoading: inboxLoading } = useQuery({
     queryKey: ['notif-inbox'],
     queryFn: () => api.get('/notifications/inbox', { params: { take: 100 } }).then(r => r.data.data),
-    refetchInterval: 15000,
+    refetchInterval: 60_000,
   });
   const markReadMutation = useMutation({
     mutationFn: (ids: number[]) => api.patch('/notifications/read', { ids }),
