@@ -80,6 +80,15 @@ export default function DashboardPage() {
     ...QUERY_OPTS,
   });
 
+  // Check if there's an active POS session for the current branch (for Continue Session banner)
+  const canSeePOS = ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER'].includes(user?.role || '');
+  const { data: activeSession } = useQuery({
+    queryKey: ['pos-session-current', effectiveBranchId],
+    queryFn: () => api.get('/pos-sessions/current', { params: { branchId: effectiveBranchId } }).then(r => r.data.data),
+    enabled: canSeePOS && !!effectiveBranchId,
+    ...QUERY_OPTS,
+  });
+
   const { data: poStats } = useQuery({
     queryKey: ['po-stats-dashboard', user?.role, effectiveBranchId],
     queryFn: () => {
@@ -121,6 +130,28 @@ export default function DashboardPage() {
     <div className="space-y-6">
       {/* First-run onboarding wizard */}
       {showOnboarding && <OnboardingWizard onDismiss={() => setShowOnboarding(false)} />}
+
+      {/* ── Continue POS Session Banner (Odoo-style) ── */}
+      {activeSession && (
+        <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 rounded-2xl p-5 text-white flex items-center justify-between gap-4 shadow-lg">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center text-2xl">💳</div>
+            <div>
+              <h3 className="font-bold text-lg">POS Session Active</h3>
+              <p className="text-emerald-100 text-sm">
+                {activeSession.sessionNo} · Float: {Number(activeSession.openingFloat).toFixed(2)} QAR
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/pos')}
+            className="px-6 py-3 rounded-xl bg-white text-emerald-700 font-bold text-sm hover:bg-emerald-50 transition shadow-md"
+          >
+            Continue Session →
+          </button>
+        </div>
+      )}
+
       {/* Role-based KPI Widgets */}
       <DashboardWidgets />
       {/* Welcome banner */}
