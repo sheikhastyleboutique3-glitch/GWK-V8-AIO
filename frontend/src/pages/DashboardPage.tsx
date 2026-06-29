@@ -133,6 +133,25 @@ export default function DashboardPage() {
       {/* First-run onboarding wizard */}
       {showOnboarding && <OnboardingWizard onDismiss={() => setShowOnboarding(false)} />}
 
+      {/* ── POS Session Launcher (Odoo-style) ── */}
+      {canSeePOS && !activeSession && (
+        <div className="bg-gradient-to-r from-gray-700 to-gray-600 rounded-2xl p-5 text-white flex items-center justify-between gap-4 shadow-lg">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center text-2xl">💳</div>
+            <div>
+              <h3 className="font-bold text-lg">Point of Sale</h3>
+              <p className="text-gray-300 text-sm">No active session. Open one to start selling.</p>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/pos')}
+            className="px-6 py-3 rounded-xl bg-white text-gray-700 font-bold text-sm hover:bg-gray-50 transition shadow-md"
+          >
+            Open Session →
+          </button>
+        </div>
+      )}
+
       {/* ── Continue POS Session Banner (Odoo-style) ── */}
       {activeSession && canSeePOS && (
         <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 rounded-2xl p-5 text-white flex items-center justify-between gap-4 shadow-lg">

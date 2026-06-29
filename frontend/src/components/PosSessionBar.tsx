@@ -91,6 +91,14 @@ export default function PosSessionBar({ branchId, businessInfo }: { branchId?: n
     onSuccess: (rep) => printSessionReport(rep, businessInfo),
   });
 
+  // Fetch session report for Expected cash (used in close panel)
+  const { data: sessionReport } = useQuery({
+    queryKey: ['pos-session-report-live', session?.id],
+    queryFn: () => api.get(`/pos-sessions/${session?.id}/report`).then((r) => r.data.data),
+    enabled: !!session?.id && showClose,
+    refetchInterval: false,
+  });
+
   if (!branchId) return null;
 
   const promptCash = async (type: 'CASH_IN' | 'CASH_OUT') => {
@@ -112,55 +120,49 @@ export default function PosSessionBar({ branchId, businessInfo }: { branchId?: n
     setList(list.map((r, i) => (i === index ? { ...r, count: Math.max(0, count) } : r)));
   };
 
-  // ---- NO SESSION: show guided opening wizard ----
+  // ---- NO SESSION: show open button ----
   if (!session) {
     return (
       <>
-        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-500/10 p-4">
-          <div className="flex items-start gap-3">
-            <span className="text-2xl">💰</span>
-            <div className="flex-1">
-              <h3 className="text-sm font-bold text-amber-800 dark:text-amber-200">{t('pos.session.closedNotice')}</h3>
-              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                To start taking orders, open a POS session by counting the cash in your drawer.
-              </p>
-              <div className="flex items-center gap-2 mt-3">
-                <div className="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400">
-                  <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[9px] font-bold">1</span>
-                  Count cash
-                </div>
-                <span className="text-gray-300">→</span>
-                <div className="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400">
-                  <span className="w-5 h-5 rounded-full bg-gray-300 dark:bg-gray-600 text-white flex items-center justify-center text-[9px] font-bold">2</span>
-                  Enter denominations
-                </div>
-                <span className="text-gray-300">→</span>
-                <div className="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400">
-                  <span className="w-5 h-5 rounded-full bg-gray-300 dark:bg-gray-600 text-white flex items-center justify-center text-[9px] font-bold">3</span>
-                  Open session
-                </div>
-              </div>
-            </div>
-            <button
-              onClick={() => setShowOpen(true)}
-              className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition"
-            >
-              {t('pos.session.open')}
-            </button>
+        <div className="px-4 py-3 flex items-center justify-between bg-amber-50 dark:bg-amber-500/10 border-b border-amber-200 dark:border-amber-800">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">💰</span>
+            <span className="text-sm font-medium text-amber-800 dark:text-amber-200">No active session</span>
           </div>
+          <button
+            onClick={() => setShowOpen(true)}
+            className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition"
+          >
+            Open Session
+          </button>
         </div>
 
-        {/* Opening Cash Count Modal */}
-        <Modal open={showOpen} onClose={() => setShowOpen(false)} title="Opening Cash Count" size="md">
-          <DenomGrid rows={openDenoms} onChange={(i, c) => updateDenom(openDenoms, setOpenDenoms, i, c)} />
-          <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-200 dark:border-gray-800">
-            <span className="text-lg font-bold">Total: {denomTotal(openDenoms).toFixed(2)}</span>
-            <div className="flex gap-2">
-              <button onClick={() => setShowOpen(false)} className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm">Cancel</button>
+        {/* Opening Session — simple amount input (no denominations) */}
+        <Modal open={showOpen} onClose={() => setShowOpen(false)} title="Open Session" size="sm">
+          <div className="space-y-4">
+            <p className="text-sm text-gray-500">Enter the opening cash float in the drawer.</p>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Opening Float (QAR)</label>
+              <input
+                type="number"
+                min={0}
+                step={0.01}
+                value={denomTotal(openDenoms) || ''}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value) || 0;
+                  setOpenDenoms([{ denomination: 1, count: val }]);
+                }}
+                placeholder="0.00"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 text-xl font-bold text-center"
+                autoFocus
+              />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button onClick={() => setShowOpen(false)} className="flex-1 px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm font-medium">Cancel</button>
               <button
                 onClick={() => openMut.mutate()}
                 disabled={openMut.isPending}
-                className="px-5 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium disabled:opacity-50"
+                className="flex-1 px-4 py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-bold disabled:opacity-50"
               >
                 {openMut.isPending ? 'Opening...' : 'Open Session'}
               </button>
@@ -188,36 +190,70 @@ export default function PosSessionBar({ branchId, businessInfo }: { branchId?: n
         </div>
       </div>
 
-      {/* Closing Session Panel — Odoo-style with Expected/Counted/Difference */}
+      {/* Closing Session Panel — Odoo-style Expected/Counted/Difference */}
       <Modal open={showClose} onClose={() => setShowClose(false)} title="Closing Session" size="md">
         <div className="space-y-4">
-          {/* Simple cash input (no denomination grid — just type the total) */}
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Cash in Drawer (counted)</label>
-            <input
-              type="number"
-              min={0}
-              step={0.01}
-              value={denomTotal(closeDenoms) || ''}
-              onChange={(e) => {
-                const val = parseFloat(e.target.value) || 0;
-                // Set the first denomination count to represent the total
-                const newDenoms = emptyDenoms();
-                newDenoms[0] = { denomination: 1, count: val };
-                setCloseDenoms([{ denomination: 1, count: val }]);
-              }}
-              placeholder="Enter total cash counted"
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 text-lg font-bold text-center"
-            />
+          {/* Order summary */}
+          <div className="flex justify-between text-sm text-gray-500">
+            <span>Total {sessionReport?.orderCount ?? 0} orders</span>
+            <span className="font-bold text-gray-800 dark:text-gray-200">{(sessionReport?.salesTotal ?? 0).toFixed(2)} QAR</span>
           </div>
+
+          {/* Payment Method Breakdown */}
+          <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 dark:bg-gray-800">
+                <tr>
+                  <th className="text-left px-4 py-2 text-xs font-medium text-gray-500">Payment Method</th>
+                  <th className="text-right px-4 py-2 text-xs font-medium text-gray-500">Expected</th>
+                  <th className="text-right px-4 py-2 text-xs font-medium text-gray-500">Counted</th>
+                  <th className="text-right px-4 py-2 text-xs font-medium text-gray-500">Difference</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                <tr>
+                  <td className="px-4 py-3 font-medium">Cash</td>
+                  <td className="px-4 py-3 text-right">{(sessionReport?.expectedCash ?? 0).toFixed(2)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={denomTotal(closeDenoms) || ''}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        setCloseDenoms([{ denomination: 1, count: val }]);
+                      }}
+                      placeholder="0.00"
+                      className="w-24 px-2 py-1 rounded border border-gray-300 dark:border-gray-600 text-right font-bold"
+                    />
+                  </td>
+                  <td className={`px-4 py-3 text-right font-bold ${(denomTotal(closeDenoms) - (sessionReport?.expectedCash ?? 0)) < 0 ? 'text-red-600' : (denomTotal(closeDenoms) - (sessionReport?.expectedCash ?? 0)) > 0 ? 'text-emerald-600' : ''}`}>
+                    {(() => {
+                      const diff = +(denomTotal(closeDenoms) - (sessionReport?.expectedCash ?? 0)).toFixed(2);
+                      if (!denomTotal(closeDenoms)) return '—';
+                      return diff === 0 ? '0.00' : `${diff > 0 ? '+' : ''}${diff.toFixed(2)}`;
+                    })()}
+                  </td>
+                </tr>
+                {Object.entries(sessionReport?.paymentsByMethod ?? {}).filter(([m]) => m !== 'CASH').map(([method, amount]) => (
+                  <tr key={method}>
+                    <td className="px-4 py-3">{method.replace(/_/g, ' ')}</td>
+                    <td className="px-4 py-3 text-right">{Number(amount).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right text-gray-400">—</td>
+                    <td className="px-4 py-3 text-right text-gray-400">—</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Closing note */}
+          <textarea placeholder="Add a closing note..." className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm resize-none" rows={2} />
 
           {/* Action buttons */}
           <div className="flex items-center gap-3 pt-2 border-t border-gray-200 dark:border-gray-800">
-            <button
-              onClick={() => closeMut.mutate()}
-              disabled={closeMut.isPending}
-              className="px-5 py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-bold disabled:opacity-50"
-            >
+            <button onClick={() => closeMut.mutate()} disabled={closeMut.isPending} className="px-5 py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-bold disabled:opacity-50">
               {closeMut.isPending ? 'Closing...' : 'Close Session'}
             </button>
             <button onClick={() => { setShowClose(false); navigate('/'); }} className="px-4 py-2.5 rounded-lg border border-gray-300 text-sm font-medium">Backend</button>

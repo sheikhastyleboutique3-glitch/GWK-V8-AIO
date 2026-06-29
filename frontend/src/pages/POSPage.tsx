@@ -797,6 +797,12 @@ export default function POSPage() {
           </button>
         </div>
         <div className="ms-auto flex items-center gap-2 text-xs text-gray-400">
+          {/* Customer Display (opens in new tab) */}
+          {branchId && (
+            <button onClick={() => window.open(`/display/${branchId}`, '_blank')} className="px-2 py-1 rounded-lg hover:bg-gray-700 text-gray-300 hover:text-white transition" title="Open Customer Display">
+              🖥️
+            </button>
+          )}
           {/* Switch User (PIN login) */}
           <button onClick={() => setShowPinSwitch(true)} className="px-2 py-1 rounded-lg hover:bg-gray-700 text-gray-300 hover:text-white transition" title="Switch User">
             👤 {user?.firstName}
