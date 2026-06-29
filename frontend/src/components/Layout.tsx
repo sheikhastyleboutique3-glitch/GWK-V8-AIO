@@ -249,6 +249,22 @@ export default function Layout() {
               <div className="space-y-0.5">
                 {section.items.map((item) => {
                   const Icon = item.icon;
+                  // Full-screen pages (POS, Waiter, KDS) need a hard navigation
+                  // to break out of the Layout wrapper
+                  const isFullScreen = ['/pos', '/waiter', '/kds'].includes(item.path);
+                  if (isFullScreen) {
+                    return (
+                      <a
+                        key={item.path}
+                        href={item.path}
+                        onClick={(e) => { e.preventDefault(); window.location.href = item.path; }}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white transition-theme"
+                      >
+                        <Icon className="w-5 h-5 flex-shrink-0" />
+                        {!sidebarCollapsed && <span className="truncate">{t(`nav.${item.key}`)}</span>}
+                      </a>
+                    );
+                  }
                   return (
                     <NavLink
                       key={item.path}
