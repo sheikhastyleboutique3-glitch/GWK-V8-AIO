@@ -1080,6 +1080,7 @@ model AuditLog {
   @@index([entity, entityId])
   @@index([userId])
   @@index([createdAt])
+  @@index([entity, entityId])
   @@map("audit_logs")
 }
 

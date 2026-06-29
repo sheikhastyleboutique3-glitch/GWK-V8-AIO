@@ -26,7 +26,7 @@ function getSocket(): Socket {
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
+      reconnectionDelayMax: 30000,
       timeout: 10000,
       autoConnect: true,
     });

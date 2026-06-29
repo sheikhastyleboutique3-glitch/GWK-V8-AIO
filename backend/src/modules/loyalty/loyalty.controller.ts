@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { LoyaltyService } from './loyalty.service';
+import { CreateLoyaltyProgramDto, UpdateLoyaltyProgramDto, IssueCardDto } from './loyalty.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -18,10 +19,10 @@ export class LoyaltyController {
   @Get('programs') findAll() { return this.svc.findAll(); }
 
   @Post('programs') @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
-  create(@Body() dto: any) { return this.svc.create(dto); }
+  create(@Body() dto: CreateLoyaltyProgramDto) { return this.svc.create(dto); }
 
   @Patch('programs/:id') @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: any) { return this.svc.update(id, dto); }
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateLoyaltyProgramDto) { return this.svc.update(id, dto); }
 
   @Delete('programs/:id') @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
   remove(@Param('id', ParseIntPipe) id: number) { return this.svc.remove(id); }
@@ -32,7 +33,7 @@ export class LoyaltyController {
   }
 
   @Post('cards') @Roles(...POS_ROLES)
-  issueCard(@Body() dto: any) { return this.svc.issueCard(dto); }
+  issueCard(@Body() dto: IssueCardDto) { return this.svc.issueCard(dto); }
 
   @Post('cards/:code/earn') @Roles(...POS_ROLES)
   earn(@Param('code') code: string, @Body() dto: { points?: number; amount?: number }) {
@@ -44,9 +45,6 @@ export class LoyaltyController {
     return this.svc.redeem(code, dto?.points ?? 0, dto?.amount ?? 0);
   }
 
-  /** Scan/lookup a loyalty card by barcode or NFC code. Returns card + customer info. */
   @Get('cards/:code/lookup') @Roles(...POS_ROLES)
-  lookupCard(@Param('code') code: string) {
-    return this.svc.lookupCard(code);
-  }
+  lookupCard(@Param('code') code: string) { return this.svc.lookupCard(code); }
 }

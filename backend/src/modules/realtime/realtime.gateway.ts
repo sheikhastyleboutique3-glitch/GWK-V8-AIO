@@ -67,7 +67,14 @@ export class RealtimeGateway implements OnGatewayInit {
       data: evt.data,
       at: Date.now(),
     };
-    this.server.emit('product_changed', payload);
+    // Branch-scoped broadcast: if event has branchId, send only to that branch.
+    // Otherwise broadcast to all (e.g. price changes affect all branches).
+    if ((evt as any).branchId) {
+      this.server.to(`branch_${(evt as any).branchId}`).emit('product_changed', payload);
+    } else {
+      // Global change (price update, archive, new product) — notify all + public menu
+      this.server.emit('product_changed', payload);
+    }
   }
 
   // ── Table Status Changes (opened, closed, transferred) ────────────────────

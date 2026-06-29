@@ -91,7 +91,7 @@ export class FinanceService {
     return this.createMany(lines, tx);
   }
 
-  findAll(filters?: { branchId?: number; type?: FinanceEntryType; from?: string; to?: string }) {
+  findAll(filters?: { branchId?: number; type?: FinanceEntryType; from?: string; to?: string; take?: number; skip?: number }) {
     const where: Prisma.FinanceEntryWhereInput = {};
     if (filters?.branchId) where.branchId = filters.branchId;
     if (filters?.type) where.type = filters.type;
@@ -104,7 +104,8 @@ export class FinanceService {
     return this.prisma.financeEntry.findMany({
       where,
       orderBy: { occurredAt: 'desc' },
-      take: 500,
+      take: filters?.take || 50,
+      skip: filters?.skip || 0,
     });
   }
 

@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { UserViewsService } from './user-views.service';
+import { CreateUserViewDto, UpdateUserViewDto } from './user-views.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -22,16 +23,12 @@ export class UserViewsController {
   }
 
   @Post()
-  create(@CurrentUser('sub') userId: number, @Body() dto: any) {
+  create(@CurrentUser('sub') userId: number, @Body() dto: CreateUserViewDto) {
     return this.svc.create(userId, dto);
   }
 
   @Patch(':id')
-  update(
-    @CurrentUser('sub') userId: number,
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: any,
-  ) {
+  update(@CurrentUser('sub') userId: number, @Param('id', ParseIntPipe) id: number, @Body() dto: UpdateUserViewDto) {
     return this.svc.update(userId, id, dto);
   }
 

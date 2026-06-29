@@ -23,7 +23,8 @@ export function useRealtimeFloor(branchId?: number) {
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionDelay: 1000,
-        reconnectionAttempts: 20,
+        reconnectionDelayMax: 30000,
+        reconnectionAttempts: 50,
       });
 
       socket.on('connect', () => {

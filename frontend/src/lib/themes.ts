@@ -1,8 +1,15 @@
 /**
- * GWK V8 Theme Engine — Enterprise-grade theme system.
+ * GWK V8 Theme Engine — Enterprise-grade theme system (DENSITY + SCHEDULING layer).
  *
- * 4 Production Presets + 3 Density Modes + OS Sync + Schedule + Auto-touch + Persistence.
- * All values map to CSS custom properties on :root for instant switching.
+ * This file handles: 4 visual presets, 3 density modes, OS sync, schedule, auto-touch.
+ * For BRAND COLORS (preset ramp + dark mode), see ./theme.ts
+ *
+ * Architecture:
+ *   theme.ts  → brand color ramp, dark mode toggle, font family (used by App.tsx, Layout.tsx)
+ *   themes.ts → density, visual presets, OS sync, scheduling (used by ThemePanel.tsx, main.tsx)
+ *
+ * Both work together: theme.ts sets CSS color variables, themes.ts sets spacing/density variables.
+ * They share localStorage persistence but are complementary, not duplicative.
  */
 
 export type ThemeMode = 'corporate-light' | 'deep-slate' | 'amoled-pos' | 'accessibility';

@@ -2,6 +2,7 @@ import { Controller, Get, Post, Patch, Delete, Body, Param, ParseIntPipe, UseGua
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { PaymentTerminalsService } from './payment-terminals.service';
 import { TerminalSdkService } from './terminal-sdk.service';
+import { CreatePaymentTerminalDto, UpdatePaymentTerminalDto } from './payment-terminals.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -29,15 +30,14 @@ export class PaymentTerminalsController {
   }
 
   @Post() @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
-  create(@Body() dto: any) { return this.svc.create(dto); }
+  create(@Body() dto: CreatePaymentTerminalDto) { return this.svc.create(dto); }
 
   @Patch(':id') @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: any) { return this.svc.update(id, dto); }
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdatePaymentTerminalDto) { return this.svc.update(id, dto); }
 
   @Delete(':id') @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
   remove(@Param('id', ParseIntPipe) id: number) { return this.svc.remove(id); }
 
-  // ─── Terminal SDK: live payment initiation ─────────────────────────────
   @Post(':id/initiate') @Roles(...POS_ROLES)
   initiate(
     @Param('id', ParseIntPipe) id: number,
@@ -47,12 +47,8 @@ export class PaymentTerminalsController {
   }
 
   @Get('txn/:txnId/status') @Roles(...POS_ROLES)
-  txnStatus(@Param('txnId') txnId: string) {
-    return this.sdk.getStatus(txnId);
-  }
+  txnStatus(@Param('txnId') txnId: string) { return this.sdk.getStatus(txnId); }
 
   @Post('txn/:txnId/cancel') @Roles(...POS_ROLES)
-  txnCancel(@Param('txnId') txnId: string) {
-    return this.sdk.cancel(txnId);
-  }
+  txnCancel(@Param('txnId') txnId: string) { return this.sdk.cancel(txnId); }
 }

@@ -58,7 +58,8 @@ export class AuditService {
       where,
       include: { user: { select: { id: true, firstName: true, lastName: true, role: true } } },
       orderBy: { createdAt: 'desc' },
-      take: filters?.limit || 200,
+      take: filters?.limit || 50,
+      skip: (filters as any)?.skip || 0,
     });
   }
 

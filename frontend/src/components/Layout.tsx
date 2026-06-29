@@ -10,6 +10,7 @@ import { toggleDarkMode, loadThemeLocal } from '../lib/theme';
 import ThemePanel from './ThemePanel';
 import CommandPalette from './CommandPalette';
 import SyncIndicator from './SyncIndicator';
+import KeyboardShortcutsOverlay from './KeyboardShortcutsOverlay';
 import {
   Squares2X2Icon, ClipboardDocumentListIcon, TrashIcon,
   BellAlertIcon, ChatBubbleLeftRightIcon, ArchiveBoxIcon, TruckIcon,
@@ -64,6 +65,7 @@ const NAV_SECTIONS: NavSection[] = [
       { key: 'promotions', path: '/promotions', icon: TagIcon,            roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
       { key: 'pricing',    path: '/pricing',    icon: CurrencyDollarIcon, roles: ['SUPER_ADMIN', 'PROCUREMENT'] },
       { key: 'combos',     path: '/combos',     icon: TagIcon,            roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'discountRules', path: '/discount-rules', icon: ReceiptPercentIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
     ],
   },
   {
@@ -91,9 +93,9 @@ const NAV_SECTIONS: NavSection[] = [
       { key: 'users',       path: '/users',       icon: UsersIcon,                  roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
       { key: 'staffTasks',  path: '/staff-tasks', icon: ClipboardDocumentCheckIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CLEANER', 'WAREHOUSE'] },
       { key: 'customers',   path: '/customers',   icon: IdentificationIcon,         roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER'] },
+      { key: 'loyalty',     path: '/loyalty',     icon: ReceiptPercentIcon,         roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER'] },
       { key: 'bookings',    path: '/bookings',    icon: CalendarDaysIcon,           roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'WAITER'] },
       { key: 'deliveries',  path: '/deliveries',  icon: TruckIcon,                  roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'DRIVER'] },
-      { key: 'loyalty',     path: '/loyalty',     icon: ReceiptPercentIcon,         roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER'] },
     ],
   },
   {
@@ -120,7 +122,6 @@ const NAV_SECTIONS: NavSection[] = [
       { key: 'orderPresets',      path: '/order-presets',      icon: ReceiptPercentIcon,     roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
       { key: 'paymentMethods',    path: '/payment-methods',    icon: CurrencyDollarIcon,     roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
       { key: 'paymentTerminals',  path: '/payment-terminals',  icon: CurrencyDollarIcon,     roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
-      { key: 'discountRules',     path: '/discount-rules',     icon: ReceiptPercentIcon,     roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
       { key: 'cashRoundings',     path: '/cash-roundings',     icon: CurrencyDollarIcon,     roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
       { key: 'fiscalPositions',   path: '/fiscal-positions',   icon: ReceiptPercentIcon,     roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
       { key: 'pricelists',        path: '/pricelists',         icon: ReceiptPercentIcon,     roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
@@ -144,6 +145,18 @@ export default function Layout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [branchDropdown, setBranchDropdown] = useState(false);
   const isRTL = i18n.language === 'ar';
+
+  // ── Collapsible sidebar groups (persisted to localStorage) ──
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem('gwk_sidebar_collapsed') || '{}'); } catch { return {}; }
+  });
+  const toggleGroup = (label: string) => {
+    setCollapsedGroups((prev) => {
+      const next = { ...prev, [label]: !prev[label] };
+      localStorage.setItem('gwk_sidebar_collapsed', JSON.stringify(next));
+      return next;
+    });
+  };
 
   // Real-time audible + popup notifications, scoped to the active branch.
   useNotificationSounds(activeBranch?.id);
@@ -235,12 +248,21 @@ export default function Layout() {
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-3 scrollbar-hide">
-          {visibleSections.map((section) => (
+        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1 scrollbar-hide">
+          {visibleSections.map((section) => {
+            const isGroupCollapsed = collapsedGroups[section.label] && !sidebarCollapsed;
+            return (
             <div key={section.label}>
-              <p className={`px-3 mb-1 text-[10px] font-semibold uppercase tracking-wider text-white/35 ${sidebarCollapsed ? 'hidden' : ''}`}>
-                {t(`navGroups.${section.label}`)}
-              </p>
+              <button
+                onClick={() => !sidebarCollapsed && toggleGroup(section.label)}
+                className={`w-full flex items-center justify-between px-3 py-1.5 mb-0.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider text-white/40 hover:text-white/60 hover:bg-white/5 transition-theme ${sidebarCollapsed ? 'justify-center' : ''}`}
+              >
+                <span className={sidebarCollapsed ? 'hidden' : ''}>{t(`navGroups.${section.label}`)}</span>
+                {!sidebarCollapsed && (
+                  <ChevronDownIcon className={`w-3 h-3 transition-transform duration-200 ${isGroupCollapsed ? '-rotate-90' : ''}`} />
+                )}
+              </button>
+              {!isGroupCollapsed && (
               <div className="space-y-0.5">
                 {section.items.map((item) => {
                   const Icon = item.icon;
@@ -279,8 +301,10 @@ export default function Layout() {
                   );
                 })}
               </div>
+              )}
             </div>
-          ))}
+            );
+          })}
         </nav>
 
         {/* User footer */}
@@ -389,6 +413,7 @@ export default function Layout() {
         </main>
       </div>
       <CommandPalette />
+      <KeyboardShortcutsOverlay />
 
       {/* Theme Panel */}
       {showThemePanel && <ThemePanel onClose={() => setShowThemePanel(false)} />}

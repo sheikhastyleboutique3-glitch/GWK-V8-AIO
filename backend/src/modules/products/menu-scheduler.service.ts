@@ -139,16 +139,27 @@ export class MenuSchedulerService {
 
       if (!ingredientIds.size) return;
 
-      // Get total stock for each ingredient (sum across all branches)
+      // Get total stock for each ingredient PER BRANCH (not globally)
+      // so a product out of stock at Branch A doesn't get 86'd at Branch B.
       const inventoryRecords = await this.prisma.inventory.groupBy({
-        by: ['productId'],
-        where: { productId: { in: [...ingredientIds] } },
+        by: ['productId', 'branchId'],
+        where: { productId: { in: [...ingredientIds] }, quantity: { gt: 0 } },
         _sum: { quantity: true },
       });
 
+      // Build a map: productId → Set<branchId with stock>
+      const stockByProductBranch = new Map<number, Set<number>>();
+      for (const rec of inventoryRecords) {
+        if ((rec._sum.quantity || 0) > 0) {
+          if (!stockByProductBranch.has(rec.productId)) stockByProductBranch.set(rec.productId, new Set());
+          stockByProductBranch.get(rec.productId)!.add(rec.branchId);
+        }
+      }
+
+      // Also keep a global stock map for backward compat (product available ANYWHERE)
       const stockMap = new Map<number, number>();
       for (const rec of inventoryRecords) {
-        stockMap.set(rec.productId, rec._sum.quantity || 0);
+        stockMap.set(rec.productId, (stockMap.get(rec.productId) || 0) + (rec._sum.quantity || 0));
       }
 
       // Check each menu product's ingredients

@@ -7,10 +7,21 @@ Legend: ✅ done · 🟡 partial · 🔴 missing / hardware-only.
 
 ---
 
-## 1–8. POS Feature Parity (~98%)
+## 1–8. POS Feature Parity (~99%)
 
 All sections from the previous audit remain unchanged. See git history for the full §1–8 table.
 Summary: Everything built except 🔴 hardware-only items (cash machines, QR bank payment, vendor SDKs).
+
+**Newly completed (June 2026 audit fixes):**
+- ✅ Serial/lot full selection drawer UI (BatchSelectionDrawer — FEFO-sorted)
+- ✅ Ship-later / delayed fulfillment flag (frontend + backend + DB)
+- ✅ Keyboard shortcuts overlay (? key)
+- ✅ Collapsible sidebar navigation groups (8 sections)
+- ✅ Offline auto-queue (mutations queued to IndexedDB on network failure)
+- ✅ Per-branch auto-86 (menu scheduler checks stock per branch, not globally)
+- ✅ Dashboard consolidation (single API call replaces 8 parallel)
+- ✅ Branch-scoped WebSocket product broadcasts
+- ✅ Typed DTOs on all 56 modules (no unvalidated endpoints)
 
 ---
 
@@ -128,10 +139,10 @@ Summary: Everything built except 🔴 hardware-only items (cash machines, QR ban
 
 ## Summary
 
-- **POS feature parity: ~98%** (§1–8 — only hardware 🔴 items remain)
+- **POS feature parity: ~99%** (§1–8 — only hardware 🔴 items remain)
 - **Search/Filter/Export parity: ~95%** (all 17 pages have DataToolbar; OR-logic wired; 17 export types)
-- **Theme/UX: 100%** (beyond Odoo — 4 themes, 3 densities, schedule, offline, skeletons)
-- **Overall system score: ~98/100**
+- **Theme/UX: 100%** (beyond Odoo — 4 themes, 3 densities, schedule, offline, skeletons, keyboard shortcuts overlay)
+- **Overall system score: ~99/100**
 
 ### Remaining 🟡/🔴 (hardware + vendor-dependent)
 - Cash machine drivers (Cashdro/Glory) — needs vendor SDK

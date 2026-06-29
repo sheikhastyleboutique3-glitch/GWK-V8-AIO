@@ -2,6 +2,7 @@ import { Controller, Get, Post, Patch, Delete, Body, Param, Query, ParseIntPipe,
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { PaymentMethodsService } from './payment-methods.service';
 import { OnlinePaymentService } from './online-payment.service';
+import { CreatePaymentMethodDto, UpdatePaymentMethodDto } from './payment-methods.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -18,22 +19,20 @@ export class PaymentMethodsController {
   @Get() findAll(@Query('activeOnly') activeOnly?: string) { return this.svc.findAll(activeOnly === 'true'); }
 
   @Post() @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
-  create(@Body() dto: any) { return this.svc.create(dto); }
+  create(@Body() dto: CreatePaymentMethodDto) { return this.svc.create(dto); }
 
   @Patch(':id') @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: any) { return this.svc.update(id, dto); }
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdatePaymentMethodDto) { return this.svc.update(id, dto); }
 
   @Delete(':id') @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
   remove(@Param('id', ParseIntPipe) id: number) { return this.svc.remove(id); }
 
-  /** Create a payment intent (online payment / QR). Public for kiosk, auth for POS. */
   @Public()
   @Post('intents')
   createIntent(@Body() dto: { amount: number; currency?: string; orderId?: number; provider?: string; description?: string }) {
     return this.onlinePay.createIntent(dto);
   }
 
-  /** Verify a payment intent (poll from frontend). Public for kiosk. */
   @Public()
   @Get('intents/:intentId/verify')
   verifyIntent(@Param('intentId') intentId: string) {

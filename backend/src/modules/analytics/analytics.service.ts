@@ -664,4 +664,24 @@ export class AnalyticsService {
       totalRevenue: scored.reduce((s, c) => s + c.monetary, 0),
     };
   }
+
+  // ── Dashboard consolidation helpers ─────────────────────────────────────
+
+  /** Lightweight alert counts for the dashboard (unread low-stock + expiry). */
+  async dashboardAlerts(branchId?: number) {
+    const where: any = { isRead: false };
+    if (branchId) where.branchId = branchId;
+    const [lowStock, expiry] = await Promise.all([
+      this.prisma.alert.count({ where: { ...where, type: 'LOW_STOCK' } }),
+      this.prisma.alert.count({ where: { ...where, type: 'EXPIRY' } }),
+    ]);
+    return { lowStock, expiry, total: lowStock + expiry };
+  }
+
+  /** Pending requisitions count for the dashboard widget. */
+  async pendingRequisitionsCount(branchId?: number) {
+    const where: any = { status: { in: ['DRAFT', 'SUBMITTED'] } };
+    if (branchId) where.branchId = branchId;
+    return this.prisma.requisition.count({ where });
+  }
 }
