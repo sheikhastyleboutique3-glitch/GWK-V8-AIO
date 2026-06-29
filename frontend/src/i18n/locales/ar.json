@@ -71,7 +71,11 @@
     "qrCodes": "رموز QR",
     "bookings": "الحجوزات",
     "permissions": "الصلاحيات",
-    "advancedAnalytics": "التحليلات المتقدمة"
+    "advancedAnalytics": "التحليلات المتقدمة",
+    "warehouseItems": "أصناف المستودع",
+    "staffPerformance": "أداء الموظفين",
+    "posDashboard": "لوحة نقاط البيع",
+    "returns": "المرتجعات"
   },
   "kiosk": {
     "title": "الطلب الذاتي",

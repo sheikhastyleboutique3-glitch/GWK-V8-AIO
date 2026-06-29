@@ -71,7 +71,11 @@
     "selfOrder": "Self-Ordering",
     "qrCodes": "QR Codes",
     "bookings": "Reservations",
-    "permissions": "Permissions"
+    "permissions": "Permissions",
+    "warehouseItems": "Warehouse Items",
+    "staffPerformance": "Staff Performance",
+    "posDashboard": "POS Dashboard",
+    "returns": "Returns"
   },
   "kiosk": {
     "title": "Self-Order",
