@@ -2,15 +2,14 @@
  * Forced POS Closing Popup (Odoo parity).
  *
  * Prevents navigating away from the POS page when a session is open without
- * counting. Uses both `beforeunload` (browser tab close/refresh) and a React
- * Router blocker to block in-app navigation.
+ * counting. Uses `beforeunload` (browser tab close/refresh) and monitors
+ * in-app navigation attempts via history interception.
  *
- * The guard shows a warning dialog when the user attempts to leave while a
- * POS session is still OPEN. They must explicitly close/count the session
- * or dismiss the warning.
+ * Compatible with React Router v6 <BrowserRouter> (does NOT require
+ * createBrowserRouter / data router — useBlocker is NOT used).
  */
-import { useEffect, useCallback, useRef } from 'react';
-import { useBlocker } from 'react-router-dom';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 interface UsePosSessionGuardOptions {
   /** Whether a POS session is currently open (OPEN status). */
@@ -26,6 +25,10 @@ interface UsePosSessionGuardOptions {
 export function usePosSessionGuard({ sessionOpen, onBlocked }: UsePosSessionGuardOptions) {
   const onBlockedRef = useRef(onBlocked);
   onBlockedRef.current = onBlocked;
+  const [blocked, setBlocked] = useState(false);
+  const pendingNavRef = useRef<string | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   // ── Browser beforeunload event: block tab close / page refresh ──────────
   useEffect(() => {
@@ -33,7 +36,6 @@ export function usePosSessionGuard({ sessionOpen, onBlocked }: UsePosSessionGuar
 
     const handler = (e: BeforeUnloadEvent) => {
       e.preventDefault();
-      // Chrome requires returnValue to be set
       e.returnValue = 'You have an open POS session. Please close it (count cash) before leaving.';
       return e.returnValue;
     };
@@ -42,27 +44,77 @@ export function usePosSessionGuard({ sessionOpen, onBlocked }: UsePosSessionGuar
     return () => window.removeEventListener('beforeunload', handler);
   }, [sessionOpen]);
 
-  // ── React Router blocker: block in-app navigation ───────────────────────
-  const blocker = useBlocker(
-    useCallback(
-      ({ currentLocation, nextLocation }) => {
-        if (!sessionOpen) return false;
-        // Allow navigation within the POS page itself
-        if (nextLocation.pathname.startsWith('/pos')) return false;
-        // Block navigation away from POS when session is open
-        onBlockedRef.current?.();
-        return true;
-      },
-      [sessionOpen],
-    ),
-  );
+  // ── Intercept in-app navigation via history.pushState monkey-patch ──────
+  useEffect(() => {
+    if (!sessionOpen) return;
 
-  return {
-    /** Whether navigation is currently blocked by an active session. */
-    blocked: blocker.state === 'blocked',
-    /** Allow the blocked navigation to proceed (user acknowledged). */
-    proceed: () => blocker.state === 'blocked' && blocker.proceed(),
-    /** Cancel the blocked navigation (user wants to stay). */
-    cancel: () => blocker.state === 'blocked' && blocker.reset(),
-  };
+    const originalPushState = history.pushState.bind(history);
+    const originalReplaceState = history.replaceState.bind(history);
+
+    const intercept = (method: typeof history.pushState) => {
+      return function (this: History, data: any, unused: string, url?: string | URL | null) {
+        if (url && typeof url === 'string') {
+          const targetPath = new URL(url, window.location.origin).pathname;
+          // Allow navigation within POS
+          if (targetPath.startsWith('/pos')) {
+            return method.call(this, data, unused, url);
+          }
+          // Block navigation away — show confirmation
+          pendingNavRef.current = targetPath;
+          setBlocked(true);
+          onBlockedRef.current?.();
+          return; // Don't actually navigate
+        }
+        return method.call(this, data, unused, url);
+      };
+    };
+
+    history.pushState = intercept(originalPushState) as typeof history.pushState;
+    history.replaceState = intercept(originalReplaceState) as typeof history.replaceState;
+
+    // Also catch popstate (browser back button)
+    const handlePopState = () => {
+      if (location.pathname.startsWith('/pos')) {
+        // Going back from POS — block it
+        pendingNavRef.current = null; // can't know where back goes easily
+        setBlocked(true);
+        onBlockedRef.current?.();
+        // Push back to POS to undo the back navigation
+        history.pushState(null, '', location.pathname + location.search);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      history.pushState = originalPushState;
+      history.replaceState = originalReplaceState;
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [sessionOpen, location.pathname, location.search]);
+
+  // Clear blocked state when session closes
+  useEffect(() => {
+    if (!sessionOpen) {
+      setBlocked(false);
+      pendingNavRef.current = null;
+    }
+  }, [sessionOpen]);
+
+  const proceed = useCallback(() => {
+    setBlocked(false);
+    const target = pendingNavRef.current;
+    pendingNavRef.current = null;
+    if (target) {
+      // Temporarily disable the guard to allow navigation through
+      navigate(target);
+    }
+  }, [navigate]);
+
+  const cancel = useCallback(() => {
+    setBlocked(false);
+    pendingNavRef.current = null;
+  }, []);
+
+  return { blocked, proceed, cancel };
 }
