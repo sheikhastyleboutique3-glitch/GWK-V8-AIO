@@ -818,7 +818,7 @@ export default function POSPage() {
 
       {/* ─── FLOOR PLAN VIEW ─── */}
       {posView === 'floor' && (
-        <div className="flex-1 overflow-auto p-4">
+        <div className="flex-1 overflow-hidden p-4 flex flex-col">
           {/* Floor tabs + edit toggle */}
           <div className="flex items-center gap-2 mb-4">
             {(floors || []).map((f: any, idx: number) => (
@@ -873,8 +873,8 @@ export default function POSPage() {
 
           {/* Floor canvas with positioned tables */}
           {activeFloor ? (
-            <div className="relative rounded-2xl overflow-hidden border-2 border-gray-200 dark:border-gray-700 w-full"
-              style={{ maxWidth: 900, height: 'clamp(300px, 60vw, 500px)', background: activeFloor.background || '#e9d5ff' }}
+            <div className="relative rounded-2xl overflow-hidden border-2 border-gray-200 dark:border-gray-700 w-full flex-1"
+              style={{ background: activeFloor.background || '#f5f5f4' }}
               onMouseMove={floorEditMode ? handleFloorDrag : undefined}
               onMouseUp={floorEditMode ? handleFloorDragEnd : undefined}
               onMouseLeave={floorEditMode ? handleFloorDragEnd : undefined}
