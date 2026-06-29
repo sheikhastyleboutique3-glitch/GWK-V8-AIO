@@ -9,18 +9,15 @@ import { applyTheme, saveThemeLocal, themeFromSettings } from './lib/theme';
  * Lazy import with retry — if a chunk fails to load (stale hash after deploy),
  * forces a page refresh to get the new index.html with updated chunk references.
  */
-function lazyRetry(importFn: () => Promise<any>) {
-  return lazyRetry(() => importFn().catch(() => {
-    // Chunk failed — likely stale cache. Reload the page once.
+function lazyRetry(importFn: () => Promise<{ default: React.ComponentType<any> }>) {
+  return lazy(() => importFn().catch((err) => {
     const hasReloaded = sessionStorage.getItem('chunk_reload');
     if (!hasReloaded) {
       sessionStorage.setItem('chunk_reload', '1');
       window.location.reload();
-      return { default: () => null }; // Never rendered — page reloads
     }
     sessionStorage.removeItem('chunk_reload');
-    // If already reloaded once, show the original error
-    return importFn();
+    throw err;
   }));
 }
 import Layout from './components/Layout';
