@@ -106,7 +106,7 @@ async function main() {
   });
   console.log('✅ Branches (6): Warehouse + Gaimer w Kahi (3) + Shai bu Hamad (2)');
 
-  const branches = { warehouse, gwkWestWalk: branchGwkWestWalk, gwkDohaPort: branchGwkDohaPort, gwkExpress: branchGwkExpress, sbhGulfMall: branchSbhGulfMall, sbhWestWalk: branchSbhWestWalk };
+  const branches = { warehouse, gwkWestWalk: branchGwkWestWalk, gwkDohaPort: branchGwkDohaPort, gwkExpress: branchGwkExpress, sbhGulfMall: branchSbhGulfMall, sbhWestWalk: branchSbhWestWalk, doha: branchGwkDohaPort, wakra: branchGwkWestWalk };
 
   // Alias for backward compatibility (referenced throughout the seed)
   const branchDoha = branchGwkDohaPort;
