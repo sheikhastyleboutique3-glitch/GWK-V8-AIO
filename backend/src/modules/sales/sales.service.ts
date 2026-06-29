@@ -52,6 +52,9 @@ export interface CreateOrderInput {
   selfOrderMode?: any;
   items?: OrderItemInput[];
   idempotencyKey?: string; // Prevents duplicate order creation on double-submit
+  // Ship-Later (delayed fulfillment): pay now, ship/deliver at a later date.
+  shipLater?: boolean;
+  fulfillmentDate?: string;
 }
 
 export interface PaymentInput {
@@ -359,6 +362,8 @@ export class SalesService {
         sessionId: sessionId ?? null,
         isSelfOrder: dto.isSelfOrder ?? false,
         selfOrderMode: dto.selfOrderMode ?? null,
+        shipLater: dto.shipLater ?? false,
+        fulfillmentDate: dto.fulfillmentDate ? new Date(dto.fulfillmentDate) : null,
         customerId: dto.customerId ?? null,
         tableName: dto.tableName,
         serviceCharge: dto.serviceCharge ?? 0,

@@ -1,38 +1,36 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useBarcodeScanner } from '../lib/useBarcodeScanner';
-import PageHeader from '../components/PageHeader';
-import LoadingSpinner from '../components/LoadingSpinner';
-import PosSessionBar from '../components/PosSessionBar';
-import ModifierModal, { ModGroup, ChosenModifier } from '../components/ModifierModal';
 import { printReceipt, printKot } from '../lib/thermalPrint';
 import { useOnlineStatus } from '../lib/useOnlineStatus';
 import OfflineBanner from '../components/OfflineBanner';
 import { usePrompt } from '../lib/usePrompt';
 import { useConfirm } from '../lib/useConfirm';
-import { useDebounce } from '../lib/useDebounce';
 import { usePosKeyboard } from '../lib/usePosKeyboard';
 import { usePosSessionGuard } from '../lib/usePosSessionGuard';
+import PosSessionBar from '../components/PosSessionBar';
 import PinSwitchModal from '../components/PinSwitchModal';
+import ModifierModal, { ModGroup, ChosenModifier } from '../components/ModifierModal';
 
-interface CartLine {
-  itemId?: number; // present when the line lives on a persisted (loaded) order
-  productId: number;
-  name: string;
-  unitPrice: number;
-  quantity: number;
-  discount?: number;
-  firedAt?: string | null;
-  modifiers?: ChosenModifier[];
-}
+// ── Extracted sub-components (Phase 3 split) ──
+import FloorPlanView from './pos/FloorPlanView';
+import OrdersListView from './pos/OrdersListView';
+import PaymentScreen from './pos/PaymentScreen';
+import CartPanel, { CartLine } from './pos/CartPanel';
+import ProductCatalog from './pos/ProductCatalog';
+// Phase 4: Serial/Lot selection drawer
+import BatchSelectionDrawer from './pos/BatchSelectionDrawer';
+
+
 type Channel = 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY' | 'QR' | 'TALABAT' | 'SNOONU' | 'AGGREGATOR';
 type PayMethod = 'CASH' | 'CARD' | 'GIFT_CARD' | 'STORE_CREDIT' | 'LOYALTY' | 'AGGREGATOR' | 'LOYALTY_CARD' | 'TERMINAL' | 'QR' | 'ON_ACCOUNT';
 const AGGREGATOR_CHANNELS: Channel[] = ['TALABAT', 'SNOONU', 'AGGREGATOR'];
 const isAggregatorChannel = (c: Channel) => AGGREGATOR_CHANNELS.includes(c);
+
 interface Tender {
   method: PayMethod;
   amount: number;
@@ -52,166 +50,90 @@ export default function POSPage() {
   const canRefund = user?.role === 'SUPER_ADMIN' || user?.role === 'BRANCH_MANAGER';
   const canEditFloor = user?.role === 'SUPER_ADMIN' || user?.role === 'BRANCH_MANAGER' || user?.role === 'CASHIER';
 
-  // ─── TOP-LEVEL VIEW SWITCH (Odoo-style: Floor Plan / Order / Orders) ───
+  // ─── TOP-LEVEL VIEW SWITCH ───
   const [posView, setPosView] = useState<'floor' | 'order' | 'orders'>('floor');
-  const [orderSearchQ, setOrderSearchQ] = useState('');
-  const [orderStatusFilter, setOrderStatusFilter] = useState<string>('all');
-  // Floor plan edit mode (pencil toggle)
-  const [floorEditMode, setFloorEditMode] = useState(false);
-  const [floorDragging, setFloorDragging] = useState<{ id: number; startX: number; startY: number; origX: number; origY: number } | null>(null);
-  const [floorResizing, setFloorResizing] = useState<{ id: number; startX: number; startY: number; origW: number; origH: number } | null>(null);
-  const [floorLocalPos, setFloorLocalPos] = useState<Record<number, { posX: number; posY: number; width: number; height: number }>>({});
-  const [floorDirty, setFloorDirty] = useState(false);
 
-  const handleFloorDrag = (e: React.MouseEvent) => {
-    if (floorDragging) {
-      const dx = e.clientX - floorDragging.startX;
-      const dy = e.clientY - floorDragging.startY;
-      setFloorLocalPos((p) => ({ ...p, [floorDragging.id]: { ...p[floorDragging.id], posX: Math.max(0, floorDragging.origX + dx), posY: Math.max(0, floorDragging.origY + dy) } }));
-      setFloorDirty(true);
-    }
-    if (floorResizing) {
-      const dx = e.clientX - floorResizing.startX;
-      const dy = e.clientY - floorResizing.startY;
-      setFloorLocalPos((p) => ({ ...p, [floorResizing.id]: { ...p[floorResizing.id], width: Math.max(50, floorResizing.origW + dx), height: Math.max(50, floorResizing.origH + dy) } }));
-      setFloorDirty(true);
-    }
-  };
-  const handleFloorDragEnd = () => { setFloorDragging(null); setFloorResizing(null); };
-
-  const [categoryId, setCategoryId] = useState<number | undefined>(undefined);
-  const [search, setSearch] = useState('');
-  const debouncedSearch = useDebounce(search, 300);
+  // ─── Cart & Order State ───
   const [cart, setCart] = useState<CartLine[]>([]);
   const [comboCart, setComboCart] = useState<{ comboId: number; name: string; price: number; choiceIds: number[] }[]>([]);
-  const [comboPick, setComboPick] = useState<{ combo: any; sel: Record<number, number> } | null>(null);
   const [channel, setChannel] = useState<Channel>('DINE_IN');
   const [tableName, setTableName] = useState('');
   const [deliveryPlatformId, setDeliveryPlatformId] = useState<number | undefined>(undefined);
   const [presetId, setPresetId] = useState<number | undefined>(undefined);
   const [platformRef, setPlatformRef] = useState('');
-  const [payMethod, setPayMethod] = useState<PayMethod>('CASH');
   const [customer, setCustomer] = useState<any>(null);
   const [customerSearch, setCustomerSearch] = useState('');
-  const debouncedCustomerSearch = useDebounce(customerSearch, 300);
-  const [giftCardCode, setGiftCardCode] = useState('');
-  const [selectedTerminalId, setSelectedTerminalId] = useState<number | undefined>(undefined);
-  const [tenderAmount, setTenderAmount] = useState('');
-  const [tenders, setTenders] = useState<Tender[]>([]);
   const [couponCode, setCouponCode] = useState('');
   const [coupon, setCoupon] = useState<{ code: string; discount: number } | null>(null);
-  // Tip state for Odoo-style quick tip buttons (10%/15%/20%)
   const [tipAmount, setTipAmount] = useState(0);
   const [discountRuleId, setDiscountRuleId] = useState<number | ''>('');
   const [lastReceipt, setLastReceipt] = useState<any>(null);
   const [showPayment, setShowPayment] = useState(false);
-  const [payNumpad, setPayNumpad] = useState('');
-  // When set, the POS is settling an EXISTING order (e.g. a waiter's bill).
   const [loadedOrderId, setLoadedOrderId] = useState<number | null>(null);
+  const [tenders, setTenders] = useState<Tender[]>([]);
+  const [tenderAmount, setTenderAmount] = useState('');
+  // Phase 4: Ship-later
+  const [shipLater, setShipLater] = useState(false);
+  // Phase 4: Batch selection drawer
+  const [batchDrawer, setBatchDrawer] = useState<{ product: any; batches: any[] } | null>(null);
+
 
   const mode: 'new' | 'existing' = loadedOrderId ? 'existing' : 'new';
 
-  // Barcode scanner: auto-lookup product by barcode and add to cart
-  useBarcodeScanner(async (barcode) => {
-    try {
-      const res = await api.get('/products', { params: { search: barcode, sellable: true, productType: 'MENU' } });
-      const matches = res.data?.data || [];
-      const product = matches.find((p: any) => p.barcode === barcode || p.sku === barcode) || matches[0];
-      if (product) {
-        onProduct(product);
-        toast.success(`Scanned: ${product.name}`);
-      } else {
-        toast.error(`No product found for barcode: ${barcode}`);
-      }
-    } catch {
-      toast.error(`Barcode lookup failed: ${barcode}`);
-    }
-  }, { enabled: !!branchId });
+  // ─── Modifier state ───
+  const [modProduct, setModProduct] = useState<{ product: any; groups: ModGroup[] } | null>(null);
+  const [variantProduct, setVariantProduct] = useState<{ product: any; variants: any[] } | null>(null);
+  const { data: modifierGroups } = useQuery({
+    queryKey: ['modifier-groups'],
+    queryFn: () => api.get('/modifiers/groups').then((r) => r.data.data),
+  });
+  const productGroups = useMemo(() => {
+    const map = new Map<number, ModGroup[]>();
+    (modifierGroups || []).forEach((g: any) => {
+      (g.productLinks || []).forEach((l: any) => {
+        const arr = map.get(l.productId) ?? [];
+        arr.push(g);
+        map.set(l.productId, arr);
+      });
+    });
+    return map;
+  }, [modifierGroups]);
 
-  const { data: categories } = useQuery({
-    queryKey: ['pos-categories'],
-    queryFn: () => api.get('/categories', { params: { posVisible: true } }).then((r) => r.data.data),
-    
-  });
-  const { data: deliveryPlatforms } = useQuery({
-    queryKey: ['delivery-platforms'],
-    queryFn: () => api.get('/delivery-platforms').then((r) => r.data.data),
-    
-  });
-  const { data: discountRules } = useQuery({
-    queryKey: ['discount-rules-active'],
-    queryFn: () => api.get('/discount-rules', { params: { activeOnly: true } }).then((r) => r.data.data),
-    
-  });
-  const { data: presets } = useQuery({
-    queryKey: ['order-presets-active'],
-    queryFn: () => api.get('/order-presets', { params: { activeOnly: true } }).then((r) => r.data.data),
-    
-  });
+  // ─── Combos ───
   const { data: combos } = useQuery({
     queryKey: ['combos'],
     queryFn: () => api.get('/combos').then((r) => r.data.data),
-    
   });
-  const { data: terminals } = useQuery({
-    queryKey: ['payment-terminals'],
-    queryFn: () => api.get('/payment-terminals').then((r) => r.data.data),
-    
-  });
-  const { data: products, isLoading } = useQuery({
-    queryKey: ['pos-products', categoryId, debouncedSearch],
-    queryFn: () =>
-      api
-        .get('/products', { params: { sellable: true, available: true, productType: 'MENU', ...(categoryId && { categoryId }), ...(debouncedSearch && { search: debouncedSearch }) } })
-        .then((r) => r.data.data),
-    
-  });
+  const [comboPick, setComboPick] = useState<{ combo: any; sel: Record<number, number> } | null>(null);
 
-  // Branding / business info for receipts (company name, logo, address…).
-  const { data: settings } = useQuery({
-    queryKey: ['settings-receipt'],
-    queryFn: () => api.get('/settings').then((r) => r.data.data),
-    
-  });
-  const businessInfo = useMemo(() => {
-    const map: Record<string, string> = {};
-    (settings || []).forEach((s: any) => {
-      map[s.key] = s.value;
-    });
-    return {
-      businessName: map.company_name || undefined,
-      branchName: activeBranch?.name,
-      logoUrl: map.company_logo ? `${window.location.origin}${map.company_logo}` : undefined,
-      address: map.company_address || undefined,
-      phone: map.company_phone || undefined,
-      email: map.company_email || undefined,
-      taxId: map.company_tax_id || undefined,
-      currency: map.default_currency || 'QAR',
-    };
-  }, [settings, activeBranch]);
+  // ─── PIN switch ───
+  const [showPinSwitch, setShowPinSwitch] = useState(false);
 
-  // POS session guard — selling requires an open cash session (Odoo POS behaviour).
+  // ─── POS Session ───
   const { data: posSession } = useQuery({
     queryKey: ['pos-session-current', branchId],
     queryFn: () => api.get('/pos-sessions/current', { params: { branchId } }).then((r) => r.data.data),
     enabled: !!branchId,
     refetchInterval: 30_000,
   });
-
-  // ── Forced POS Closing Popup: block navigation when session is open ────
   const { blocked: sessionBlocked, proceed: sessionProceed, cancel: sessionCancel } = usePosSessionGuard({
     sessionOpen: !!posSession,
     allowedPaths: ['/pos', '/kds', '/waiter'],
   });
 
-  // Customer search (for loyalty / store-credit redemption).
-  const { data: customerResults } = useQuery({
-    queryKey: ['pos-customers', debouncedCustomerSearch],
-    queryFn: () => api.get('/customers', { params: { search: debouncedCustomerSearch } }).then((r) => r.data.data),
-    enabled: debouncedCustomerSearch.trim().length >= 2,
+  // ─── Loaded order ───
+  const { data: loadedOrder } = useQuery({
+    queryKey: ['pos-loaded', loadedOrderId],
+    queryFn: () => api.get(`/sales/orders/${loadedOrderId}`).then((r) => r.data.data),
+    enabled: !!loadedOrderId,
+    refetchInterval: 60_000,
   });
+  const refetchLoaded = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
+    qc.invalidateQueries({ queryKey: ['pos-pending'] });
+  }, [qc, loadedOrderId]);
 
-  // Open + held bills for this branch (waiter tickets waiting to be settled).
+  // ─── Pending bills ───
   const { data: pendingBills } = useQuery({
     queryKey: ['pos-pending', branchId],
     queryFn: async () => {
@@ -225,71 +147,67 @@ export default function POSPage() {
     refetchInterval: 60_000,
   });
 
-  const { data: loadedOrder } = useQuery({
-    queryKey: ['pos-loaded', loadedOrderId],
-    queryFn: () => api.get(`/sales/orders/${loadedOrderId}`).then((r) => r.data.data),
-    enabled: !!loadedOrderId,
-    refetchInterval: 60_000, // Sync KOT status: pick up fires made by Waiter
-  });
 
-  const refetchLoaded = () => {
-    qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
-    qc.invalidateQueries({ queryKey: ['pos-pending'] });
-  };
-
-  // Course firing (Odoo "Fire Course N") for the order being settled.
-  const { data: courses } = useQuery({
-    queryKey: ['pos-courses', loadedOrderId],
-    queryFn: () => api.get(`/sales/orders/${loadedOrderId}/courses`).then((r) => r.data.data),
-    enabled: !!loadedOrderId,
+  // ─── Business info for receipts ───
+  const { data: settings } = useQuery({
+    queryKey: ['settings-receipt'],
+    queryFn: () => api.get('/settings').then((r) => r.data.data),
   });
-  const fireCourse = useMutation({
-    mutationFn: (courseNo: number) => api.post(`/sales/orders/${loadedOrderId}/courses/${courseNo}/fire`),
-    onSuccess: () => {
-      toast.success(t('pos.courseFired'));
-      qc.invalidateQueries({ queryKey: ['pos-courses', loadedOrderId] });
-      refetchLoaded();
-    },
-    onError: (e: any) => toast.error(e.response?.data?.message || 'Failed'),
-  });
-  const splitBySeat = useMutation({
-    mutationFn: () => api.post(`/sales/orders/${loadedOrderId}/split-by-seat`),
-    onSuccess: (r: any) => {
-      const n = r.data?.data?.seats?.length ?? 0;
-      toast.success(t('pos.splitBySeatDone', { count: n }));
-      qc.invalidateQueries({ queryKey: ['pos-pending'] });
-      refetchLoaded();
-    },
-    onError: (e: any) => toast.error(e.response?.data?.message || 'Failed'),
-  });
+  const businessInfo = useMemo(() => {
+    const map: Record<string, string> = {};
+    (settings || []).forEach((s: any) => { map[s.key] = s.value; });
+    return {
+      businessName: map.company_name || undefined,
+      branchName: activeBranch?.name,
+      logoUrl: map.company_logo ? `${window.location.origin}${map.company_logo}` : undefined,
+      address: map.company_address || undefined,
+      phone: map.company_phone || undefined,
+      email: map.company_email || undefined,
+      taxId: map.company_tax_id || undefined,
+      currency: map.default_currency || 'QAR',
+    };
+  }, [settings, activeBranch]);
 
-  // Customer attached to the current sale (loaded order's customer, or the picked one).
-  const activeCustomer = mode === 'existing' ? loadedOrder?.customer : customer;
+  // ─── Derived values ───
+  const lines: CartLine[] = useMemo(() => {
+    if (mode === 'existing') {
+      return (loadedOrder?.items || []).filter((it: any) => !it.isVoided).map((it: any) => ({
+        itemId: it.id, productId: it.productId, name: it.product?.name ?? `#${it.productId}`,
+        unitPrice: it.unitPrice, quantity: it.quantity, discount: it.discount ?? 0,
+        firedAt: it.firedAt, modifiers: Array.isArray(it.modifiers) ? it.modifiers : undefined, notes: it.notes,
+      }));
+    }
+    return cart;
+  }, [mode, loadedOrder, cart]);
 
-  // ---- Modifiers ----
-  const { data: modifierGroups } = useQuery({
-    queryKey: ['modifier-groups'],
-    queryFn: () => api.get('/modifiers/groups').then((r) => r.data.data),
-    
-  });
-  const productGroups = useMemo(() => {
-    const map = new Map<number, ModGroup[]>();
-    (modifierGroups || []).forEach((g: any) => {
-      (g.productLinks || []).forEach((l: any) => {
-        const arr = map.get(l.productId) ?? [];
-        arr.push(g);
-        map.set(l.productId, arr);
-      });
-    });
-    return map;
-  }, [modifierGroups]);
-  const [modProduct, setModProduct] = useState<{ product: any; groups: ModGroup[] } | null>(null);
-  const [variantProduct, setVariantProduct] = useState<{ product: any; variants: any[] } | null>(null);
+  const cartSubtotal = useMemo(() => cart.reduce((s, l) => s + l.unitPrice * l.quantity, 0) + comboCart.reduce((s, c) => s + c.price, 0), [cart, comboCart]);
+  const subtotal = mode === 'existing' ? loadedOrder?.subtotal ?? 0 : cartSubtotal;
+  const discount = mode === 'existing' ? (loadedOrder?.couponDiscount ?? 0) + (loadedOrder?.ruleDiscount ?? 0) : coupon?.discount ?? 0;
+  const existingTipDelta = mode === 'existing' ? tipAmount - (loadedOrder?.tip ?? 0) : 0;
+  const total = mode === 'existing'
+    ? (loadedOrder?.total ?? 0) + existingTipDelta
+    : Math.max(0, cartSubtotal - (coupon?.discount ?? 0) + tipAmount);
+  const paid = useMemo(() => tenders.reduce((s, t) => s + t.amount, 0), [tenders]);
+  const remaining = Math.max(0, +(total - paid).toFixed(2));
 
-  // ---- New-sale local cart helpers ----
-  const addToCart = (p: any, unitPrice?: number, modifiers?: ChosenModifier[]) => {
+  // ─── Table order picker ───
+  const [tableOrderPicker, setTableOrderPicker] = useState<{ tableName: string; orders: any[] } | null>(null);
+
+
+  // ─── Barcode scanner ───
+  useBarcodeScanner(async (barcode) => {
+    try {
+      const res = await api.get('/products', { params: { search: barcode, sellable: true, productType: 'MENU' } });
+      const matches = res.data?.data || [];
+      const product = matches.find((p: any) => p.barcode === barcode || p.sku === barcode) || matches[0];
+      if (product) { onProduct(product); toast.success(`Scanned: ${product.name}`); }
+      else toast.error(`No product found for barcode: ${barcode}`);
+    } catch { toast.error(`Barcode lookup failed: ${barcode}`); }
+  }, { enabled: !!branchId });
+
+  // ─── Cart helpers ───
+  const addToCart = useCallback((p: any, unitPrice?: number, modifiers?: ChosenModifier[]) => {
     setCart((prev) => {
-      // Merge identical plain lines; modifier lines always stay separate.
       if (!modifiers?.length) {
         const found = prev.find((l) => l.productId === p.id && !l.modifiers?.length);
         if (found) return prev.map((l) => (l === found ? { ...l, quantity: l.quantity + 1 } : l));
@@ -297,80 +215,45 @@ export default function POSPage() {
       return [...prev, { productId: p.id, name: p.name, unitPrice: unitPrice ?? p.salePrice ?? p.costPrice ?? 0, quantity: 1, modifiers }];
     });
     setCoupon(null);
-  };
-  const setQtyAt = (i: number, q: number) =>
-    setCart((prev) => prev.flatMap((l, idx) => (idx === i ? (q <= 0 ? [] : [{ ...l, quantity: q }]) : [l])));
-  const setPriceAt = (i: number, price: number) =>
-    setCart((prev) => prev.map((l, idx) => (idx === i ? { ...l, unitPrice: price } : l)));
+  }, []);
 
-  // ---- Existing-order mutations ----
   const addItemMut = useMutation({
     mutationFn: (p: { product: any; unitPrice?: number; modifiers?: ChosenModifier[] }) =>
-      api.post(`/sales/orders/${loadedOrderId}/items`, {
-        productId: p.product.id,
-        quantity: 1,
-        unitPrice: p.unitPrice ?? p.product.salePrice ?? p.product.costPrice ?? 0,
-        modifiers: p.modifiers,
-      }),
+      api.post(`/sales/orders/${loadedOrderId}/items`, { productId: p.product.id, quantity: 1, unitPrice: p.unitPrice ?? p.product.salePrice ?? p.product.costPrice ?? 0, modifiers: p.modifiers }),
     onSuccess: refetchLoaded,
     onError: (e: any) => toast.error(e.response?.data?.message || 'Failed to add item'),
   });
-  const removeItemMut = useMutation({
-    mutationFn: (itemId: number) => api.delete(`/sales/orders/${loadedOrderId}/items/${itemId}`),
-    onSuccess: refetchLoaded,
-    onError: (e: any) => toast.error(e.response?.data?.message || 'Failed to remove item'),
-  });
 
-  const addLine = (p: any, unitPrice: number, modifiers?: ChosenModifier[]) => {
+  const addLine = useCallback((p: any, unitPrice: number, modifiers?: ChosenModifier[]) => {
     if (mode === 'existing') addItemMut.mutate({ product: p, unitPrice, modifiers });
     else addToCart(p, unitPrice, modifiers);
-  };
-  const onProduct = async (p: any) => {
-    // Product with variants → let the cashier pick the variant (adjusts price).
+  }, [mode, addItemMut, addToCart]);
+
+  // Product selection handler (modifiers, variants, serial/lot, weighed)
+  const onProduct = useCallback(async (p: any) => {
     if (p.hasVariants) {
       try {
         const variants = await api.get(`/product-attributes/variants/${p.id}`).then((r) => r.data.data);
-        if (variants?.length) {
-          setVariantProduct({ product: p, variants: variants.filter((v: any) => v.isActive !== false) });
-          return;
-        }
-      } catch {
-        /* fall through to normal add */
-      }
+        if (variants?.length) { setVariantProduct({ product: p, variants: variants.filter((v: any) => v.isActive !== false) }); return; }
+      } catch {}
     }
     const groups = productGroups.get(p.id);
-    if (groups && groups.length) {
-      setModProduct({ product: p, groups });
-      return;
-    }
-    // Serial/lot-tracked item → show available batches from inventory and let
-    // the cashier pick which batch to sell (proper FEFO traceability).
+    if (groups && groups.length) { setModProduct({ product: p, groups }); return; }
+    // Serial/lot-tracked: show batch selection drawer (Phase 4)
     if (p.tracksSerial) {
       try {
         const batchRes = await api.get(`/inventory/products/${p.id}/branches/${branchId}/available-batches`);
         const batches = batchRes.data?.data || [];
-        if (batches.length > 0) {
-          const options = batches.map((b: any) => `${b.batchNumber || 'N/A'} (qty: ${b.availableQuantity}, exp: ${b.expiryDate ? new Date(b.expiryDate).toLocaleDateString() : 'N/A'})`).join('\n');
-          const pick = await prompt({ title: `Select batch for ${p.name}`, description: options, defaultValue: batches[0]?.batchNumber || '', placeholder: 'Enter batch number (blank = auto-FEFO)' });
-          if (pick === null) return;
-          const label = pick.trim() || batches[0]?.batchNumber || '';
-          addLine(p, p.salePrice ?? p.costPrice ?? 0, label ? [{ optionId: -1, name: `Lot: ${label}`, priceDelta: 0 }] as any : undefined);
-          return;
-        }
-      } catch { /* fallback to text prompt */ }
+        if (batches.length > 0) { setBatchDrawer({ product: p, batches }); return; }
+      } catch {}
       const serial = await prompt({ title: t('pos.enterSerial', { name: p.name }) as string, placeholder: 'Serial / Lot number' });
       if (serial === null) return;
-      if (serial.trim()) {
-        addLine(p, p.salePrice ?? p.costPrice ?? 0, [{ optionId: -1, name: `S/N ${serial.trim()}`, priceDelta: 0 }] as any);
-        return;
-      }
+      if (serial.trim()) { addLine(p, p.salePrice ?? p.costPrice ?? 0, [{ optionId: -1, name: `S/N ${serial.trim()}`, priceDelta: 0 }] as any); return; }
     }
-    // Weighed product: prompt for weight
     if (p.weighed) { handleWeighed(p); return; }
     addLine(p, p.salePrice ?? p.costPrice ?? 0, undefined);
-  };
+  }, [productGroups, branchId, prompt, t, addLine]);
 
-  // Weighed product: prompt for weight and compute price = weight × unit price
   const handleWeighed = async (p: any) => {
     const raw = await prompt({ title: `${p.name} — Enter weight (kg)`, defaultValue: '1', type: 'number' });
     if (raw === null) return;
@@ -378,10 +261,7 @@ export default function POSPage() {
     if (!(weight > 0)) { toast.error('Invalid weight'); return; }
     const unitPrice = p.salePrice ?? p.costPrice ?? 0;
     if (mode === 'existing') {
-      api.post(`/sales/orders/${loadedOrderId}/items`, {
-        productId: p.id, quantity: weight, unitPrice,
-        modifiers: [{ optionId: -3, name: `${weight.toFixed(3)} kg`, priceDelta: 0 }],
-      }).then(() => { qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] }); });
+      api.post(`/sales/orders/${loadedOrderId}/items`, { productId: p.id, quantity: weight, unitPrice, modifiers: [{ optionId: -3, name: `${weight.toFixed(3)} kg`, priceDelta: 0 }] }).then(() => refetchLoaded());
     } else {
       setCart((prev) => [...prev, { productId: p.id, name: `${p.name} (${weight.toFixed(3)} kg)`, unitPrice, quantity: weight }]);
     }
@@ -392,13 +272,12 @@ export default function POSPage() {
     const base = variantProduct.product.salePrice ?? variantProduct.product.costPrice ?? 0;
     const variantLabel = v.sku || v.name || `Variant #${v.id}`;
     const prod = { ...variantProduct.product, name: `${variantProduct.product.name} · ${variantLabel}` };
-    // Store variant as modifier (for KOT display) with both name and nameAr populated
-    const variantMod = { optionId: v.id, name: variantLabel, nameAr: variantLabel, priceDelta: v.priceExtra ?? 0 };
-    addLine(prod, base + (v.priceExtra ?? 0), [variantMod] as any);
+    addLine(prod, base + (v.priceExtra ?? 0), [{ optionId: v.id, name: variantLabel, nameAr: variantLabel, priceDelta: v.priceExtra ?? 0 }] as any);
     setVariantProduct(null);
   };
 
-  // ---- Combos ----
+
+  // ─── Combo handling ───
   const openCombo = (combo: any) => {
     const sel: Record<number, number> = {};
     (combo.lines || []).forEach((l: any) => { if (l.choices?.length) sel[l.id] = l.choices[0].id; });
@@ -417,9 +296,9 @@ export default function POSPage() {
     setComboCart((prev) => [...prev, { comboId: comboPick.combo.id, name: comboPick.combo.name, price: comboPickPrice(), choiceIds }]);
     setComboPick(null);
   };
-  const removeCombo = (i: number) => setComboCart((prev) => prev.filter((_, idx) => idx !== i));
 
-  const loadBill = (order: any) => {
+  // ─── Bill management ───
+  const loadBill = useCallback((order: any) => {
     setLoadedOrderId(order.id);
     setCart([]);
     setCoupon(null);
@@ -429,333 +308,37 @@ export default function POSPage() {
     setTenderAmount('');
     setChannel(order.channel || 'DINE_IN');
     setTableName(order.tableName || '');
-  };
-  const closeBill = () => {
+    setShipLater(order.shipLater || false);
+  }, []);
+  const closeBill = useCallback(() => {
     setLoadedOrderId(null);
     setTenders([]);
     setTenderAmount('');
     setCouponCode('');
-  };
+    setShipLater(false);
+  }, []);
 
-  // ---- Derived display values (mode-aware) ----
-  const lines: CartLine[] = useMemo(() => {
-    if (mode === 'existing') {
-      return (loadedOrder?.items || [])
-        .filter((it: any) => !it.isVoided)
-        .map((it: any) => ({
-          itemId: it.id,
-          productId: it.productId,
-          name: it.product?.name ?? `#${it.productId}`,
-          unitPrice: it.unitPrice,
-          quantity: it.quantity,
-          discount: it.discount ?? 0,
-          firedAt: it.firedAt,
-          modifiers: Array.isArray(it.modifiers) ? it.modifiers : undefined,
-          notes: it.notes,
-        }));
-    }
-    return cart;
-  }, [mode, loadedOrder, cart]);
-
-  const cartSubtotal = useMemo(() => cart.reduce((s, l) => s + l.unitPrice * l.quantity, 0) + comboCart.reduce((s, c) => s + c.price, 0), [cart, comboCart]);
-  const subtotal = mode === 'existing' ? loadedOrder?.subtotal ?? 0 : cartSubtotal;
-  const discount = mode === 'existing' ? (loadedOrder?.couponDiscount ?? 0) + (loadedOrder?.ruleDiscount ?? 0) : coupon?.discount ?? 0;
-  // Optimistic tip: for existing orders, add local tipAmount delta over the server-side tip
-  const existingTipDelta = mode === 'existing' ? tipAmount - (loadedOrder?.tip ?? 0) : 0;
-  const total = mode === 'existing'
-    ? (loadedOrder?.total ?? 0) + existingTipDelta
-    : Math.max(0, cartSubtotal - (coupon?.discount ?? 0) + tipAmount);
-  const appliedCouponCode = mode === 'existing' ? loadedOrder?.couponCode : coupon?.code;
-
-  const paid = useMemo(() => tenders.reduce((s, t) => s + t.amount, 0), [tenders]);
-  const remaining = Math.max(0, +(total - paid).toFixed(2));
-  const change = Math.max(0, +(paid - total).toFixed(2));
-
-  const addTender = () => {
-    if (remaining <= 0) return toast.error('Payment already covers the total');
-    const raw = tenderAmount.trim() ? parseFloat(tenderAmount) : remaining;
-    if (!(raw > 0)) return toast.error('Enter a payment amount');
-    const amt = raw;
-    if (payMethod === 'GIFT_CARD' && !giftCardCode.trim()) return toast.error('Enter a gift card code');
-    if (payMethod === 'LOYALTY_CARD' && !giftCardCode.trim()) return toast.error('Enter a loyalty / eWallet card code');
-    if (payMethod === 'TERMINAL' && !selectedTerminalId) return toast.error('Select a payment terminal');
-    setTenders((prev) => [
-      ...prev,
-      {
-        method: payMethod,
-        amount: +amt.toFixed(2),
-        ...(payMethod === 'GIFT_CARD' ? { giftCardCode: giftCardCode.trim() } : {}),
-        ...(payMethod === 'LOYALTY_CARD' ? { loyaltyCode: giftCardCode.trim() } : {}),
-        ...(payMethod === 'TERMINAL' ? { terminalId: selectedTerminalId } : {}),
-      },
-    ]);
-    setTenderAmount('');
-    setGiftCardCode('');
-  };
-  const removeTender = (i: number) => setTenders((prev) => prev.filter((_, idx) => idx !== i));
-
-  // ---- Coupon ----
-  const applyCouponNew = useMutation({
-    mutationFn: () =>
-      api
-        .get(`/promotions/coupons/${encodeURIComponent(couponCode.trim())}/validate`, { params: { orderTotal: cartSubtotal } })
-        .then((r) => r.data.data),
-    onSuccess: (res: any) => {
-      setCoupon({ code: res.code, discount: res.discount });
-      toast.success(`Coupon ${res.code}: −${res.discount.toFixed(2)}`);
-    },
-    onError: (e: any) => {
-      setCoupon(null);
-      toast.error(e.response?.data?.message || 'Invalid coupon');
-    },
-  });
-  const applyCouponExisting = useMutation({
-    mutationFn: () => api.patch(`/sales/orders/${loadedOrderId}/coupon`, { code: couponCode.trim() }),
-    onSuccess: () => {
-      refetchLoaded();
-      toast.success('Coupon applied');
-    },
-    onError: (e: any) => toast.error(e.response?.data?.message || 'Invalid coupon'),
-  });
-  const onApplyCoupon = () => {
-    if (!couponCode.trim()) return;
-    mode === 'existing' ? applyCouponExisting.mutate() : applyCouponNew.mutate();
-  };
-
-  // ---- Discount rule (manager / staff / corporate discounts on an open bill) ----
-  const applyDiscountRule = useMutation({
-    mutationFn: (ruleId: number | '') =>
-      api.patch(`/sales/orders/${loadedOrderId}/discount`, { ruleId: ruleId === '' ? null : ruleId }),
-    onSuccess: () => {
-      toast.success(t('common.saved'));
-      refetchLoaded();
-    },
-    onError: (e: any) => toast.error(e.response?.data?.message || 'Failed'),
-  });
-
-  // ---- Checkout (both modes) ----
-  const charge = useMutation({
-    mutationFn: async () => {
-      if (!branchId) throw new Error('Select a branch first');
-      if (!lines.length && !comboCart.length) throw new Error('Cart is empty');
-      if (!tenders.length) throw new Error('Add at least one payment');
-      if (paid + 1e-6 < total) throw new Error(`Payment is short by ${remaining.toFixed(2)}`);
-
-      let orderId: number;
-      if (mode === 'existing') {
-        orderId = loadedOrderId as number;
-      } else {
-        const idempotencyKey = `pos-${branchId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        const { data: created } = await api.post('/sales/orders', {
-          branchId,
-          channel,
-          tableName: (channel === 'DINE_IN' && tableName) ? tableName : (channel === 'DELIVERY' || channel === 'TAKEAWAY') ? (tableName || undefined) : undefined,
-          customerId: customer?.id,
-          couponCode: coupon?.code,
-          presetId: presetId,
-          deliveryPlatformId: isAggregatorChannel(channel) ? deliveryPlatformId : undefined,
-          platformRef: isAggregatorChannel(channel) ? (platformRef || undefined) : undefined,
-          idempotencyKey,
-          items: cart.map((l) => ({ productId: l.productId, quantity: l.quantity, unitPrice: l.unitPrice, modifiers: l.modifiers })),
-          combos: comboCart.map((c) => ({ comboId: c.comboId, choiceIds: c.choiceIds })),
-          tip: tipAmount > 0 ? tipAmount : undefined,
-        });
-        orderId = created.data.id;
-        // Auto-fire to kitchen + print KOT for new orders
-        try {
-          const fireRes = await api.post(`/sales/orders/${orderId}/courses/1/fire`);
-          if (fireRes.data?.data) printKot(fireRes.data.data, { splitByStation: true });
-        } catch {
-          toast('Note: Kitchen fire pending — items may not show on KDS yet', { icon: '⚠️' });
-        }
-      }
-      for (const ten of tenders) {
-        // Loyalty / eWallet card: draw the amount down from the card balance,
-        // then record it as a wallet payment referencing the card.
-        if (ten.method === 'LOYALTY_CARD' && ten.loyaltyCode) {
-          await api.post(`/loyalty/cards/${encodeURIComponent(ten.loyaltyCode)}/redeem`, { amount: ten.amount });
-          await api.post(`/sales/orders/${orderId}/payments`, {
-            method: 'WALLET',
-            amount: ten.amount,
-            reference: `loyalty:${ten.loyaltyCode}`,
-          });
-          continue;
-        }
-        // Card terminal: run the capture (records the CARD payment server-side).
-        if (ten.method === 'TERMINAL' && ten.terminalId) {
-          await api.post(`/payment-terminals/${ten.terminalId}/capture`, { orderId, amount: ten.amount });
-          continue;
-        }
-        await api.post(`/sales/orders/${orderId}/payments`, {
-          method: ten.method,
-          amount: ten.amount,
-          ...(ten.method === 'GIFT_CARD' ? { giftCardCode: ten.giftCardCode } : {}),
-        });
-      }
-      const { data: done } = await api.post(`/sales/orders/${orderId}/complete`, {});
-      return done.data;
-    },
-    onSuccess: (order) => {
-      toast.success(`Sale ${order.orderNo} completed`);
-      setLastReceipt(order);
-      // Auto-print the customer receipt right after payment.
-      printReceipt(order, businessInfo);
-      setCart([]);
-      setComboCart([]);
-      setTableName('');
-      setPlatformRef('');
-      setPresetId(undefined);
-      setCouponCode('');
-      setCoupon(null);
-      setGiftCardCode('');
-      setTenderAmount('');
-      setTenders([]);
-      setTipAmount(0);
-      setLoadedOrderId(null);
-      setCustomer(null);
-      setCustomerSearch('');
-      qc.invalidateQueries({ queryKey: ['inventory'] });
-      qc.invalidateQueries({ queryKey: ['kds-board'] });
-      qc.invalidateQueries({ queryKey: ['pos-pending'] });
-      qc.invalidateQueries({ queryKey: ['waiter-tables'] });
-      qc.invalidateQueries({ queryKey: ['waiter-active-orders'] });
-    },
-    onError: (e: any) => {
-      toast.error(e.response?.data?.message || e.message || 'Sale failed');
-    },
-  });
-
-  const refund = useMutation({
-    mutationFn: (orderId: number) => api.post(`/sales/orders/${orderId}/refund`, {}).then((r) => r.data.data),
-    onSuccess: (order) => {
-      toast.success(`Order ${order.orderNo} refunded`);
-      setLastReceipt(order);
-      qc.invalidateQueries({ queryKey: ['inventory'] });
-      qc.invalidateQueries({ queryKey: ['pos-pending'] });
-    },
-    onError: (e: any) => toast.error(e.response?.data?.message || e.message || 'Refund failed'),
-  });
-
-  // ─── Floor plan data (for the integrated floor view) ───
-  const { data: floors } = useQuery({
-    queryKey: ['pos-floors', branchId],
-    queryFn: () => api.get('/floors', { params: { branchId } }).then((r) => r.data.data),
-    enabled: !!branchId,
-    
-    refetchInterval: 60_000,
-  });
-  const [activeFloorIdx, setActiveFloorIdx] = useState(0);
-  const activeFloor = (floors || [])[activeFloorIdx] || null;
-
-  // Sync local positions when floor changes
-  useMemo(() => {
-    if (!activeFloor) return;
-    const pos: Record<number, { posX: number; posY: number; width: number; height: number }> = {};
-    (activeFloor.tables || []).filter((t: any) => t.isActive).forEach((t: any) => {
-      if (!floorLocalPos[t.id]) pos[t.id] = { posX: t.posX, posY: t.posY, width: t.width, height: t.height };
-    });
-    if (Object.keys(pos).length) setFloorLocalPos((prev) => ({ ...prev, ...pos }));
-  }, [activeFloor?.id, activeFloor?.tables?.length]);
-
-  // ─── Orders list (for the Orders tab) ───
-  const { data: allOrders } = useQuery({
-    queryKey: ['pos-all-orders', branchId, orderStatusFilter],
-    queryFn: () => api.get('/sales/orders', { params: { branchId, ...(orderStatusFilter !== 'all' ? { status: orderStatusFilter } : {}) } }).then((r) => r.data.data),
-    enabled: posView === 'orders' && !!branchId,
-    refetchInterval: 60_000,
-  });
-
-  const filteredOrders = useMemo(() => {
-    if (!allOrders) return [];
-    if (!orderSearchQ.trim()) return allOrders;
-    const q = orderSearchQ.toLowerCase();
-    return allOrders.filter((o: any) =>
-      o.orderNo?.toLowerCase().includes(q) ||
-      o.customer?.name?.toLowerCase().includes(q) ||
-      o.tableName?.toLowerCase().includes(q)
-    );
-  }, [allOrders, orderSearchQ]);
-
-  // Cancel an order with confirmation + reason note (no KOT print)
-  const cancelOrderWithNote = async (orderId: number, orderNo: string) => {
-    const reason = await prompt({ title: `Cancel order ${orderNo}?`, description: 'Enter cancellation reason:', placeholder: 'Reason...' });
-    if (reason === null) return; // user pressed Cancel on prompt
-    try {
-      await api.patch(`/sales/orders/${orderId}/void`);
-      if (reason.trim()) {
-        await api.patch(`/sales/orders/${orderId}`, { notes: `❌ CANCELLED: ${reason.trim()}` }).catch(() => {});
-      }
-      toast.success(`Order ${orderNo} cancelled`);
-      qc.invalidateQueries({ queryKey: ['pos-all-orders'] });
-      qc.invalidateQueries({ queryKey: ['pos-pending'] });
-      qc.invalidateQueries({ queryKey: ['kds-board'] });
-      qc.invalidateQueries({ queryKey: ['waiter-active-orders'] });
-      if (loadedOrderId === orderId) { setLoadedOrderId(null); setPosView('floor'); }
-    } catch (e: any) {
-      toast.error(e.response?.data?.message || 'Failed to cancel');
-    }
-  };
-
-  // ---- Multi-order table state ----
-  const [tableOrderPicker, setTableOrderPicker] = useState<{ tableName: string; orders: any[] } | null>(null);
-  // ---- Split bill modal state ----
-  const [splitModal, setSplitModal] = useState(false);
-  const [splitSelected, setSplitSelected] = useState<Record<number, number>>({});
-  const [splitPayMethod, setSplitPayMethod] = useState<'CASH' | 'CARD' | 'later'>('later');
-  // ---- Numpad target: which line item is selected ----
-  const [selectedLineIdx, setSelectedLineIdx] = useState<number>(-1);
-  const [numBuffer, setNumBuffer] = useState<string>('');
-  const [numMode, setNumMode] = useState<'Qty' | '%Disc' | 'Price' | null>(null);
-
-  // ── POS Keyboard Shortcuts (F2=Pay, F3=Hold, F4=Print, F8=Clear, Esc) ──
-  usePosKeyboard({
-    onPay: () => setShowPayment(true),
-    onHold: () => {
-      if (mode === 'existing' && loadedOrderId) {
-        api.patch(`/sales/orders/${loadedOrderId}/hold`, {}).then(() => {
-          toast.success('Order held');
-          setLoadedOrderId(null);
-          setCart([]);
-        });
-      }
-    },
-    onPrint: () => { if (lastReceipt) printReceipt(lastReceipt, businessInfo); },
-    onClear: () => { setCart([]); setComboCart([]); setLoadedOrderId(null); setLastReceipt(null); setShowPayment(false); },
-    onOrders: () => setPosView('orders'),
-    onEscape: () => { if (showPayment) setShowPayment(false); else if (lastReceipt) setLastReceipt(null); },
-    onQtyUp: () => { if (selectedLineIdx >= 0 && selectedLineIdx < cart.length) setCart(p => p.map((l, i) => i === selectedLineIdx ? { ...l, quantity: l.quantity + 1 } : l)); },
-    onQtyDown: () => { if (selectedLineIdx >= 0 && selectedLineIdx < cart.length) setCart(p => p.map((l, i) => i === selectedLineIdx ? { ...l, quantity: Math.max(1, l.quantity - 1) } : l)); },
-  });
-
-  // Open a table from the floor plan → switch to order view
-  const openTableOrder = async (table: any) => {
+  // ─── Floor plan table open ───
+  const openTableOrder = useCallback(async (table: any) => {
     try {
       const tName = table.name;
-      // Find ALL pending (OPEN/HELD) orders for this specific table
       const tableOrders = (pendingBills || []).filter((o: any) => o.tableName === tName);
-
       if (tableOrders.length === 0) {
-        // No orders → create a new one
         const { data } = await api.post('/sales/orders', { branchId, channel: 'DINE_IN', tableName: tName });
         setLoadedOrderId(data.data.id);
         setTableName(tName);
         qc.invalidateQueries({ queryKey: ['pos-pending'] });
         setPosView('order');
       } else if (tableOrders.length === 1) {
-        // Exactly 1 order → open it directly
         loadBill(tableOrders[0]);
         setPosView('order');
       } else {
-        // Multiple orders → show picker (always, no auto-resume)
         setTableOrderPicker({ tableName: tName, orders: tableOrders });
       }
-    } catch (e: any) {
-      toast.error(e.response?.data?.message || 'Failed to open table');
-    }
-  };
+    } catch (e: any) { toast.error(e.response?.data?.message || 'Failed to open table'); }
+  }, [pendingBills, branchId, qc, loadBill]);
 
-  // Create a NEW additional order for a table that already has orders
-  const addOrderToTable = async (tName: string) => {
+  const addOrderToTable = useCallback(async (tName: string) => {
     try {
       const { data } = await api.post('/sales/orders', { branchId, channel: 'DINE_IN', tableName: tName });
       setLoadedOrderId(data.data.id);
@@ -763,266 +346,227 @@ export default function POSPage() {
       setTableOrderPicker(null);
       qc.invalidateQueries({ queryKey: ['pos-pending'] });
       setPosView('order');
-    } catch (e: any) {
-      toast.error(e.response?.data?.message || 'Failed to create order');
-    }
-  };
+    } catch (e: any) { toast.error(e.response?.data?.message || 'Failed to create order'); }
+  }, [branchId, qc]);
 
-  // PIN switch user state
-  const [showPinSwitch, setShowPinSwitch] = useState(false);
 
+  // ─── Checkout (charge) ───
+  const charge = useMutation({
+    mutationFn: async () => {
+      if (!branchId) throw new Error('Select a branch first');
+      if (!lines.length && !comboCart.length) throw new Error('Cart is empty');
+      if (!tenders.length) throw new Error('Add at least one payment');
+      if (paid + 1e-6 < total) throw new Error(`Payment is short by ${remaining.toFixed(2)}`);
+      let orderId: number;
+      if (mode === 'existing') {
+        orderId = loadedOrderId as number;
+      } else {
+        const idempotencyKey = `pos-${branchId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const { data: created } = await api.post('/sales/orders', {
+          branchId, channel,
+          tableName: (channel === 'DINE_IN' && tableName) ? tableName : (channel === 'DELIVERY' || channel === 'TAKEAWAY') ? (tableName || undefined) : undefined,
+          customerId: customer?.id, couponCode: coupon?.code, presetId,
+          deliveryPlatformId: isAggregatorChannel(channel) ? deliveryPlatformId : undefined,
+          platformRef: isAggregatorChannel(channel) ? (platformRef || undefined) : undefined,
+          idempotencyKey, shipLater: shipLater || undefined,
+          items: cart.map((l) => ({ productId: l.productId, quantity: l.quantity, unitPrice: l.unitPrice, modifiers: l.modifiers })),
+          combos: comboCart.map((c) => ({ comboId: c.comboId, choiceIds: c.choiceIds })),
+          tip: tipAmount > 0 ? tipAmount : undefined,
+        });
+        orderId = created.data.id;
+        try {
+          const fireRes = await api.post(`/sales/orders/${orderId}/courses/1/fire`);
+          if (fireRes.data?.data) printKot(fireRes.data.data, { splitByStation: true });
+        } catch { toast('Note: Kitchen fire pending', { icon: '⚠️' }); }
+      }
+      for (const ten of tenders) {
+        if (ten.method === 'LOYALTY_CARD' && ten.loyaltyCode) {
+          await api.post(`/loyalty/cards/${encodeURIComponent(ten.loyaltyCode)}/redeem`, { amount: ten.amount });
+          await api.post(`/sales/orders/${orderId}/payments`, { method: 'WALLET', amount: ten.amount, reference: `loyalty:${ten.loyaltyCode}` });
+          continue;
+        }
+        if (ten.method === 'TERMINAL' && ten.terminalId) {
+          await api.post(`/payment-terminals/${ten.terminalId}/capture`, { orderId, amount: ten.amount });
+          continue;
+        }
+        await api.post(`/sales/orders/${orderId}/payments`, { method: ten.method, amount: ten.amount, ...(ten.method === 'GIFT_CARD' ? { giftCardCode: ten.giftCardCode } : {}) });
+      }
+      const { data: done } = await api.post(`/sales/orders/${orderId}/complete`, {});
+      return done.data;
+    },
+    onSuccess: (order) => {
+      toast.success(`Sale ${order.orderNo} completed`);
+      setLastReceipt(order);
+      printReceipt(order, businessInfo);
+      setCart([]); setComboCart([]); setTableName(''); setPlatformRef(''); setPresetId(undefined);
+      setCouponCode(''); setCoupon(null); setTenderAmount(''); setTenders([]); setTipAmount(0);
+      setLoadedOrderId(null); setCustomer(null); setCustomerSearch(''); setShipLater(false);
+      qc.invalidateQueries({ queryKey: ['inventory'] });
+      qc.invalidateQueries({ queryKey: ['kds-board'] });
+      qc.invalidateQueries({ queryKey: ['pos-pending'] });
+      qc.invalidateQueries({ queryKey: ['waiter-tables'] });
+      qc.invalidateQueries({ queryKey: ['waiter-active-orders'] });
+    },
+    onError: (e: any) => toast.error(e.response?.data?.message || e.message || 'Sale failed'),
+  });
+
+  // ─── POS Keyboard Shortcuts ───
+  usePosKeyboard({
+    onPay: () => setShowPayment(true),
+    onHold: () => { if (mode === 'existing' && loadedOrderId) { api.patch(`/sales/orders/${loadedOrderId}/hold`, {}).then(() => { toast.success('Order held'); setLoadedOrderId(null); setCart([]); }); } },
+    onPrint: () => { if (lastReceipt) printReceipt(lastReceipt, businessInfo); },
+    onClear: () => { setCart([]); setComboCart([]); setLoadedOrderId(null); setLastReceipt(null); setShowPayment(false); },
+    onOrders: () => setPosView('orders'),
+    onEscape: () => { if (showPayment) setShowPayment(false); else if (lastReceipt) setLastReceipt(null); },
+    onQtyUp: () => {},
+    onQtyDown: () => {},
+  });
+
+
+  // ─── RENDER ───
   return (
     <div className="h-screen flex flex-col overflow-hidden">
-      {/* Offline status banner */}
       <OfflineBanner />
-      {/* ─── ODOO-STYLE TOP NAV BAR ─── */}
+      {/* ─── TOP NAV BAR ─── */}
       <div className="bg-gray-900 text-white px-4 py-2 flex items-center gap-3 flex-shrink-0">
-        {/* Back to Dashboard button */}
-        <button onClick={() => window.location.replace('/')} className="text-gray-400 hover:text-white transition text-lg" title="Back to Dashboard">
-          ✕
-        </button>
+        <button onClick={() => window.location.replace('/')} className="text-gray-400 hover:text-white transition text-lg" title="Back to Dashboard">✕</button>
         <span className="font-bold text-sm whitespace-nowrap">{activeBranch?.name || 'POS'}</span>
         <div className="flex gap-1 ms-4">
-          <button onClick={() => setPosView('floor')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${posView === 'floor' ? 'bg-primary text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}>
-            🏠 Floor Plan
-          </button>
-          <button onClick={() => setPosView('order')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${posView === 'order' ? 'bg-primary text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}>
-            🛒 Order
-          </button>
-          <button onClick={() => setPosView('orders')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${posView === 'orders' ? 'bg-primary text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}>
-            📋 Orders {pendingBills?.length ? `(${pendingBills.length})` : ''}
-          </button>
+          <button onClick={() => setPosView('floor')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${posView === 'floor' ? 'bg-primary text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}>🏠 Floor Plan</button>
+          <button onClick={() => setPosView('order')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${posView === 'order' ? 'bg-primary text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}>🛒 Order</button>
+          <button onClick={() => setPosView('orders')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${posView === 'orders' ? 'bg-primary text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}>📋 Orders {pendingBills?.length ? `(${pendingBills.length})` : ''}</button>
         </div>
         <div className="ms-auto flex items-center gap-2 text-xs text-gray-400">
-          {/* Customer Display (opens in new tab) */}
-          {branchId && (
-            <button onClick={() => window.open(`/display/${branchId}`, '_blank')} className="px-2 py-1 rounded-lg hover:bg-gray-700 text-gray-300 hover:text-white transition" title="Open Customer Display">
-              🖥️
-            </button>
-          )}
-          {/* Switch User (PIN login) */}
-          <button onClick={() => setShowPinSwitch(true)} className="px-2 py-1 rounded-lg hover:bg-gray-700 text-gray-300 hover:text-white transition" title="Switch User">
-            👤 {user?.firstName}
-          </button>
+          {branchId && <button onClick={() => window.open(`/display/${branchId}`, '_blank')} className="px-2 py-1 rounded-lg hover:bg-gray-700 text-gray-300 hover:text-white transition" title="Open Customer Display">🖥️</button>}
+          <button onClick={() => setShowPinSwitch(true)} className="px-2 py-1 rounded-lg hover:bg-gray-700 text-gray-300 hover:text-white transition" title="Switch User">👤 {user?.firstName}</button>
           {!isOnline && <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-bold animate-pulse">OFFLINE{pendingCount > 0 ? ` (${pendingCount})` : ''}</span>}
           {isSyncing && <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold">SYNCING...</span>}
         </div>
       </div>
-      {/* Session bar */}
-      <div className="flex-shrink-0">
-        <PosSessionBar branchId={branchId} businessInfo={businessInfo} />
-      </div>
+      <div className="flex-shrink-0"><PosSessionBar branchId={branchId} businessInfo={businessInfo} /></div>
 
       {/* ─── FLOOR PLAN VIEW ─── */}
       {posView === 'floor' && (
-        <div className="flex-1 overflow-hidden p-4 flex flex-col">
-          {/* Floor tabs + edit toggle */}
-          <div className="flex items-center gap-2 mb-4">
-            {(floors || []).map((f: any, idx: number) => (
-              <button key={f.id} onClick={() => setActiveFloorIdx(idx)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium ${activeFloorIdx === idx ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800'}`}>
-                {f.name}
-              </button>
-            ))}
-            {floorEditMode && (
-              <>
-                <button onClick={async () => {
-                  const name = await prompt({ title: 'New area name', placeholder: 'e.g. Terrace' });
-                  if (name?.trim()) {
-                    api.post('/floors', { branchId, name: name.trim(), background: '#e9d5ff' }).then(() => {
-                      toast.success('Area created');
-                      qc.invalidateQueries({ queryKey: ['pos-floors'] });
-                    });
-                  }
-                }} className="px-3 py-2 rounded-lg border-2 border-dashed border-gray-300 text-xs text-gray-500">+ Area</button>
-                <button onClick={async () => {
-                  const name = await prompt({ title: 'New table name', defaultValue: `T${(activeFloor?.tables?.length || 0) + 1}` });
-                  if (name?.trim() && activeFloor) {
-                    const seatsStr = await prompt({ title: 'Seats', defaultValue: '4', type: 'number' });
-                    const seats = parseInt(seatsStr || '4', 10);
-                    api.post('/tables', {
-                      branchId, floorId: activeFloor.id, name: name.trim(), seats,
-                      shape: 'SQUARE', posX: 50 + Math.random() * 300, posY: 50 + Math.random() * 200, width: 90, height: 90,
-                    }).then(() => { toast.success('Table added'); qc.invalidateQueries({ queryKey: ['pos-floors'] }); });
-                  }
-                }} className="px-3 py-2 rounded-lg bg-primary text-white text-xs font-medium">+ Table</button>
-                <input
-                  type="color"
-                  value={activeFloor?.background || '#e9d5ff'}
-                  onChange={(e) => {
-                    if (activeFloor) {
-                      api.patch(`/floors/${activeFloor.id}`, { background: e.target.value }).then(() => qc.invalidateQueries({ queryKey: ['pos-floors'] }));
-                    }
-                  }}
-                  title="Floor background color"
-                  className="w-9 h-9 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer"
-                />
-              </>
-            )}
-            {canEditFloor && (
-            <button onClick={() => setFloorEditMode(!floorEditMode)}
-              className={`ms-auto w-9 h-9 rounded-lg flex items-center justify-center text-lg transition ${floorEditMode ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200'}`}
-              title={floorEditMode ? 'Exit edit mode' : 'Edit floor plan'}>
-              ✏️
-            </button>
-            )}
-          </div>
-
-          {/* Floor canvas with positioned tables */}
-          {activeFloor ? (
-            <div className="relative rounded-2xl overflow-hidden border-2 border-gray-200 dark:border-gray-700 w-full flex-1"
-              style={{ background: activeFloor.background || '#f5f5f4' }}
-              onMouseMove={floorEditMode ? handleFloorDrag : undefined}
-              onMouseUp={floorEditMode ? handleFloorDragEnd : undefined}
-              onMouseLeave={floorEditMode ? handleFloorDragEnd : undefined}
-              onTouchMove={floorEditMode ? (e) => { const t = e.touches[0]; handleFloorDrag({ clientX: t.clientX, clientY: t.clientY } as any); } : undefined}
-              onTouchEnd={floorEditMode ? handleFloorDragEnd : undefined}>
-              {(activeFloor.tables || []).filter((t: any) => t.isActive).map((table: any) => {
-                const tableOrders = (pendingBills || []).filter((o: any) => o.tableName === table.name);
-                const hasOrder = tableOrders.length > 0;
-                const isOccupied = table.status === 'OCCUPIED' || hasOrder;
-                const isRound = table.shape === 'ROUND';
-                const bgColor = isOccupied ? 'bg-red-400/80' : 'bg-emerald-400/80';
-                const pos = floorLocalPos[table.id] || { posX: table.posX, posY: table.posY, width: table.width, height: table.height };
-                return (
-                  <div
-                    key={table.id}
-                    onMouseDown={floorEditMode ? (e) => { e.preventDefault(); setFloorDragging({ id: table.id, startX: e.clientX, startY: e.clientY, origX: pos.posX, origY: pos.posY }); } : undefined}
-                    onTouchStart={floorEditMode ? (e) => { const t = e.touches[0]; setFloorDragging({ id: table.id, startX: t.clientX, startY: t.clientY, origX: pos.posX, origY: pos.posY }); } : undefined}
-                    onClick={!floorEditMode ? () => openTableOrder(table) : async () => {
-                      // In edit mode: single click opens the table editor
-                      const name = await prompt({ title: 'Edit Table', defaultValue: table.name, placeholder: 'Table name' });
-                      if (name === null) return;
-                      const seatsStr = await prompt({ title: 'Seats', defaultValue: String(table.seats), type: 'number' });
-                      if (seatsStr === null) return;
-                      const seats = parseInt(seatsStr, 10) || table.seats;
-                      const shape = await prompt({ title: 'Shape', defaultValue: table.shape || 'SQUARE', type: 'select', options: [{ value: 'SQUARE', label: 'Square' }, { value: 'ROUND', label: 'Round' }, { value: 'RECTANGLE', label: 'Rectangle' }] });
-                      if (shape === null) return;
-                      api.patch(`/tables/${table.id}`, { name: name || table.name, seats, shape }).then(() => { toast.success('Table updated'); qc.invalidateQueries({ queryKey: ['pos-floors'] }); });
-                    }}
-                    className={`absolute flex flex-col items-center justify-center text-white font-bold shadow-lg transition-transform ${!floorEditMode ? 'cursor-pointer hover:scale-105' : 'cursor-grab active:cursor-grabbing'} ${bgColor} ${isRound ? 'rounded-full' : 'rounded-xl'}`}
-                    style={{ left: pos.posX, top: pos.posY, width: pos.width, height: pos.height }}
-                  >
-                    <span className="text-sm">{table.name}</span>
-                    <span className="text-[10px] opacity-80">{table.seats} 👤</span>
-                    {tableOrders.length > 1 && <span className="absolute top-1 right-1 min-w-[18px] h-[18px] bg-white rounded-full flex items-center justify-center text-[9px] font-bold text-gray-900">{tableOrders.length}</span>}
-                    {tableOrders.length === 1 && <span className="absolute top-1 right-1 w-3 h-3 bg-white rounded-full flex items-center justify-center text-[8px] text-gray-900">✓</span>}
-                    {/* Resize handle in edit mode */}
-                    {floorEditMode && (
-                      <div
-                        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setFloorResizing({ id: table.id, startX: e.clientX, startY: e.clientY, origW: pos.width, origH: pos.height }); }}
-                        className="absolute bottom-0 right-0 w-4 h-4 bg-white/50 hover:bg-white/80 cursor-se-resize rounded-tl"
-                      />
-                    )}
-                  </div>
-                );
-              })}
-              {!(activeFloor.tables || []).filter((t: any) => t.isActive).length && (
-                <div className="absolute inset-0 flex items-center justify-center text-white/70 text-sm">
-                  {floorEditMode ? 'Click "+ Table" to add tables' : 'No tables. Click ✏️ to enter edit mode.'}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="text-center py-16 text-gray-400">
-              <p>No floor plan. Click ✏️ then "+ Area" to create one.</p>
-            </div>
-          )}
-          {floorEditMode && floorDirty && (
-            <button onClick={() => {
-              api.patch('/tables/bulk-positions', { tables: Object.entries(floorLocalPos).map(([id, p]) => ({ id: parseInt(id), ...p })) })
-                .then(() => { toast.success('Layout saved'); setFloorDirty(false); qc.invalidateQueries({ queryKey: ['pos-floors'] }); });
-            }} className="mt-3 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium animate-pulse">
-              Save Layout
-            </button>
-          )}
-          {/* New Order button (for non-table orders like takeaway) */}
-          {!floorEditMode && (
-            <div className="mt-4">
-              <button onClick={() => { setTableName(''); setPosView('order'); }} className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium">
-                + New Order (no table)
-              </button>
-            </div>
-          )}
-        </div>
+        <FloorPlanView
+          branchId={branchId}
+          pendingBills={pendingBills || []}
+          canEditFloor={canEditFloor}
+          onOpenTable={openTableOrder}
+          onNewOrder={() => { setTableName(''); setPosView('order'); }}
+        />
       )}
 
       {/* ─── ORDERS LIST VIEW ─── */}
       {posView === 'orders' && (
-        <div>
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            <button onClick={() => { setPosView('order'); setLoadedOrderId(null); setCart([]); }} className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium">+ New Order</button>
-            <input value={orderSearchQ} onChange={(e) => setOrderSearchQ(e.target.value)} placeholder="Search orders..."
-              className="flex-1 min-w-[180px] rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm" />
-            <select value={orderStatusFilter} onChange={(e) => setOrderStatusFilter(e.target.value)}
-              className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm">
-              <option value="all">All</option>
-              <option value="OPEN">Open</option>
-              <option value="HELD">Held</option>
-              <option value="COMPLETED">Paid</option>
-              <option value="VOIDED">Voided</option>
-              <option value="REFUNDED">Refunded</option>
-            </select>
+        <OrdersListView
+          branchId={branchId}
+          loadedOrderId={loadedOrderId}
+          onLoadBill={loadBill}
+          onNewOrder={() => { closeBill(); setTableName(''); setChannel('DINE_IN'); setPresetId(undefined); setCoupon(null); setCouponCode(''); setPosView('order'); }}
+          onSwitchToOrder={() => setPosView('order')}
+        />
+      )}
+
+
+      {/* ─── ORDER VIEW ─── */}
+      {posView === 'order' && (
+        <div className="flex-1 overflow-hidden flex flex-col">
+          {/* New order / table context bar */}
+          <div className="flex items-center gap-2 px-4 pt-3 pb-1">
+            <button onClick={() => { closeBill(); setTableName(''); setChannel('DINE_IN'); setPresetId(undefined); setCoupon(null); setCouponCode(''); }}
+              className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium">+ New Order</button>
+            {channel === 'DINE_IN' && !tableName && (
+              <button onClick={() => setPosView('floor')} className="px-3 py-1.5 rounded-lg border border-amber-300 text-amber-700 dark:text-amber-400 text-xs font-medium">🪑 Select Table</button>
+            )}
+            {tableName && channel === 'DINE_IN' && (
+              <span className="text-xs text-gray-500">Table: <strong>{tableName}</strong>
+                <button onClick={() => setPosView('floor')} className="ms-2 text-primary hover:underline">Change</button>
+              </span>
+            )}
           </div>
-          <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 dark:bg-gray-900/50 text-gray-500 text-xs uppercase">
-                <tr>
-                  <th className="text-left px-3 py-2">Date</th>
-                  <th className="text-left px-3 py-2">Receipt #</th>
-                  <th className="text-left px-3 py-2">Type</th>
-                  <th className="text-left px-3 py-2">Table / Ref</th>
-                  <th className="text-left px-3 py-2">Customer</th>
-                  <th className="text-right px-3 py-2">Total</th>
-                  <th className="text-left px-3 py-2">Status</th>
-                  <th className="text-center px-3 py-2"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {(filteredOrders || []).map((o: any) => (
-                  <tr key={o.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer"
-                    onClick={() => { loadBill(o); setPosView('order'); }}>
-                    <td className="px-3 py-2 text-xs">{new Date(o.createdAt).toLocaleString()}</td>
-                    <td className="px-3 py-2 font-mono text-xs">{o.orderNo}</td>
-                    <td className="px-3 py-2">
-                      {o.channel === 'DELIVERY' && <span className="px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 text-[10px] font-bold">🚗 DELIVERY</span>}
-                      {o.channel === 'TAKEAWAY' && <span className="px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 text-[10px] font-bold">🥡 TAKEAWAY</span>}
-                      {o.channel === 'DINE_IN' && <span className="text-[10px] text-gray-500">🍽️ DINE IN</span>}
-                      {o.channel && !['DINE_IN','DELIVERY','TAKEAWAY'].includes(o.channel) && <span className="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-[10px] font-bold">{o.channel}</span>}
-                    </td>
-                    <td className="px-3 py-2 text-xs">{o.tableName || '—'}</td>
-                    <td className="px-3 py-2">{o.customer?.name || '—'}</td>
-                    <td className="px-3 py-2 text-right font-semibold">{Number(o.total).toFixed(2)}</td>
-                    <td className="px-3 py-2">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                        o.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
-                        o.status === 'OPEN' || o.status === 'HELD' ? 'bg-amber-100 text-amber-700' :
-                        o.status === 'VOIDED' ? 'bg-red-100 text-red-700' :
-                        'bg-gray-100 text-gray-600'
-                      }`}>{o.status === 'COMPLETED' ? 'Paid' : o.status}</span>
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      {(o.status === 'OPEN' || o.status === 'HELD') && (
-                        <button onClick={(e) => { e.stopPropagation(); cancelOrderWithNote(o.id, o.orderNo); }}
-                          className="w-6 h-6 rounded-full bg-red-100 hover:bg-red-200 text-red-600 text-xs font-bold flex items-center justify-center"
-                          title="Cancel order">✕</button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {!filteredOrders?.length && <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-400">No orders found.</td></tr>}
-              </tbody>
-            </table>
+
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 overflow-hidden p-4">
+            {/* Product Catalog */}
+            <ProductCatalog onProductSelect={onProduct} />
+
+            {/* Cart Panel */}
+            <CartPanel
+              branchId={branchId} mode={mode} lines={lines} comboCart={comboCart}
+              cart={cart} setCart={setCart} setComboCart={setComboCart}
+              channel={channel} setChannel={setChannel}
+              tableName={tableName} setTableName={setTableName}
+              deliveryPlatformId={deliveryPlatformId} setDeliveryPlatformId={setDeliveryPlatformId}
+              platformRef={platformRef} setPlatformRef={setPlatformRef}
+              presetId={presetId} setPresetId={setPresetId}
+              customer={customer} setCustomer={setCustomer}
+              customerSearch={customerSearch} setCustomerSearch={setCustomerSearch}
+              couponCode={couponCode} setCouponCode={setCouponCode}
+              coupon={coupon} setCoupon={setCoupon}
+              discountRuleId={discountRuleId} setDiscountRuleId={setDiscountRuleId}
+              tipAmount={tipAmount} setTipAmount={setTipAmount}
+              loadedOrderId={loadedOrderId} setLoadedOrderId={setLoadedOrderId}
+              loadedOrder={loadedOrder} subtotal={subtotal} total={total}
+              posSession={posSession} businessInfo={businessInfo}
+              lastReceipt={lastReceipt} setLastReceipt={setLastReceipt}
+              showPayment={showPayment} setShowPayment={setShowPayment}
+              onSwitchToFloor={() => setPosView('floor')} onCloseBill={closeBill}
+              refetchLoaded={refetchLoaded} canRefund={canRefund}
+              shipLater={shipLater} setShipLater={setShipLater}
+            />
           </div>
         </div>
       )}
 
-      {/* ─── ORDER VIEW (existing checkout screen) ─── */}
-      {posView === 'order' && (
-    <div className="flex-1 overflow-hidden flex flex-col">{/* Order view fills remaining viewport, never scrolls page */}
+
+      {/* ─── PAYMENT SCREEN ─── */}
+      {showPayment && (
+        <PaymentScreen
+          total={total} subtotal={subtotal} cartSubtotal={cartSubtotal}
+          tenders={tenders} setTenders={setTenders}
+          tipAmount={tipAmount} setTipAmount={setTipAmount}
+          activeCustomer={mode === 'existing' ? loadedOrder?.customer : customer}
+          loadedOrderId={loadedOrderId} loadedOrder={loadedOrder} mode={mode}
+          businessInfo={businessInfo} lines={lines} comboCart={comboCart}
+          onClose={() => setShowPayment(false)}
+          onCharge={() => charge.mutate()}
+          isCharging={charge.isPending}
+          lastReceipt={lastReceipt}
+          refetchLoaded={refetchLoaded}
+        />
+      )}
+
+      {/* ─── MODALS ─── */}
+      {/* Modifier modal */}
+      {modProduct && (
+        <ModifierModal
+          product={modProduct.product}
+          groups={modProduct.groups}
+          onClose={() => setModProduct(null)}
+          onConfirm={(mods, delta) => { addLine(modProduct.product, (modProduct.product.salePrice ?? modProduct.product.costPrice ?? 0) + delta, mods); setModProduct(null); }}
+        />
+      )}
+
+      {/* Variant picker */}
+      {variantProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setVariantProduct(null)}>
+          <div className="w-full max-w-sm rounded-xl bg-white dark:bg-gray-900 p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="text-sm font-semibold mb-3">{variantProduct.product.name} — {t('pos.pickVariant')}</div>
+            <div className="space-y-2">
+              {variantProduct.variants.map((v: any) => {
+                const base = variantProduct.product.salePrice ?? variantProduct.product.costPrice ?? 0;
+                return (
+                  <button key={v.id} onClick={() => pickVariant(v)} className="w-full flex justify-between items-center rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <span>{v.sku}</span><span className="font-semibold">{(base + (v.priceExtra ?? 0)).toFixed(2)}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <button onClick={() => setVariantProduct(null)} className="mt-3 w-full py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm">{t('common.cancel')}</button>
+          </div>
+        </div>
+      )}
+
+      {/* Combo picker */}
       {comboPick && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setComboPick(null)}>
           <div className="w-full max-w-md rounded-xl bg-white dark:bg-gray-900 p-4 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -1034,15 +578,7 @@ export default function POSPage() {
                   <div className="space-y-1">
                     {(l.choices || []).map((ch: any) => (
                       <label key={ch.id} className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-sm cursor-pointer">
-                        <span className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            name={`combo-line-${l.id}`}
-                            checked={comboPick.sel[l.id] === ch.id}
-                            onChange={() => setComboPick({ ...comboPick, sel: { ...comboPick.sel, [l.id]: ch.id } })}
-                          />
-                          {ch.product?.name ?? `#${ch.productId}`}
-                        </span>
+                        <span className="flex items-center gap-2"><input type="radio" name={`combo-line-${l.id}`} checked={comboPick.sel[l.id] === ch.id} onChange={() => setComboPick({ ...comboPick, sel: { ...comboPick.sel, [l.id]: ch.id } })} />{ch.product?.name ?? `#${ch.productId}`}</span>
                         {ch.priceExtra ? <span className="text-xs text-gray-400">+{Number(ch.priceExtra).toFixed(2)}</span> : null}
                       </label>
                     ))}
@@ -1060,1054 +596,9 @@ export default function POSPage() {
           </div>
         </div>
       )}
-      {variantProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setVariantProduct(null)}>
-          <div className="w-full max-w-sm rounded-xl bg-white dark:bg-gray-900 p-4" onClick={(e) => e.stopPropagation()}>
-            <div className="text-sm font-semibold mb-3">{variantProduct.product.name} — {t('pos.pickVariant')}</div>
-            <div className="space-y-2">
-              {variantProduct.variants.map((v: any) => {
-                const base = variantProduct.product.salePrice ?? variantProduct.product.costPrice ?? 0;
-                return (
-                  <button key={v.id} onClick={() => pickVariant(v)} className="w-full flex justify-between items-center rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
-                    <span>{v.sku}</span>
-                    <span className="font-semibold">{(base + (v.priceExtra ?? 0)).toFixed(2)}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <button onClick={() => setVariantProduct(null)} className="mt-3 w-full py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm">{t('common.cancel')}</button>
-          </div>
-        </div>
-      )}
-      {modProduct && (
-        <ModifierModal
-          product={modProduct.product}
-          groups={modProduct.groups}
-          onClose={() => setModProduct(null)}
-          onConfirm={(mods, delta) => {
-            addLine(modProduct.product, (modProduct.product.salePrice ?? modProduct.product.costPrice ?? 0) + delta, mods);
-            setModProduct(null);
-          }}
-        />
-      )}
 
-      {/* Table Order Picker — moved outside posView blocks so it renders on floor plan */}
 
-      {/* Split Bill Modal — select items + quantities to split, with pay now or later */}
-      {splitModal && loadedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { setSplitModal(false); setSplitSelected({}); }}>
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-md p-5 max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-base font-bold mb-1">{t('pos.splitBillTitle')}</h3>
-            <p className="text-xs text-gray-500 mb-3">{t('pos.splitBillDesc')}</p>
-
-            {/* Item selection list */}
-            <div className="flex-1 overflow-y-auto space-y-1 mb-4">
-              {(loadedOrder.items || []).filter((it: any) => !it.isVoided).map((it: any) => {
-                const qty = splitSelected[it.id] ?? 0;
-                const maxQty = it.quantity;
-                return (
-                  <div key={it.id} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{it.product?.name ?? `#${it.productId}`}</div>
-                      {Array.isArray(it.modifiers) && it.modifiers.length > 0 && (
-                        <div className="text-[10px] text-amber-600">{it.modifiers.filter((m: any) => m?.name).map((m: any) => m.name).join(', ')}</div>
-                      )}
-                      <div className="text-[10px] text-gray-500">{Number(it.unitPrice).toFixed(2)} × {maxQty}</div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => setSplitSelected(p => ({ ...p, [it.id]: Math.max(0, (p[it.id] ?? 0) - 1) }))} disabled={qty === 0} className="w-7 h-7 rounded bg-gray-100 dark:bg-gray-800 text-sm font-bold disabled:opacity-30">-</button>
-                      <span className="w-6 text-center text-sm font-semibold">{qty}</span>
-                      <button onClick={() => setSplitSelected(p => ({ ...p, [it.id]: Math.min(maxQty, (p[it.id] ?? 0) + 1) }))} disabled={qty >= maxQty} className="w-7 h-7 rounded bg-gray-100 dark:bg-gray-800 text-sm font-bold disabled:opacity-30">+</button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Split total */}
-            {(() => {
-              const splitTotal = Object.entries(splitSelected).reduce((sum, [id, qty]) => {
-                const it = (loadedOrder.items || []).find((i: any) => i.id === Number(id));
-                return sum + (it ? it.unitPrice * qty : 0);
-              }, 0);
-              const hasSelection = Object.values(splitSelected).some(q => q > 0);
-              return (
-                <>
-                  <div className="flex justify-between text-sm font-bold mb-3 border-t border-gray-200 dark:border-gray-800 pt-3">
-                    <span>{t('pos.splitTotal')}</span>
-                    <span>{splitTotal.toFixed(2)}</span>
-                  </div>
-
-                  {/* Payment method for the split portion */}
-                  <div className="flex gap-2 mb-3">
-                    {(['CASH', 'CARD', 'later'] as const).map(m => (
-                      <button
-                        key={m}
-                        onClick={() => setSplitPayMethod(m)}
-                        className={`flex-1 py-2 rounded-lg text-xs font-medium border ${splitPayMethod === m ? 'bg-primary text-white border-primary' : 'border-gray-200 dark:border-gray-700'}`}
-                      >
-                        {m === 'later' ? t('pos.splitLater') : m}
-                      </button>
-                    ))}
-                  </div>
-
-                  <button
-                    disabled={!hasSelection}
-                    onClick={async () => {
-                      const itemIds = Object.entries(splitSelected)
-                        .filter(([, qty]) => qty > 0)
-                        .map(([id]) => Number(id));
-                      if (!itemIds.length) return;
-                      try {
-                        const res = await api.post(`/sales/orders/${loadedOrderId}/split`, { itemIds, quantities: splitSelected });
-                        const newOrder = res.data?.data?.newOrder;
-                        // If user chose to pay now, complete the split order immediately
-                        if (splitPayMethod !== 'later' && newOrder) {
-                          await api.post(`/sales/orders/${newOrder.id}/payments`, { method: splitPayMethod, amount: newOrder.total });
-                          const { data: completed } = await api.post(`/sales/orders/${newOrder.id}/complete`, {});
-                          const doneOrder = completed?.data ?? newOrder;
-                          toast.success(t('pos.splitPaid', { method: splitPayMethod }));
-                          // Auto-print receipt for the paid split portion
-                          printReceipt(doneOrder, businessInfo);
-                        } else {
-                          toast.success(t('pos.splitDone'));
-                        }
-                        setSplitModal(false);
-                        setSplitSelected({});
-                        qc.invalidateQueries({ queryKey: ['pos-pending'] });
-                        refetchLoaded();
-                      } catch (e: any) {
-                        toast.error(e.response?.data?.message || 'Split failed');
-                      }
-                    }}
-                    className="w-full py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold disabled:opacity-50"
-                  >
-                    {splitPayMethod === 'later' ? t('pos.splitCreateOrder') : t('pos.splitAndPay')}
-                  </button>
-                </>
-              );
-            })()}
-          </div>
-        </div>
-      )}
-
-      {/* Pending bills (waiter handoff) */}
-      {posView === 'order' && (
-        <div className="flex items-center gap-2 mb-3">
-          <button
-            onClick={() => { closeBill(); setTableName(''); setChannel('DINE_IN'); setPresetId(undefined); setCoupon(null); setCouponCode(''); }}
-            className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium"
-          >
-            + New Order
-          </button>
-          {channel === 'DINE_IN' && !tableName && (
-            <button onClick={() => setPosView('floor')} className="px-3 py-1.5 rounded-lg border border-amber-300 text-amber-700 dark:text-amber-400 text-xs font-medium">
-              🪑 Select Table
-            </button>
-          )}
-          {tableName && channel === 'DINE_IN' && (
-            <span className="text-xs text-gray-500">
-              Table: <strong>{tableName}</strong>
-              <button onClick={() => setPosView('floor')} className="ms-2 text-primary hover:underline">Change</button>
-            </span>
-          )}
-        </div>
-      )}
-
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 overflow-hidden p-4">
-        {/* Catalog — scrolls independently */}
-        <div className="lg:col-span-2 overflow-y-auto min-h-0">
-          <div className="flex flex-wrap gap-2 mb-3">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search products…"
-              className="flex-1 min-w-[160px] rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
-            />
-            <button
-              onClick={() => setCategoryId(undefined)}
-              className={`px-3 py-2 rounded-lg text-sm ${!categoryId ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800'}`}
-            >
-              All
-            </button>
-            {(categories || []).map((c: any) => (
-              <button
-                key={c.id}
-                onClick={() => setCategoryId(c.id)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm ${categoryId === c.id ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800'}`}
-              >
-                {c.imageUrl ? (
-                  <img src={c.imageUrl} alt="" className="w-5 h-5 rounded object-cover" />
-                ) : c.icon ? (
-                  <span>{c.icon}</span>
-                ) : null}
-                {c.name}
-              </button>
-            ))}
-          </div>
-          {isLoading ? (
-            <LoadingSpinner />
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {(products || []).map((p: any) => (
-                <button
-                  key={p.id}
-                  onClick={() => onProduct(p)}
-                  className="text-left rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden hover:border-primary hover:shadow-sm active:scale-[0.96] transition-all duration-150 min-h-[120px]"
-                >
-                  <div className="h-20 bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden">
-                    {p.imageUrl ? (
-                      <img src={p.imageUrl} alt={p.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-3xl">{p.category?.icon || '🍽️'}</span>
-                    )}
-                  </div>
-                  <div className="p-2">
-                    <div className="font-medium text-sm text-gray-900 dark:text-gray-100 line-clamp-2">{p.name}</div>
-                    <div className="flex justify-between items-center mt-0.5">
-                      <span className="text-xs text-gray-500">{p.sku}</span>
-                      <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">{Number(p.salePrice || p.costPrice || 0).toFixed(2)}</span>
-                    </div>
-                  </div>
-                </button>
-              ))}
-              {!products?.length && <p className="text-sm text-gray-500 col-span-full">No products found.</p>}
-            </div>
-          )}
-        </div>
-
-        {/* Cart / bill — bounded to viewport, items scroll inside */}
-        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 flex flex-col min-h-0 overflow-hidden">
-          {mode === 'existing' ? (
-            <div className="mb-3">
-              <div className="flex items-center justify-between rounded-lg bg-primary/10 px-3 py-2">
-                <div className="text-sm font-medium text-primary">
-                  {t('pos.settling')}: {loadedOrder?.tableName ? `${t('pos.table')} ${loadedOrder.tableName}` : loadedOrder?.orderNo}
-                </div>
-                <button onClick={closeBill} className="text-xs text-gray-500 hover:text-gray-700" aria-label="Close bill">✕</button>
-              </div>
-              <div className="flex flex-wrap gap-1.5 mt-2">
-              </div>
-              {(courses?.length ?? 0) > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {(courses || []).map((c: any) => (
-                    <button
-                      key={c.courseNo}
-                      disabled={c.status !== 'QUEUED' || fireCourse.isPending}
-                      onClick={() => fireCourse.mutate(c.courseNo)}
-                      className={`px-2 py-1 rounded text-xs font-medium ${c.status === 'QUEUED' ? 'bg-amber-500 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}
-                    >
-                      {c.status === 'QUEUED' ? `🔥 ${t('pos.fireCourse')} ${c.courseNo}` : `${t('pos.course')} ${c.courseNo} ✓`}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <>
-              {(presets?.length ?? 0) > 0 && (
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {(presets || []).map((p: any) => (
-                    <button
-                      key={p.id}
-                      onClick={() => {
-                        setPresetId(presetId === p.id ? undefined : p.id);
-                        setChannel(p.channel);
-                        if (p.channel !== 'DINE_IN' && p.channel !== 'DELIVERY' && p.channel !== 'TAKEAWAY') setTableName(''); // Clear table for aggregator channels
-                        if (isAggregatorChannel(p.channel)) setPayMethod('AGGREGATOR');
-                      }}
-                      style={presetId === p.id && p.color ? { backgroundColor: p.color, color: '#fff' } : {}}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium ${presetId === p.id ? 'text-white' : 'bg-gray-100 dark:bg-gray-800'}`}
-                    >
-                      {p.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {/* Raw channel selector — only shown if NO presets are configured */}
-              {!(presets?.length) && (
-              <div className="flex flex-wrap gap-2 mb-3">
-                {(['DINE_IN', 'TAKEAWAY', 'DELIVERY', 'QR', 'TALABAT', 'SNOONU'] as Channel[]).map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => {
-                      setChannel(c);
-                      if (c !== 'DINE_IN' && c !== 'DELIVERY' && c !== 'TAKEAWAY') setTableName(''); // Clear table for aggregator channels
-                      // Aggregator channels are settled by the platform → default tender to AGGREGATOR.
-                      if (isAggregatorChannel(c)) setPayMethod('AGGREGATOR');
-                      // Auto-pick the matching configured platform if present.
-                      const match = (deliveryPlatforms || []).find((p: any) => p.channel === c || p.name?.toUpperCase() === c);
-                      if (match) setDeliveryPlatformId(match.id);
-                    }}
-                    className={`flex-1 min-w-[4rem] px-2 py-1.5 rounded-lg text-xs ${channel === c ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800'}`}
-                  >
-                    {c.replace('_', ' ')}
-                  </button>
-                ))}
-              </div>
-              )}
-              {channel === 'DINE_IN' && tableName && (
-                <div className="mb-2 text-xs text-gray-500">
-                  Table: <span className="font-semibold text-gray-800 dark:text-gray-200">{tableName}</span>
-                  <button onClick={() => { setTableName(''); setPosView('floor'); }} className="ms-2 text-primary hover:underline">Change</button>
-                </div>
-              )}
-              {(channel === 'DELIVERY' || channel === 'TAKEAWAY') && (
-                <div className="mb-2">
-                  <input
-                    value={tableName}
-                    onChange={(e) => setTableName(e.target.value)}
-                    placeholder={channel === 'DELIVERY' ? 'Delivery address / customer name...' : 'Customer name / order reference...'}
-                    className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
-                  />
-                </div>
-              )}
-              {isAggregatorChannel(channel) && (
-                <div className="mb-3 space-y-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-2">
-                  <div className="text-[10px] uppercase text-amber-700 dark:text-amber-400">{t('pos.aggregatorOrder')}</div>
-                  <select
-                    value={deliveryPlatformId ?? ''}
-                    onChange={(e) => setDeliveryPlatformId(e.target.value ? parseInt(e.target.value, 10) : undefined)}
-                    className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
-                  >
-                    <option value="">{t('pos.selectPlatform')}</option>
-                    {(deliveryPlatforms || []).filter((p: any) => p.isActive).map((p: any) => (
-                      <option key={p.id} value={p.id}>{p.name} ({p.commissionPct}%)</option>
-                    ))}
-                  </select>
-                  <input
-                    value={platformRef}
-                    onChange={(e) => setPlatformRef(e.target.value)}
-                    placeholder={t('pos.platformRef')}
-                    className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
-                  />
-                </div>
-              )}
-            </>
-          )}
-
-          <div className="flex-1 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800 -mx-1 min-h-[6rem]">
-            {lines.map((l, i) => (
-              <div key={l.itemId ?? `${l.productId}-${i}`} className={`px-1 py-2 cursor-pointer rounded ${selectedLineIdx === i ? 'bg-emerald-50 dark:bg-emerald-900/30 ring-2 ring-emerald-500 dark:ring-emerald-400' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}
-                onClick={() => setSelectedLineIdx(i)}
-                onDoubleClick={async () => {
-                  // Double-click: add a note to this specific item (shows on KOT)
-                  if (mode === 'existing' && l.itemId) {
-                    const note = await prompt({ title: `Note for "${l.name}"`, description: 'Printed on KOT', defaultValue: (l as any).notes || '', placeholder: 'e.g. No ice, extra sauce' });
-                    if (note !== null) {
-                      try {
-                        await api.patch(`/sales/orders/${loadedOrderId}/items/${l.itemId}`, { notes: note });
-                        toast.success('Item note saved');
-                        qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
-                      } catch (e: any) { toast.error(e.response?.data?.message || 'Failed'); }
-                    }
-                  }
-                }}>
-                <div className="flex justify-between items-center gap-2">
-                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100 flex-1 line-clamp-1 cursor-pointer flex items-center gap-1" title="Double-click to add note">
-                    {l.firedAt ? (
-                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex-shrink-0" title="Sent to kitchen">🔥</span>
-                    ) : mode === 'existing' ? (
-                      <span className="text-[10px] text-gray-300 dark:text-gray-600 flex-shrink-0" title="Not yet sent to kitchen">○</span>
-                    ) : null}
-                    {l.name}
-                  </span>
-                  {mode === 'new' ? (
-                    <>
-                      <button onClick={() => setQtyAt(i, l.quantity - 1)} className="w-7 h-7 rounded bg-gray-100 dark:bg-gray-800">−</button>
-                      <span className="w-6 text-center text-sm">{l.quantity}</span>
-                      <button onClick={() => setQtyAt(i, l.quantity + 1)} className="w-7 h-7 rounded bg-gray-100 dark:bg-gray-800">+</button>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-sm">×{l.quantity}</span>
-                      <button onClick={async () => {
-                        if (!l.itemId) return;
-                        const reason = await prompt({ title: `Cancel "${l.name}"?`, description: 'Reason (sent to kitchen):', placeholder: 'e.g. Customer changed mind' });
-                        if (reason === null) return;
-                        try {
-                          await api.patch(`/sales/orders/${loadedOrderId}/items/${l.itemId}`, { isVoided: true, voidReason: reason || 'Cancelled' });
-                          toast.success(`${l.name} cancelled`);
-                          qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
-                          qc.invalidateQueries({ queryKey: ['kds-board'] });
-                        } catch (e: any) { toast.error(e.response?.data?.message || 'Failed'); }
-                      }} className="text-red-600 text-sm" aria-label="Cancel item" title="Cancel this item">✕</button>
-                    </>
-                  )}
-                </div>
-                {(l as any).notes && (
-                  <div className="text-[11px] text-amber-600 mt-0.5 italic">📝 {(l as any).notes}</div>
-                )}
-                {l.modifiers && l.modifiers.length > 0 && (
-                  <div className="text-[11px] text-gray-500 mt-0.5">
-                    {l.modifiers.filter((m: any) => m?.name).map((m: any) => m.name).join(', ') || null}
-                  </div>
-                )}
-                <div className="flex justify-between items-center mt-1">
-                  {mode === 'new' ? (
-                    <input
-                      type="number"
-                      value={l.unitPrice}
-                      onChange={(e) => setPriceAt(i, parseFloat(e.target.value) || 0)}
-                      className="w-24 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-1 text-xs"
-                    />
-                  ) : (
-                    <span className="text-xs text-gray-500">{l.unitPrice.toFixed(2)}</span>
-                  )}
-                  <div className="text-right">
-                    {(l.discount ?? 0) > 0 && (
-                      <div className="text-[10px] text-green-600 line-through">{(l.unitPrice * l.quantity).toFixed(2)}</div>
-                    )}
-                    <span className="text-sm font-semibold">{((l.unitPrice * l.quantity) - (l.discount ?? 0)).toFixed(2)}</span>
-                    {(l.discount ?? 0) > 0 && (
-                      <span className="text-[10px] text-green-600 ms-1">(-{(l.discount ?? 0).toFixed(2)}{l.unitPrice * l.quantity > 0 ? ` / ${Math.round((l.discount ?? 0) / (l.unitPrice * l.quantity) * 100)}%` : ''})</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-            {comboCart.map((c, i) => (
-              <div key={`combo-${i}`} className="px-1 py-2">
-                <div className="flex justify-between items-center gap-2">
-                  <span className="text-sm font-medium flex-1 line-clamp-1">🍱 {c.name}</span>
-                  {mode === 'new' && <button onClick={() => removeCombo(i)} className="text-red-600 text-sm" aria-label="Remove">✕</button>}
-                  <span className="text-sm w-16 text-end">{c.price.toFixed(2)}</span>
-                </div>
-              </div>
-            ))}
-            {!lines.length && !comboCart.length && <p className="text-sm text-gray-400 py-8 text-center">Tap products to add them.</p>}
-          </div>
-
-          {mode === 'new' && (combos?.length ?? 0) > 0 && (
-            <div className="border-t border-gray-200 dark:border-gray-800 mt-3 pt-3">
-              <div className="text-[10px] uppercase text-gray-400 mb-2">{t('pos.combos')}</div>
-              <div className="flex flex-wrap gap-2">
-                {(combos || []).filter((c: any) => c.isActive !== false).map((c: any) => (
-                  <button key={c.id} onClick={() => openCombo(c)} className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs font-medium">
-                    🍱 {c.name} · {Number(c.basePrice).toFixed(2)}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Customer (loyalty / store credit) */}
-          <div className="border-t border-gray-200 dark:border-gray-800 mt-3 pt-3">
-            {activeCustomer ? (
-              <div className="flex items-center justify-between gap-2 text-sm">
-                <div className="min-w-0">
-                  <div className="font-medium truncate">👤 {activeCustomer.name}</div>
-                  <div className="text-xs text-gray-500">
-                    {t('pos.points')}: {activeCustomer.loyaltyPoints ?? 0} · {t('pos.credit')}: {Number(activeCustomer.creditBalance ?? 0).toFixed(2)}
-                  </div>
-                </div>
-                {mode === 'new' && (
-                  <button onClick={() => { setCustomer(null); setCustomerSearch(''); }} className="text-xs text-red-600">✕</button>
-                )}
-              </div>
-            ) : mode === 'new' ? (
-              <div className="relative">
-                <input
-                  value={customerSearch}
-                  onChange={(e) => setCustomerSearch(e.target.value)}
-                  placeholder={t('pos.customerSearch')}
-                  className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
-                />
-                {customerSearch.trim().length >= 2 && (customerResults?.length ?? 0) > 0 && (
-                  <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                    {customerResults.map((c: any) => (
-                      <button
-                        key={c.id}
-                        onClick={() => { setCustomer(c); setCustomerSearch(''); }}
-                        className="w-full text-start px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800"
-                      >
-                        {c.name} <span className="text-xs text-gray-400">{c.phone || ''}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : null}
-          </div>
-
-          {/* Coupon */}
-          <div className="border-t border-gray-200 dark:border-gray-800 mt-3 pt-3 flex gap-2">
-            <input
-              value={couponCode}
-              onChange={(e) => setCouponCode(e.target.value)}
-              placeholder="Coupon code"
-              className="flex-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
-            />
-            <button
-              onClick={onApplyCoupon}
-              disabled={!couponCode.trim() || !lines.length || applyCouponNew.isPending || applyCouponExisting.isPending}
-              className="px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm disabled:opacity-50"
-            >
-              Apply
-            </button>
-          </div>
-
-          {/* Discount rule (staff / corporate discount applied to an open bill) */}
-          {mode === 'existing' && (discountRules?.length ?? 0) > 0 && (
-            <div className="mt-2">
-              <select
-                value={discountRuleId}
-                onChange={(e) => {
-                  const v = e.target.value === '' ? '' : parseInt(e.target.value, 10);
-                  setDiscountRuleId(v);
-                  applyDiscountRule.mutate(v);
-                }}
-                className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
-              >
-                <option value="">{t('pos.noDiscount')}</option>
-                {(discountRules || [])
-                  .filter((r: any) => r.scope === 'ORDER')
-                  .map((r: any) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name} ({r.type === 'PERCENT' ? `${r.value}%` : `-${r.value}`})
-                    </option>
-                  ))}
-              </select>
-            </div>
-          )}
-
-          {/* ─── ACTION BAR (Odoo-style quick actions) ─── */}
-          <div className="border-t border-gray-200 dark:border-gray-800 mt-3 pt-3">
-            <div className="grid grid-cols-3 gap-1.5 text-xs">
-              <button
-                onClick={async () => {
-                  if (mode === 'existing' && loadedOrderId) {
-                    try {
-                      // Fire to kitchen — this sets firedAt on all unfired items
-                      const { data: fireResult } = await api.post(`/sales/orders/${loadedOrderId}/courses/1/fire`);
-                      const firedOrder = fireResult.data;
-
-                      // Compare: items that NOW have firedAt but loadedOrder had them without firedAt = newly fired
-                      const prevFiredIds = new Set(
-                        (loadedOrder?.items || []).filter((it: any) => it.firedAt).map((it: any) => it.id)
-                      );
-                      const newlyFired = (firedOrder.items || []).filter(
-                        (it: any) => it.firedAt && !prevFiredIds.has(it.id) && !it.isVoided
-                      );
-
-                      if (newlyFired.length > 0) {
-                        printKot(firedOrder, { items: newlyFired, splitByStation: true });
-                        toast.success(`🔥 ${newlyFired.length} item(s) sent to kitchen!`, { duration: 3000 });
-                      } else {
-                        toast('All items already sent to kitchen', { icon: '✓' });
-                      }
-
-                      qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
-                      qc.invalidateQueries({ queryKey: ['kds-board'] });
-                    } catch (e: any) {
-                      const msg = e.response?.data?.message || 'Failed to fire to kitchen';
-                      toast.error(`❌ Kitchen fire failed: ${msg}`, { duration: 5000 });
-                    }
-                  } else if (mode === 'new' && lines.length > 0) {
-                    // New order: create it first, then fire to kitchen
-                    try {
-                      // Build KOT items from local cart BEFORE creating (preserves modifier names)
-                      const kotItems = cart.map((l) => ({
-                        productId: l.productId,
-                        quantity: l.quantity,
-                        unitPrice: l.unitPrice,
-                        product: { name: l.name, nameAr: undefined, category: undefined },
-                        modifiers: l.modifiers,
-                        notes: undefined,
-                      }));
-
-                      const { data: created } = await api.post('/sales/orders', {
-                        branchId,
-                        channel,
-                        tableName: (channel === 'DINE_IN' && tableName) ? tableName : (channel === 'DELIVERY' || channel === 'TAKEAWAY') ? (tableName || undefined) : undefined,
-                        customerId: customer?.id,
-                        presetId: presetId,
-                        items: cart.map((l) => ({ productId: l.productId, quantity: l.quantity, unitPrice: l.unitPrice, modifiers: l.modifiers })),
-                      });
-                      const newOrderId = created.data.id;
-                      const newOrder = created.data;
-
-                      // Fire to kitchen (sets firedAt on items for KDS)
-                      await api.post(`/sales/orders/${newOrderId}/courses/1/fire`).catch(() => {});
-
-                      // Print KOT from LOCAL cart data (guaranteed to have modifiers)
-                      // because the DB roundtrip might lose modifier names
-                      const kotOrder = { orderNo: newOrder.orderNo, tableName: newOrder.tableName || tableName, channel, items: kotItems };
-                      printKot(kotOrder as any, { splitByStation: true });
-
-                      // Switch to existing mode with this order loaded
-                      setLoadedOrderId(newOrderId);
-                      setCart([]);
-                      setTableName(newOrder.tableName || '');
-                      toast.success('🔥 Order created & sent to kitchen!', { duration: 3000 });
-                      qc.invalidateQueries({ queryKey: ['pos-pending'] });
-                      qc.invalidateQueries({ queryKey: ['kds-board'] });
-                    } catch (e: any) {
-                      toast.error(e.response?.data?.message || 'Failed to create order');
-                    }
-                  } else {
-                    toast('Load an existing order or add items first');
-                  }
-                }}
-                className="px-2 py-2 rounded-lg bg-orange-100 dark:bg-orange-500/10 text-orange-700 hover:bg-orange-200 dark:hover:bg-orange-500/20 text-center font-medium"
-              >🔥 Kitchen</button>
-              <button
-                onClick={async () => {
-                  const note = await prompt({ title: 'Customer Note', description: 'Printed on receipt/KOT', placeholder: 'e.g. Allergic to nuts' });
-                  if (note != null && mode === 'existing' && loadedOrderId) {
-                    api.patch(`/sales/orders/${loadedOrderId}`, { notes: note }).then(() => {
-                      toast.success('Note saved');
-                      qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
-                    });
-                  } else if (note != null) {
-                    // For new orders, just show the note will be added on create
-                    toast.success('Note will be added when order is created');
-                  }
-                }}
-                className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
-              >📝 Note</button>
-              <button
-                onClick={() => {
-                  if (mode === 'existing' && loadedOrder) {
-                    printReceipt(loadedOrder, businessInfo);
-                    toast.success('Bill printed');
-                  } else if (mode === 'new' && lines.length > 0) {
-                    // Print a preview bill for new (unsaved) orders
-                    const preview = { orderNo: 'PREVIEW', tableName, items: lines.map(l => ({ productId: l.productId, product: { name: l.name }, quantity: l.quantity, unitPrice: l.unitPrice, modifiers: l.modifiers })), total, subtotal };
-                    printReceipt(preview as any, businessInfo);
-                  } else {
-                    toast('Add items first');
-                  }
-                }}
-                className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
-              >🧾 Bill</button>
-              <button
-                onClick={async () => {
-                  const count = await prompt({ title: 'Number of Guests', type: 'number', defaultValue: String(mode === 'existing' ? loadedOrder?.guestCount || 1 : 1) });
-                  if (count && mode === 'existing' && loadedOrderId) {
-                    api.patch(`/sales/orders/${loadedOrderId}`, { guestCount: parseInt(count, 10) || 1 });
-                    toast.success(`Guests: ${count}`);
-                  }
-                }}
-                className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
-              >👥 Guests</button>
-              <button
-                onClick={async () => {
-                  const code = await prompt({ title: 'Coupon / Reward Code', placeholder: 'Enter code...' });
-                  if (code?.trim()) { setCouponCode(code.trim()); onApplyCoupon(); }
-                }}
-                className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
-              >🏷 Code</button>
-              <button
-                onClick={() => {
-                  if (mode === 'existing' && loadedOrder) {
-                    const info = `Order: ${loadedOrder.orderNo}\nStatus: ${loadedOrder.status}\nChannel: ${loadedOrder.channel}\nTable: ${loadedOrder.tableName || '-'}\nItems: ${loadedOrder.items?.length || 0}\nTotal: ${Number(loadedOrder.total).toFixed(2)}`;
-                    window.alert(info);
-                  } else {
-                    toast('Create or load an order first');
-                  }
-                }}
-                className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
-              >ℹ️ Info</button>
-              <button
-                onClick={async () => {
-                  const note = await prompt({ title: 'Staff Note', description: 'Internal only — not printed on receipt or KOT', placeholder: 'e.g. VIP customer, special request' });
-                  if (note != null) toast.success('Internal note saved');
-                }}
-                className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
-              >🔒 Staff Note</button>
-              <button
-                onClick={() => {
-                  if (mode === 'existing' && loadedOrderId && loadedOrder?.items?.length >= 2) {
-                    setSplitModal(true);
-                  } else {
-                    toast('Load an order with at least 2 items to split');
-                  }
-                }}
-                className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center"
-              >✂️ Split</button>
-              <button
-                onClick={async () => {
-                  if (mode === 'existing' && loadedOrderId && loadedOrder) {
-                    cancelOrderWithNote(loadedOrderId, loadedOrder.orderNo);
-                  } else {
-                    toast('Load an existing order to cancel');
-                  }
-                }}
-                className="px-2 py-2 rounded-lg bg-red-50 dark:bg-red-500/10 text-red-600 hover:bg-red-100 dark:hover:bg-red-500/20 text-center font-medium"
-              >❌ Void All</button>
-            </div>
-          </div>
-
-          {/* ─── NUMPAD (Odoo-style: tap Qty → type digits → changes live) ─── */}
-          {/* applyNumpad: executes the action with the given buffer value */}
-          {lines.length > 0 && (() => {
-            const applyNumpad = async (action: 'Qty' | '%Disc' | 'Price', buf: string, targetIdx: number, line: any) => {
-              if (action === 'Qty') {
-                const val = parseInt(buf, 10);
-                if (!val || val <= 0) return;
-                if (mode === 'new') { setQtyAt(targetIdx, val); }
-                else if (line.itemId) {
-                  try {
-                    await api.patch(`/sales/orders/${loadedOrderId}/items/${line.itemId}`, { quantity: val });
-                    qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
-                  } catch {}
-                }
-              } else if (action === '%Disc') {
-                const percent = parseFloat(buf);
-                if (!percent || percent <= 0) return;
-                const discAmt = Math.round(line.unitPrice * line.quantity * percent) / 100;
-                if (mode === 'existing' && line.itemId) {
-                  try {
-                    await api.patch(`/sales/orders/${loadedOrderId}/items/${line.itemId}`, { discount: discAmt });
-                    qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
-                    toast.success(`-${discAmt.toFixed(2)} (${percent}%)`);
-                  } catch (e: any) { toast.error(e.response?.data?.message || 'Failed'); }
-                } else {
-                  toast.success(`-${discAmt.toFixed(2)} (${percent}%)`);
-                }
-              } else if (action === 'Price') {
-                const newPrice = parseFloat(buf);
-                if (isNaN(newPrice)) return;
-                if (mode === 'new') { setPriceAt(targetIdx, newPrice); toast.success(`Price → ${newPrice.toFixed(2)}`); }
-                else { toast('Price change requires manager override — use %Disc instead'); }
-              }
-            };
-            return (
-            <div className="border-t border-gray-200 dark:border-gray-800 mt-2 pt-2">
-              {selectedLineIdx >= 0 && selectedLineIdx < lines.length && (
-                <div className="text-[10px] text-primary font-medium mb-1">
-                  Selected: {lines[selectedLineIdx].name} (×{lines[selectedLineIdx].quantity})
-                  {lines[selectedLineIdx].discount ? <span className="ms-1 text-emerald-600">(-{Number(lines[selectedLineIdx].discount).toFixed(2)})</span> : null}
-                </div>
-              )}
-              {/* Numpad buffer display */}
-              {numBuffer && (
-                <div className="text-right text-lg font-mono font-bold text-gray-800 dark:text-gray-100 mb-1 px-1 flex items-center justify-end gap-2">
-                  <span className="text-[10px] text-gray-400 font-normal">{numMode || 'Qty'}</span>
-                  {numBuffer}
-                </div>
-              )}
-              <div className="grid grid-cols-4 gap-1 text-xs">
-                {[7,8,9,'Qty',4,5,6,'%Disc',1,2,3,'Price','+/-',0,'.','C'
-                ].map((key, idx) => {
-                  const isAction = typeof key === 'string' && ['Qty','%Disc','Price'].includes(key as string);
-                  const isClear = key === 'C';
-                  const isActiveMode = isAction && numMode === key;
-                  return (
-                    <button key={idx}
-                      className={`py-2 rounded ${isAction ? (isActiveMode ? 'bg-primary text-white font-bold ring-2 ring-primary/50' : 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-blue-400 font-medium') : isClear ? 'bg-red-50 dark:bg-red-500/10 text-red-600 font-medium' : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-600'} text-center text-sm`}
-                      onClick={async () => {
-                        // Clear button
-                        if (isClear) { setNumBuffer(''); setNumMode(null); return; }
-
-                        const targetIdx = selectedLineIdx >= 0 && selectedLineIdx < lines.length ? selectedLineIdx : lines.length - 1;
-                        const line = lines[targetIdx];
-
-                        // Action keys: if buffer has value → apply immediately. Otherwise → select mode.
-                        if (isAction) {
-                          const actionKey = key as 'Qty' | '%Disc' | 'Price';
-                          if (numBuffer && line) {
-                            // Apply the buffer with this action
-                            await applyNumpad(actionKey, numBuffer, targetIdx, line);
-                            setNumBuffer('');
-                            setNumMode(null);
-                          } else {
-                            // Just select the mode (next digit input will apply live)
-                            setNumMode(actionKey);
-                            setNumBuffer('');
-                          }
-                          return;
-                        }
-
-                        // Number/decimal/sign keys
-                        let newBuf = numBuffer;
-                        if (key === '+/-') {
-                          newBuf = numBuffer.startsWith('-') ? numBuffer.slice(1) : '-' + numBuffer;
-                        } else {
-                          newBuf = numBuffer + String(key);
-                        }
-                        setNumBuffer(newBuf);
-
-                        // In Qty mode: apply immediately as digits are typed
-                        if (numMode === 'Qty' && line) {
-                          const val = parseInt(newBuf, 10);
-                          if (val > 0) {
-                            if (mode === 'new') {
-                              setQtyAt(targetIdx, val);
-                            } else if (line.itemId) {
-                              api.patch(`/sales/orders/${loadedOrderId}/items/${line.itemId}`, { quantity: val })
-                                .then(() => qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] }))
-                                .catch(() => {});
-                            }
-                          }
-                        }
-                      }}
-                    >{key}</button>
-                  );
-                })}
-              </div>
-            </div>
-            ); })()}
-
-          {/* ─── TOTALS + PAYMENT BUTTON ─── */}
-          <div className="border-t border-gray-200 dark:border-gray-800 mt-3 pt-3">
-            <div className="flex justify-between text-sm text-gray-500">
-              <span>Subtotal</span>
-              <span>{subtotal.toFixed(2)}</span>
-            </div>
-            {discount > 0 && (
-              <div className="flex justify-between text-sm text-green-600">
-                <span>Coupon {appliedCouponCode}</span>
-                <span>-{discount.toFixed(2)}</span>
-              </div>
-            )}
-            {(() => {
-              const itemDisc = lines.reduce((s, l) => s + (l.discount ?? 0), 0);
-              return itemDisc > 0 ? (
-                <div className="flex justify-between text-sm text-green-600">
-                  <span>Item discounts</span>
-                  <span>-{itemDisc.toFixed(2)}</span>
-                </div>
-              ) : null;
-            })()}
-            <div className="flex justify-between text-lg font-bold my-2">
-              <span>Total</span>
-              <span>{total.toFixed(2)}</span>
-            </div>
-            {tenders.length > 0 && (
-              <div className="flex justify-between text-sm text-emerald-600 mb-2">
-                <span>Paid</span>
-                <span>{paid.toFixed(2)}{change > 0 ? ` (change: ${change.toFixed(2)})` : ''}</span>
-              </div>
-            )}
-            <button
-              disabled={(!lines.length && !comboCart.length) || !posSession || charge.isPending}
-              onClick={() => setShowPayment(true)}
-              className="w-full py-3 rounded-xl bg-emerald-600 text-white font-bold text-lg disabled:opacity-50 active:scale-[0.97] transition-transform"
-            >
-              {!posSession ? t('pos.session.openSessionFirst') : `💳 Payment${total > 0 ? ` · ${total.toFixed(2)}` : ''}`}
-            </button>
-          </div>
-
-          {lastReceipt && (
-            <div className="mt-3 border-t border-gray-200 dark:border-gray-800 pt-3">
-              <button
-                onClick={() => printReceipt(lastReceipt, businessInfo)}
-                className="w-full py-2.5 rounded-xl bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm font-medium flex items-center justify-center gap-2"
-              >
-                🖨 {t('pos.printReceipt')}
-              </button>
-              <div className="mt-2 text-xs text-gray-500">
-                Last: {lastReceipt.orderNo} · total {Number(lastReceipt.total).toFixed(2)} · food cost{' '}
-                {Number(lastReceipt.foodCost).toFixed(2)} · GP {Number(lastReceipt.grossProfit).toFixed(2)}
-                {lastReceipt.status === 'REFUNDED' && <span className="ms-2 text-red-600 font-medium">· {t('pos.refunded')}</span>}
-              </div>
-              {canRefund && lastReceipt.status === 'COMPLETED' && (
-                <button
-                  onClick={async () => {
-                    const ok = await confirm({ title: t('pos.refundConfirm'), description: 'This will fully refund this order.', variant: 'danger', confirmLabel: 'Refund' });
-                    if (ok) refund.mutate(lastReceipt.id);
-                  }}
-                  disabled={refund.isPending}
-                  className="w-full mt-2 py-2 rounded-xl border border-red-300 text-red-600 text-sm font-medium disabled:opacity-50"
-                >
-                  {t('pos.refund')}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-      )}
-
-      {/* ═══ ODOO-STYLE FULL-SCREEN PAYMENT ═══ */}
-      {showPayment && (
-        <div className="fixed inset-0 z-50 bg-white dark:bg-gray-950 flex flex-col">
-          {/* Payment header */}
-          <div className="bg-gray-900 text-white px-6 py-3 flex items-center justify-between">
-            <button onClick={() => setShowPayment(false)} className="text-sm hover:text-gray-300">« Back</button>
-            <h2 className="text-lg font-bold">Payment</h2>
-            <span className="text-sm text-gray-400">{loadedOrderId ? `Order #${loadedOrder?.orderNo?.slice(-6) || ''}` : 'New Order'}</span>
-          </div>
-
-          <div className="flex-1 flex flex-col md:flex-row overflow-y-auto">
-            {/* LEFT: Payment methods + Summary */}
-            <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-gray-200 dark:border-gray-800 flex flex-col">
-              <div className="p-4 flex-1">
-                <div className="text-xs font-semibold text-gray-400 uppercase mb-3">Payment Method</div>
-                <div className="space-y-2">
-                  {['CASH', 'CARD', 'QR', 'GIFT_CARD', 'ON_ACCOUNT'].map((m) => (
-                    <button key={m} onClick={() => {
-                      const amt = payNumpad ? parseFloat(payNumpad) : remaining;
-                      if (remaining <= 0) { toast.error('Already paid'); return; }
-                      if (amt > 0) {
-                        setTenders((prev) => [...prev, { method: m as PayMethod, amount: +amt.toFixed(2) }]);
-                        setPayNumpad('');
-                      }
-                    }} className="w-full text-left px-4 py-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm font-medium transition">
-                      {m === 'CASH' ? '💵 Cash' : m === 'CARD' ? '💳 Card' : m === 'QR' ? '📱 QR Pay' : m === 'GIFT_CARD' ? '🎁 Gift Card' : m === 'ON_ACCOUNT' ? '📋 Customer Account' : m}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Summary */}
-              <div className="border-t border-gray-200 dark:border-gray-800 p-4">
-                <div className="text-xs font-semibold text-gray-400 uppercase mb-2">Summary</div>
-                <div className="space-y-1 mb-3 max-h-32 overflow-y-auto">
-                  {tenders.map((ten, i) => (
-                    <div key={i} className="flex justify-between items-center text-sm bg-gray-50 dark:bg-gray-800 rounded px-2 py-1">
-                      <span>{ten.method.replace('_', ' ')}</span>
-                      <span className="flex items-center gap-2">
-                        <span className="font-medium">{ten.amount.toFixed(2)}</span>
-                        <button onClick={() => setTenders((prev) => prev.filter((_, idx) => idx !== i))} className="text-red-500 text-xs">✕</button>
-                      </span>
-                    </div>
-                  ))}
-                  {!tenders.length && <p className="text-xs text-gray-400">Click a payment method to add</p>}
-                </div>
-                <button
-                  onClick={() => { charge.mutate(); setShowPayment(false); }}
-                  disabled={remaining > 0 || charge.isPending || (!lines.length && !comboCart.length)}
-                  className="w-full py-3 rounded-xl bg-emerald-600 text-white font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2 active:scale-[0.97] transition-transform"
-                >
-                  {charge.isPending ? (
-                    <><span className="inline-block w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Processing…</>
-                  ) : (
-                    <><span className="text-2xl">▶</span> Validate</>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* CENTER: Remaining + Numpad */}
-            <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-8">
-              <div className="grid grid-cols-3 gap-8 text-center mb-8">
-                <div>
-                  <div className="text-sm text-gray-400">Remaining</div>
-                  <div className={`text-3xl font-bold ${remaining > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>{remaining.toFixed(2)}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-400">Total Due</div>
-                  <div className="text-xl font-semibold text-gray-800 dark:text-gray-200">{total.toFixed(2)}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-400">Change</div>
-                  <div className={`text-3xl font-bold ${change > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>{change.toFixed(2)}</div>
-                </div>
-              </div>
-
-              {/* Amount input */}
-              <div className="text-4xl font-mono font-bold mb-6 min-h-[3rem] text-center text-gray-800 dark:text-gray-100">
-                {payNumpad || remaining.toFixed(2)}
-              </div>
-
-              {/* ── Tip Quick Buttons (Odoo parity: 10%/15%/20%) ──────── */}
-              <div className="w-full max-w-xs md:max-w-sm mb-4">
-                <div className="text-xs font-semibold text-gray-400 uppercase text-center mb-2">
-                  Add Tip {businessInfo.currency && businessInfo.currency !== 'QAR' ? `(${businessInfo.currency})` : ''}
-                </div>
-                <div className="grid grid-cols-4 gap-2">
-                  {[10, 15, 20].map((pct) => {
-                    const baseForTip = mode === 'existing' ? (loadedOrder?.subtotal ?? 0) : cartSubtotal;
-                    const tipVal = +(baseForTip * pct / 100).toFixed(2);
-                    const isActive = Math.abs(tipAmount - tipVal) < 0.01;
-                    return (
-                      <button
-                        key={pct}
-                        onClick={() => {
-                          const newTip = isActive ? 0 : tipVal;
-                          setTipAmount(newTip);
-                          if (mode === 'existing' && loadedOrderId) {
-                            api.patch(`/sales/orders/${loadedOrderId}/tip`, { amount: newTip }).then(() => refetchLoaded?.());
-                          }
-                        }}
-                        className={`py-2 rounded-lg text-sm font-bold transition ${isActive ? 'bg-amber-500 text-white ring-2 ring-amber-300' : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40'}`}
-                      >
-                        <div>{pct}%</div>
-                        <div className="text-[10px] font-normal opacity-75">{tipVal.toFixed(0)} {businessInfo.currency || 'QAR'}</div>
-                      </button>
-                    );
-                  })}
-                  <button
-                    onClick={() => {
-                      setTipAmount(0);
-                      if (mode === 'existing' && loadedOrderId) {
-                        api.patch(`/sales/orders/${loadedOrderId}/tip`, { amount: 0 }).then(() => refetchLoaded?.());
-                      }
-                    }}
-                    className={`py-2 rounded-lg text-sm font-bold transition ${tipAmount === 0 ? 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 hover:bg-gray-200'}`}
-                  >
-                    No Tip
-                  </button>
-                </div>
-                {tipAmount > 0 && (
-                  <div className="text-center mt-1 text-xs text-amber-600 font-medium">
-                    Tip: +{tipAmount.toFixed(2)}
-                  </div>
-                )}
-              </div>
-
-              {/* Numpad — tablet-optimized with larger touch targets + haptic */}
-              <div className="grid grid-cols-4 gap-3 w-full max-w-sm">
-                {['1','2','3','+10','4','5','6','+20','7','8','9','+50','+/-','0','.','⌫'].map((key) => (
-                  <button key={key} onClick={() => {
-                    // Haptic feedback for tablet/phone users
-                    try { navigator.vibrate?.(15); } catch {}
-                    if (key === '⌫') setPayNumpad((p) => p.slice(0, -1));
-                    else if (key === '+/-') setPayNumpad((p) => p.startsWith('-') ? p.slice(1) : '-' + p);
-                    else if (key.startsWith('+')) {
-                      const add = parseInt(key.slice(1), 10);
-                      setPayNumpad((p) => String((parseFloat(p) || 0) + add));
-                    }
-                    else setPayNumpad((p) => p + key);
-                  }}
-                  className={`min-h-[56px] py-4 rounded-xl text-xl font-bold transition-all active:scale-95 select-none touch-manipulation ${key.startsWith('+') ? 'bg-primary/10 text-primary border-2 border-primary/20 hover:bg-primary/20' : key === '⌫' ? 'bg-red-50 dark:bg-red-500/10 text-red-600 border-2 border-red-200 dark:border-red-800' : key === '+/-' ? 'bg-gray-50 dark:bg-gray-800 text-gray-500 border border-gray-200 dark:border-gray-700' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100'}`}>
-                    {key}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* RIGHT: Customer + actions */}
-            <div className="w-full md:w-48 border-t md:border-t-0 md:border-l border-gray-200 dark:border-gray-800 p-4 flex md:flex-col gap-2">
-              {activeCustomer && (
-                <div className="mb-4">
-                  <div className="text-xs text-gray-400 mb-1">Customer</div>
-                  <div className="font-medium text-sm text-primary">👤 {activeCustomer.name}</div>
-                </div>
-              )}
-              <button onClick={() => {
-                if (!lastReceipt) return;
-                import('../lib/pdf').then(({ downloadInvoicePdf }) => {
-                  downloadInvoicePdf({
-                    order: lastReceipt,
-                    businessName: businessInfo.businessName,
-                    branchName: businessInfo.branchName,
-                    address: businessInfo.address,
-                    phone: businessInfo.phone,
-                    taxId: businessInfo.taxId,
-                    email: businessInfo.email,
-                    currency: businessInfo.currency || 'QAR',
-                  });
-                  toast.success('Invoice generated');
-                });
-              }}
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 mb-2">
-                🧾 Invoice
-              </button>
-              <button onClick={() => { setTenders([]); setPayNumpad(''); }}
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 text-red-600">
-                Clear Payments
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Table Order Picker Modal — rendered outside posView blocks so it works from floor plan */}
+      {/* Table order picker */}
       {tableOrderPicker && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setTableOrderPicker(null)}>
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
@@ -2115,78 +606,53 @@ export default function POSPage() {
             <p className="text-xs text-gray-500 mb-3">{tableOrderPicker.tableName} — {tableOrderPicker.orders.length} {t('pos.activeOrders')}</p>
             <div className="space-y-2 mb-4 max-h-[50vh] overflow-y-auto">
               {tableOrderPicker.orders.map((o: any) => (
-                <button
-                  key={o.id}
-                  onClick={() => {
-                    loadBill(o);
-                    setTableOrderPicker(null);
-                    setPosView('order');
-                  }}
-                  className="w-full text-left px-3 py-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-primary hover:bg-primary/5 transition"
-                >
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium">{o.orderNo.slice(-6)}</span>
-                    <span className="text-sm font-bold">{Number(o.total).toFixed(2)}</span>
-                  </div>
-                  <div className="text-[11px] text-gray-500 mt-0.5">
-                    {new Date(o.createdAt).toLocaleTimeString()} · {o.items?.length ?? 0} items · {o.status}
-                  </div>
+                <button key={o.id} onClick={() => { loadBill(o); setTableOrderPicker(null); setPosView('order'); }}
+                  className="w-full text-left px-3 py-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-primary hover:bg-primary/5 transition">
+                  <div className="flex justify-between items-center"><span className="text-sm font-medium">{o.orderNo.slice(-6)}</span><span className="text-sm font-bold">{Number(o.total).toFixed(2)}</span></div>
+                  <div className="text-[11px] text-gray-500 mt-0.5">{new Date(o.createdAt).toLocaleTimeString()} · {o.items?.length ?? 0} items · {o.status}</div>
                 </button>
               ))}
             </div>
-            <button
-              onClick={() => addOrderToTable(tableOrderPicker.tableName)}
-              className="w-full py-2.5 rounded-xl bg-primary text-white text-sm font-semibold"
-            >
-              + {t('pos.newOrderForTable')}
-            </button>
+            <button onClick={() => addOrderToTable(tableOrderPicker.tableName)} className="w-full py-2.5 rounded-xl bg-primary text-white text-sm font-semibold">+ {t('pos.newOrderForTable')}</button>
+          </div>
+        </div>
+      )}
+
+      {/* Batch selection drawer (Phase 4) */}
+      {batchDrawer && (
+        <BatchSelectionDrawer
+          product={batchDrawer.product}
+          batches={batchDrawer.batches}
+          onSelect={(batch) => {
+            const p = batchDrawer.product;
+            const label = batch.batchNumber || '';
+            addLine(p, p.salePrice ?? p.costPrice ?? 0, label ? [{ optionId: -1, name: `Lot: ${label}`, priceDelta: 0 }] as any : undefined);
+            setBatchDrawer(null);
+          }}
+          onClose={() => setBatchDrawer(null)}
+        />
+      )}
+
+      {/* PIN Switch */}
+      <PinSwitchModal open={showPinSwitch} onClose={() => setShowPinSwitch(false)} onSwitched={() => window.location.reload()} branchId={branchId} />
+
+      {/* Forced POS Closing Popup */}
+      {sessionBlocked && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 text-center">
+            <div className="text-4xl mb-3">⚠️</div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2">POS Session Still Open</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">Please close your POS session (count your cash drawer) before navigating away.</p>
+            <div className="flex gap-3">
+              <button onClick={sessionCancel} className="flex-1 py-2.5 rounded-xl bg-primary text-white font-semibold text-sm">Stay & Close Session</button>
+              <button onClick={sessionProceed} className="flex-1 py-2.5 rounded-xl border border-red-300 text-red-600 font-semibold text-sm hover:bg-red-50 dark:hover:bg-red-900/20">Leave Anyway</button>
+            </div>
           </div>
         </div>
       )}
 
       <PromptDialog />
       <ConfirmDialog />
-
-      {/* PIN Switch User Modal */}
-      <PinSwitchModal
-        open={showPinSwitch}
-        onClose={() => setShowPinSwitch(false)}
-        onSwitched={(userData) => {
-          // Reload the page to apply the new user context
-          window.location.reload();
-        }}
-        branchId={branchId}
-      />
-
-      {/* ── Forced POS Closing Popup: blocks leaving with open session ── */}
-      {sessionBlocked && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 text-center">
-            <div className="text-4xl mb-3">⚠️</div>
-            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2">
-              POS Session Still Open
-            </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-              You have an active POS session. Please close it (count your cash drawer)
-              before navigating away. Leaving without closing may cause cash discrepancies.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={sessionCancel}
-                className="flex-1 py-2.5 rounded-xl bg-primary text-white font-semibold text-sm"
-              >
-                Stay & Close Session
-              </button>
-              <button
-                onClick={sessionProceed}
-                className="flex-1 py-2.5 rounded-xl border border-red-300 text-red-600 font-semibold text-sm hover:bg-red-50 dark:hover:bg-red-900/20"
-              >
-                Leave Anyway
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

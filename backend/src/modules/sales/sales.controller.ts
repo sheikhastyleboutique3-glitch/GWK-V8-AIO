@@ -63,6 +63,9 @@ export class CreateOrderDto {
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => OrderItemDto)
   items?: OrderItemDto[];
   @IsOptional() @IsString() idempotencyKey?: string;
+  // Ship-Later (Odoo parity): customer pays now, delivery/pickup later.
+  @IsOptional() shipLater?: boolean;
+  @IsOptional() fulfillmentDate?: string;
 }
 
 export class AddPaymentDto {
