@@ -371,6 +371,8 @@ export default function WaiterPage() {
             <button onClick={() => setShowPinSwitch(true)} className="px-2 py-1 rounded-lg hover:bg-gray-700 text-gray-300 hover:text-white transition text-xs">👤 Switch</button>
           </div>
         </div>
+        {/* Floor content — fills remaining space */}
+        <div className="flex-1 flex flex-col overflow-hidden p-4">
         <div className="flex flex-wrap gap-3 mb-4 text-xs text-gray-500">
           {['AVAILABLE', 'OCCUPIED', 'BILL_REQUESTED', 'RESERVED'].map((s) => (
             <span key={s} className="inline-flex items-center gap-1.5">
@@ -395,8 +397,8 @@ export default function WaiterPage() {
         {tablesLoading ? (
           <LoadingSpinner />
         ) : (
-          <div className="relative rounded-2xl overflow-hidden border-2 border-gray-200 dark:border-gray-700 w-full"
-            style={{ maxWidth: 900, height: 'clamp(300px, 60vw, 500px)', background: '#f0fdf4' }}>
+          <div className="relative rounded-2xl overflow-hidden border-2 border-gray-200 dark:border-gray-700 w-full flex-1"
+            style={{ background: '#f0fdf4' }}>
             {(visibleTables || []).filter((tb: TableRow) => tb.isActive).map((table: TableRow) => {
               const tableOrders = ordersForTable(table.name);
               const ord = tableOrders[0];
@@ -471,6 +473,7 @@ export default function WaiterPage() {
             </div>
           </div>
         )}
+        </div>{/* end flex-1 floor content wrapper */}
       </div>
     );
   }
