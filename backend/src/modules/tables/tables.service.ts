@@ -41,7 +41,7 @@ export class TablesService {
   // ---- Tables ----
   listTables(branchId?: number, floorId?: number) {
     return this.prisma.restaurantTable.findMany({
-      where: { ...(branchId ? { branchId } : {}), ...(floorId ? { floorId } : {}) },
+      where: { isActive: true, ...(branchId ? { branchId } : {}), ...(floorId ? { floorId } : {}) },
       include: { floor: { select: { id: true, name: true } } },
       orderBy: { name: 'asc' },
     });

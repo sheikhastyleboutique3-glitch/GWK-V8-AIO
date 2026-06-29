@@ -359,6 +359,20 @@ export default function WaiterPage() {
 
   // ============ FLOOR PLAN ============
   if (!selectedTable) {
+    // If no branch selected, show a message instead of empty floor
+    if (!branchId) {
+      return (
+        <div className="h-screen flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-950">
+          <div className="text-center p-8">
+            <div className="text-5xl mb-4">🏢</div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">No Branch Selected</h2>
+            <p className="text-gray-500 mb-4">Please select a branch from the dashboard to see your floor plan.</p>
+            <button onClick={() => window.location.replace('/')} className="px-4 py-2 rounded-xl bg-primary text-white font-medium">Go to Dashboard</button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="h-screen flex flex-col overflow-hidden">
         <OfflineBanner />

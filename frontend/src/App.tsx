@@ -49,6 +49,7 @@ const RequisitionsPage = lazyRetry(() => import('./pages/RequisitionsPage'));
 const NewRequisitionPage = lazyRetry(() => import('./pages/NewRequisitionPage'));
 const RequisitionDetailPage = lazyRetry(() => import('./pages/RequisitionDetailPage'));
 const WastagePage = lazyRetry(() => import('./pages/WastagePage'));
+const WarehouseCatalogPage = lazyRetry(() => import('./pages/WarehouseCatalogPage'));
 const SuppliersPage = lazyRetry(() => import('./pages/SuppliersPage'));
 const PurchaseOrdersPage = lazyRetry(() => import('./pages/PurchaseOrdersPage'));
 const TransfersPage = lazyRetry(() => import('./pages/TransfersPage'));
@@ -203,7 +204,7 @@ export default function App() {
         <Route path="requisitions" element={<RequisitionsPage />} />
         <Route path="requisitions/new" element={<NewRequisitionPage />} />
         <Route path="requisitions/:id" element={<RequisitionDetailPage />} />
-        <Route path="catalog" element={<Navigate to="/menu" replace />} />
+        <Route path="catalog" element={<WarehouseCatalogPage />} />
         <Route path="wastage" element={<WastagePage />} />
         <Route path="alerts" element={<AlertsPage />} />
 
