@@ -9,6 +9,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import ModifierModal, { ModGroup, ChosenModifier } from '../components/ModifierModal';
 import { printKot } from '../lib/thermalPrint';
 import { useOnlineStatus } from '../lib/useOnlineStatus';
+import { usePosSessionGuard } from '../lib/usePosSessionGuard';
 import OfflineBanner from '../components/OfflineBanner';
 import { useRealtimeFloor } from '../lib/useRealtimeFloor';
 
@@ -49,6 +50,12 @@ export default function WaiterPage() {
   const [modProduct, setModProduct] = useState<{ product: any; groups: ModGroup[] } | null>(null);
 
   const waiterName = user ? `${user.firstName} ${user.lastName}` : undefined;
+
+  // ── Session guard: warn waiter when navigating away with active orders ──
+  const { blocked: sessionBlocked, proceed: sessionProceed, cancel: sessionCancel } = usePosSessionGuard({
+    sessionOpen: !!activeOrderId, // Block when waiter has an active order open
+    allowedPaths: ['/waiter', '/pos', '/kds'],
+  });
 
   // Real-time floor updates via WebSocket (replaces 15s polling)
   useRealtimeFloor(branchId);
@@ -714,6 +721,29 @@ export default function WaiterPage() {
             setModProduct(null);
           }}
         />
+      )}
+
+      {/* ── Session Guard: blocks leaving with active order ── */}
+      {sessionBlocked && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 text-center">
+            <div className="text-4xl mb-3">⚠️</div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2">
+              Active Order Open
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+              You have an active order. Please send it to kitchen or close it before navigating away.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={sessionCancel} className="flex-1 py-2.5 rounded-xl bg-primary text-white font-semibold text-sm">
+                Stay
+              </button>
+              <button onClick={sessionProceed} className="flex-1 py-2.5 rounded-xl border border-red-300 text-red-600 font-semibold text-sm hover:bg-red-50 dark:hover:bg-red-900/20">
+                Leave Anyway
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -200,6 +200,7 @@ export default function POSPage() {
   // ── Forced POS Closing Popup: block navigation when session is open ────
   const { blocked: sessionBlocked, proceed: sessionProceed, cancel: sessionCancel } = usePosSessionGuard({
     sessionOpen: !!posSession,
+    allowedPaths: ['/pos', '/kds', '/waiter'],
   });
 
   // Customer search (for loyalty / store-credit redemption).
