@@ -108,6 +108,9 @@ async function main() {
 
   const branches = { warehouse, gwkWestWalk: branchGwkWestWalk, gwkDohaPort: branchGwkDohaPort, gwkExpress: branchGwkExpress, sbhGulfMall: branchSbhGulfMall, sbhWestWalk: branchSbhWestWalk };
 
+  // Alias for backward compatibility (referenced throughout the seed)
+  const branchDoha = branchGwkDohaPort;
+
   // ==========================================================================
   // DELIVERY PLATFORMS (third-party aggregators)
   // ==========================================================================
