@@ -76,6 +76,8 @@ export default function POSPage() {
   const [shipLater, setShipLater] = useState(false);
   // Phase 4: Batch selection drawer
   const [batchDrawer, setBatchDrawer] = useState<{ product: any; batches: any[] } | null>(null);
+  // Mobile cart drawer toggle
+  const [mobileCartOpen, setMobileCartOpen] = useState(false);
 
 
   const mode: 'new' | 'existing' = loadedOrderId ? 'existing' : 'new';
@@ -520,14 +522,47 @@ export default function POSPage() {
             </div>
 
             {/* Mobile bottom cart bar — shows on phones (lg:hidden) */}
-            <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 shadow-lg safe-area-bottom">
-              <div className="flex items-center gap-2 px-4 py-2">
-                <div className="flex-1">
-                  <div className="text-xs text-gray-500">{lines.length} item{lines.length !== 1 ? 's' : ''}</div>
-                  <div className="text-lg font-bold">{total.toFixed(2)}</div>
+            <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 shadow-2xl safe-area-bottom">
+              {/* Expandable cart drawer (slides up when tapped) */}
+              {mobileCartOpen && (
+                <div className="max-h-[60vh] overflow-y-auto px-4 pt-3 pb-1 border-b border-gray-200 dark:border-gray-800">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-bold text-gray-900 dark:text-gray-100">Order Items</span>
+                    <button onClick={() => setMobileCartOpen(false)} className="text-xs text-gray-400 px-2 py-1">▼ Close</button>
+                  </div>
+                  <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {lines.map((l, i) => (
+                      <div key={l.itemId ?? `${l.productId}-${i}`} className="flex items-center justify-between py-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{l.name}</div>
+                          {l.modifiers && l.modifiers.length > 0 && (
+                            <div className="text-[10px] text-gray-500">{l.modifiers.filter((m: any) => m?.name).map((m: any) => m.name).join(', ')}</div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 ms-2">
+                          <button onClick={() => setCart(prev => prev.map((c, idx) => idx === i ? { ...c, quantity: Math.max(1, c.quantity - 1) } : c))}
+                            className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm font-bold flex items-center justify-center">−</button>
+                          <span className="text-sm font-semibold w-5 text-center">{l.quantity}</span>
+                          <button onClick={() => setCart(prev => prev.map((c, idx) => idx === i ? { ...c, quantity: c.quantity + 1 } : c))}
+                            className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm font-bold flex items-center justify-center">+</button>
+                          <span className="text-sm font-semibold w-14 text-end">{(l.unitPrice * l.quantity).toFixed(2)}</span>
+                          <button onClick={() => setCart(prev => prev.filter((_, idx) => idx !== i))}
+                            className="w-6 h-6 rounded-full bg-red-100 text-red-600 text-xs flex items-center justify-center">✕</button>
+                        </div>
+                      </div>
+                    ))}
+                    {!lines.length && <p className="text-sm text-gray-400 text-center py-4">No items yet</p>}
+                  </div>
                 </div>
+              )}
+              {/* Bottom summary bar (always visible) */}
+              <div className="flex items-center gap-2 px-4 py-2.5">
+                <button onClick={() => setMobileCartOpen(!mobileCartOpen)} className="flex-1 text-left active:scale-[0.98]">
+                  <div className="text-xs text-gray-500">{lines.length} item{lines.length !== 1 ? 's' : ''} {mobileCartOpen ? '▼' : '▲ tap to view'}</div>
+                  <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{total.toFixed(2)}</div>
+                </button>
                 <button onClick={() => setShowPayment(true)} disabled={!lines.length || !posSession}
-                  className="px-6 py-3 rounded-xl bg-emerald-600 text-white font-bold text-sm disabled:opacity-50 active:scale-[0.97]">
+                  className="px-6 py-3 rounded-xl bg-emerald-600 text-white font-bold text-sm disabled:opacity-50 active:scale-[0.97] transition-transform">
                   💳 Pay
                 </button>
               </div>
