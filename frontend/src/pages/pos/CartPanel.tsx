@@ -258,11 +258,11 @@ const CartPanel = React.memo(function CartPanel(props: CartPanelProps) {
 
 
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 flex flex-col min-h-0 overflow-hidden max-h-full">
-      {/* Scrollable cart body — everything except the fixed payment button */}
-      <div className="flex-1 overflow-y-auto min-h-0 space-y-0">
+    <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col min-h-0 overflow-hidden max-h-full">
+      {/* ═══ TOP ZONE (fixed): Channel/Preset selector + Order header ═══ */}
+      <div className="flex-shrink-0 p-3 pb-0">
       {mode === 'existing' ? (
-        <div className="mb-3 flex-shrink-0">
+        <div className="mb-2">
           <div className="flex items-center justify-between rounded-lg bg-primary/10 px-3 py-2">
             <div className="text-sm font-medium text-primary">
               {t('pos.settling')}: {loadedOrder?.tableName ? `${t('pos.table')} ${loadedOrder.tableName}` : loadedOrder?.orderNo}
@@ -338,8 +338,10 @@ const CartPanel = React.memo(function CartPanel(props: CartPanelProps) {
       )}
 
 
-      {/* Line items */}
-      <div className="divide-y divide-gray-100 dark:divide-gray-800 -mx-1 min-h-[4rem]">
+      </div>{/* end TOP ZONE */}
+
+      {/* ═══ MIDDLE ZONE (scrollable): Order line items ═══ */}
+      <div className="flex-1 overflow-y-auto min-h-0 px-3 divide-y divide-gray-100 dark:divide-gray-800">
         {lines.map((l, i) => (
           <div key={l.itemId ?? `${l.productId}-${i}`} className={`px-1 py-2 cursor-pointer rounded ${selectedLineIdx === i ? 'bg-emerald-50 dark:bg-emerald-900/30 ring-2 ring-emerald-500 dark:ring-emerald-400' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}
             onClick={() => setSelectedLineIdx(i)}
@@ -399,89 +401,25 @@ const CartPanel = React.memo(function CartPanel(props: CartPanelProps) {
           </div>
         ))}
         {!lines.length && !comboCart.length && <p className="text-sm text-gray-400 py-8 text-center">Tap products to add them.</p>}
+      </div>{/* end MIDDLE ZONE (scrollable lines) */}
+
+      {/* ═══ BOTTOM ZONE (fixed): Actions + Numpad + Totals + Payment ═══ */}
+      <div className="flex-shrink-0 border-t border-gray-200 dark:border-gray-800 px-3 pb-2 pt-1 space-y-1">
+
+      {/* Quick actions bar (compact) */}
+      <div className="grid grid-cols-5 gap-1 text-[10px]">
+        <button onClick={handleKitchenFire} className="px-1 py-1.5 rounded-lg bg-orange-100 dark:bg-orange-500/10 text-orange-700 text-center font-medium">🔥 KOT</button>
+        <button onClick={async () => { const note = await prompt({ title: 'Customer Note', placeholder: 'e.g. Allergic to nuts' }); if (note != null && mode === 'existing' && loadedOrderId) { api.patch(`/sales/orders/${loadedOrderId}`, { notes: note }).then(() => { toast.success('Note saved'); qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] }); }); } }}
+          className="px-1 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-center">📝</button>
+        <button onClick={() => { if (mode === 'existing' && loadedOrder) { printReceipt(loadedOrder, businessInfo); toast.success('Bill printed'); } else if (mode === 'new' && lines.length > 0) { printReceipt({ orderNo: 'PREVIEW', tableName, items: lines.map(l => ({ productId: l.productId, product: { name: l.name }, quantity: l.quantity, unitPrice: l.unitPrice, modifiers: l.modifiers })), total, subtotal } as any, businessInfo); } else toast('Add items first'); }}
+          className="px-1 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-center">🧾</button>
+        <button onClick={() => { if (mode === 'existing' && loadedOrderId && loadedOrder?.items?.length >= 2) setSplitModal(true); else toast('Need 2+ items to split'); }}
+          className="px-1 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-center">✂️</button>
+        <button onClick={async () => { if (mode === 'existing' && loadedOrderId && loadedOrder) cancelOrderWithNote(loadedOrderId, loadedOrder.orderNo); else toast('Load order first'); }}
+          className="px-1 py-1.5 rounded-lg bg-red-50 dark:bg-red-500/10 text-red-600 text-center font-medium">❌</button>
       </div>
 
-
-      {/* Customer */}
-      <div className="border-t border-gray-200 dark:border-gray-800 mt-3 pt-3">
-        {activeCustomer ? (
-          <div className="flex items-center justify-between gap-2 text-sm">
-            <div className="min-w-0">
-              <div className="font-medium truncate">👤 {activeCustomer.name}</div>
-              <div className="text-xs text-gray-500">{t('pos.points')}: {activeCustomer.loyaltyPoints ?? 0} · {t('pos.credit')}: {Number(activeCustomer.creditBalance ?? 0).toFixed(2)}</div>
-            </div>
-            {mode === 'new' && <button onClick={() => { setCustomer(null); setCustomerSearch(''); }} className="text-xs text-red-600">✕</button>}
-          </div>
-        ) : mode === 'new' ? (
-          <div className="relative">
-            <input value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)} placeholder={t('pos.customerSearch')}
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm" />
-            {customerSearch.trim().length >= 2 && (customerResults?.length ?? 0) > 0 && (
-              <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                {customerResults.map((c: any) => (
-                  <button key={c.id} onClick={() => { setCustomer(c); setCustomerSearch(''); }} className="w-full text-start px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
-                    {c.name} <span className="text-xs text-gray-400">{c.phone || ''}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : null}
-      </div>
-
-      {/* Coupon */}
-      <div className="border-t border-gray-200 dark:border-gray-800 mt-3 pt-3 flex gap-2">
-        <input value={couponCode} onChange={(e) => setCouponCode(e.target.value)} placeholder="Coupon code"
-          className="flex-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm" />
-        <button onClick={onApplyCoupon} disabled={!couponCode.trim() || !lines.length || applyCouponNew.isPending || applyCouponExisting.isPending}
-          className="px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm disabled:opacity-50">Apply</button>
-      </div>
-
-      {/* Discount rule */}
-      {mode === 'existing' && (discountRules?.length ?? 0) > 0 && (
-        <div className="mt-2">
-          <select value={discountRuleId} onChange={(e) => { const v = e.target.value === '' ? '' : parseInt(e.target.value, 10); setDiscountRuleId(v as any); applyDiscountRule.mutate(v as any); }}
-            className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm">
-            <option value="">{t('pos.noDiscount')}</option>
-            {(discountRules || []).filter((r: any) => r.scope === 'ORDER').map((r: any) => (<option key={r.id} value={r.id}>{r.name} ({r.type === 'PERCENT' ? `${r.value}%` : `-${r.value}`})</option>))}
-          </select>
-        </div>
-      )}
-
-
-      {/* Action Bar */}
-      <div className="border-t border-gray-200 dark:border-gray-800 mt-3 pt-3">
-        <div className="grid grid-cols-3 gap-1.5 text-xs">
-          <button onClick={handleKitchenFire} className="px-2 py-2 rounded-lg bg-orange-100 dark:bg-orange-500/10 text-orange-700 hover:bg-orange-200 dark:hover:bg-orange-500/20 text-center font-medium">🔥 Kitchen</button>
-          <button onClick={async () => {
-            const note = await prompt({ title: 'Customer Note', description: 'Printed on receipt/KOT', placeholder: 'e.g. Allergic to nuts' });
-            if (note != null && mode === 'existing' && loadedOrderId) { api.patch(`/sales/orders/${loadedOrderId}`, { notes: note }).then(() => { toast.success('Note saved'); qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] }); }); }
-            else if (note != null) toast.success('Note will be added when order is created');
-          }} className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center">📝 Note</button>
-          <button onClick={() => {
-            if (mode === 'existing' && loadedOrder) { printReceipt(loadedOrder, businessInfo); toast.success('Bill printed'); }
-            else if (mode === 'new' && lines.length > 0) { const preview = { orderNo: 'PREVIEW', tableName, items: lines.map(l => ({ productId: l.productId, product: { name: l.name }, quantity: l.quantity, unitPrice: l.unitPrice, modifiers: l.modifiers })), total, subtotal }; printReceipt(preview as any, businessInfo); }
-            else toast('Add items first');
-          }} className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center">🧾 Bill</button>
-          <button onClick={async () => {
-            const count = await prompt({ title: 'Number of Guests', type: 'number', defaultValue: String(mode === 'existing' ? loadedOrder?.guestCount || 1 : 1) });
-            if (count && mode === 'existing' && loadedOrderId) { api.patch(`/sales/orders/${loadedOrderId}`, { guestCount: parseInt(count, 10) || 1 }); toast.success(`Guests: ${count}`); }
-          }} className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center">👥 Guests</button>
-          <button onClick={async () => { const code = await prompt({ title: 'Coupon / Reward Code', placeholder: 'Enter code...' }); if (code?.trim()) { setCouponCode(code.trim()); onApplyCoupon(); } }}
-            className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center">🏷 Code</button>
-          <button onClick={() => { if (mode === 'existing' && loadedOrder) { window.alert(`Order: ${loadedOrder.orderNo}\nStatus: ${loadedOrder.status}\nChannel: ${loadedOrder.channel}\nTable: ${loadedOrder.tableName || '-'}\nItems: ${loadedOrder.items?.length || 0}\nTotal: ${Number(loadedOrder.total).toFixed(2)}`); } else toast('Create or load an order first'); }}
-            className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center">ℹ️ Info</button>
-          <button onClick={async () => { await prompt({ title: 'Staff Note', description: 'Internal only — not printed', placeholder: 'e.g. VIP customer' }); }}
-            className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center">🔒 Staff Note</button>
-          <button onClick={() => { if (mode === 'existing' && loadedOrderId && loadedOrder?.items?.length >= 2) setSplitModal(true); else toast('Load an order with at least 2 items to split'); }}
-            className="px-2 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-center">✂️ Split</button>
-          <button onClick={async () => { if (mode === 'existing' && loadedOrderId && loadedOrder) cancelOrderWithNote(loadedOrderId, loadedOrder.orderNo); else toast('Load an existing order to cancel'); }}
-            className="px-2 py-2 rounded-lg bg-red-50 dark:bg-red-500/10 text-red-600 hover:bg-red-100 dark:hover:bg-red-500/20 text-center font-medium">❌ Void All</button>
-        </div>
-      </div>
-
-
-      {/* Numpad */}
+      {/* Numpad (compact Odoo-style) */}
       {lines.length > 0 && (
         <div className="border-t border-gray-200 dark:border-gray-800 mt-2 pt-2">
           {selectedLineIdx >= 0 && selectedLineIdx < lines.length && (
@@ -532,19 +470,18 @@ const CartPanel = React.memo(function CartPanel(props: CartPanelProps) {
       )}
 
 
-      </div>{/* end scrollable cart body */}
-
-      {/* Totals + Payment button — sticky at bottom */}
-      <div className="border-t border-gray-200 dark:border-gray-800 pt-2 flex-shrink-0 mt-auto">
+      {/* Totals + Payment */}
+      <div className="border-t border-gray-200 dark:border-gray-800 pt-1">
         <div className="flex justify-between text-xs text-gray-500"><span>Subtotal</span><span>{subtotal.toFixed(2)}</span></div>
         {discount > 0 && <div className="flex justify-between text-xs text-green-600"><span>Coupon {appliedCouponCode}</span><span>-{discount.toFixed(2)}</span></div>}
-        {(() => { const itemDisc = lines.reduce((s, l) => s + (l.discount ?? 0), 0); return itemDisc > 0 ? <div className="flex justify-between text-xs text-green-600"><span>Item discounts</span><span>-{itemDisc.toFixed(2)}</span></div> : null; })()}
-        <div className="flex justify-between text-base font-bold my-1"><span>Total</span><span>{total.toFixed(2)}</span></div>
+        <div className="flex justify-between text-base font-bold mt-1"><span>Total</span><span>{total.toFixed(2)}</span></div>
         <button disabled={(!lines.length && !comboCart.length) || !posSession} onClick={() => setShowPayment(true)}
-          className="w-full py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm disabled:opacity-50 active:scale-[0.97] transition-transform">
-          {!posSession ? t('pos.session.openSessionFirst') : `💳 Payment${total > 0 ? ` · ${total.toFixed(2)}` : ''}`}
+          className="w-full mt-1 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm disabled:opacity-50 active:scale-[0.97] transition-transform">
+          {!posSession ? t('pos.session.openSessionFirst') : `💳 Payment · ${total.toFixed(2)}`}
         </button>
       </div>
+
+      </div>{/* end BOTTOM ZONE */}
 
       {/* Last receipt */}
       {lastReceipt && (
