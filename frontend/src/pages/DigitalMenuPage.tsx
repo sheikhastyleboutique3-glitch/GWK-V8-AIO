@@ -75,10 +75,10 @@ export default function DigitalMenuPage() {
   const scrollY = useParallax();
   const catRef = useRef<HTMLDivElement>(null);
 
-  // ─── Fetch Settings (branding, menu config) ─────────────────────────────
+  // ─── Fetch Settings (branding, menu config) — PUBLIC endpoint ─────────
   const { data: settings } = useQuery({
     queryKey: ['menu-settings'],
-    queryFn: () => fetch('/api/settings').then(r => r.json()).then(d => d.data),
+    queryFn: () => fetch('/api/settings/public').then(r => r.json()).then(d => d.data),
     staleTime: 5 * 60_000,
   });
 

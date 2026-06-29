@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Body, Query, UseGuards, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -35,6 +36,21 @@ export class SettingsController {
   @Get() 
   findAll(@Query('group') group?: string) { 
     return this.svc.findAll(group); 
+  }
+
+  /** Public endpoint for digital menu — returns only public-safe branding/menu settings (no secrets). */
+  @Public()
+  @Get('public')
+  async publicSettings() {
+    const all = await this.svc.findAll();
+    const PUBLIC_KEYS = [
+      'company_name', 'company_name_ar', 'company_logo', 'company_address', 'company_phone',
+      'company_email', 'company_tax_id', 'default_currency',
+      'menu_banner_url', 'menu_enable_ordering', 'menu_show_prices',
+      'menu_closed_message', 'menu_footer_text', 'menu_3d_effects',
+      'review_url', 'theme_brand_color',
+    ];
+    return all.filter((s: any) => PUBLIC_KEYS.includes(s.key));
   }
   
   @Post() 

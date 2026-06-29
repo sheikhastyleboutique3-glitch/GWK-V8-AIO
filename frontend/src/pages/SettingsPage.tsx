@@ -13,7 +13,13 @@ export default function SettingsPage() {
   const { data: settings, isLoading } = useQuery({ queryKey: ['settings'], queryFn: () => api.get('/settings').then(r => r.data.data) });
   useEffect(() => { if (settings) { const map: Record<string, string> = {}; settings.forEach((s: any) => { map[s.key] = s.value; }); setLocalSettings(map); } }, [settings]);
   const saveMutation = useMutation({ mutationFn: (data: any) => api.post('/settings/bulk', { settings: data }), onSuccess: () => { toast.success('Settings saved'); qc.invalidateQueries({ queryKey: ['settings'] }); }, onError: (e: any) => toast.error(e.response?.data?.message || 'Failed') });
-  const handleSave = () => { const data = Object.entries(localSettings).map(([key, value]) => ({ key, value })); saveMutation.mutate(data); };
+  const handleSave = () => {
+    // Include the correct group for each setting key so backend stores them properly
+    const keyToGroup: Record<string, string> = {};
+    settingGroups.forEach(g => g.keys.forEach(k => { keyToGroup[k] = g.group; }));
+    const data = Object.entries(localSettings).map(([key, value]) => ({ key, value, group: keyToGroup[key] || 'general' }));
+    saveMutation.mutate(data);
+  };
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
     const formData = new FormData(); formData.append('logo', file);
@@ -46,17 +52,13 @@ export default function SettingsPage() {
                 </div>
               ) : key.includes('color') ? (
                 <div className="flex items-center gap-3"><input type="color" value={localSettings[key] || '#2563eb'} onChange={e => setLocalSettings(p => ({ ...p, [key]: e.target.value }))} className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer" /><input value={localSettings[key] || ''} onChange={e => setLocalSettings(p => ({ ...p, [key]: e.target.value }))} className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm" /></div>
-              ) : key.startsWith('pos.') ? (
+              ) : key.startsWith('pos.') || key === 'staff_performance_enabled' || key === 'menu_enable_ordering' || key === 'menu_show_prices' || key === 'menu_3d_effects' ? (
                 <div className="flex items-center gap-3">
                   <label className="relative inline-flex cursor-pointer">
                     <input type="checkbox" checked={localSettings[key] === 'true'} onChange={e => setLocalSettings(p => ({ ...p, [key]: e.target.checked ? 'true' : 'false' }))} className="sr-only peer" />
                     <div className="w-10 h-5 rounded-full bg-gray-300 dark:bg-gray-600 peer-checked:bg-emerald-500 transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:w-4 after:h-4 after:bg-white after:rounded-full after:transition-transform peer-checked:after:translate-x-5" />
                   </label>
                   <span className="text-xs text-gray-500">{localSettings[key] === 'true' ? 'Enabled' : 'Disabled'}</span>
-                  <span className="text-[10px] text-gray-400 ms-2">
-                    {key === 'pos.requireOpenSession' && '(Orders blocked unless a session is open)'}
-                    {key === 'pos.allowNegativeStock' && '(Allow selling items even when stock is 0)'}
-                  </span>
                 </div>
               ) : (
                 <input value={localSettings[key] || ''} onChange={e => setLocalSettings(p => ({ ...p, [key]: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />

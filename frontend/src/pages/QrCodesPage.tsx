@@ -40,8 +40,8 @@ export default function QrCodesPage() {
       return branchList.map((b: any) => ({
         id: `menu-${b.id}`,
         label: `Menu — ${b.name}`,
-        sublabel: `/order/${b.id}`,
-        url: `${baseUrl}/order/${b.id}`,
+        sublabel: `/menu/${b.id}`,
+        url: `${baseUrl}/menu/${b.id}`,
       }));
     }
 
@@ -218,7 +218,7 @@ export default function QrCodesPage() {
                   ⬇️ SVG
                 </button>
                 <button
-                  onClick={() => { navigator.clipboard.writeText(qr.url); }}
+                  onClick={() => { navigator.clipboard.writeText(qr.url).then(() => { import('react-hot-toast').then(m => m.default.success('Link copied!')); }).catch(() => { const ta = document.createElement('textarea'); ta.value = qr.url; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); import('react-hot-toast').then(m => m.default.success('Link copied!')); }); }}
                   className="px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-xs hover:bg-gray-200 dark:hover:bg-gray-700"
                   title="Copy link"
                 >
