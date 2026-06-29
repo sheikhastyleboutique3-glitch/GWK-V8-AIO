@@ -184,7 +184,7 @@ export async function requestBackgroundSync() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export interface SyncConflict {
-  id: string;
+  id: string | number;
   url: string;
   method: string;
   error: string;

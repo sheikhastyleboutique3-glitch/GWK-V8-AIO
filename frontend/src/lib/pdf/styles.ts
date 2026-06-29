@@ -8,6 +8,7 @@ export const colors = {
   primary: '#1a56db',
   dark: '#1f2937',
   gray: '#6b7280',
+  muted: '#6b7280',
   lightGray: '#e5e7eb',
   success: '#059669',
   danger: '#dc2626',

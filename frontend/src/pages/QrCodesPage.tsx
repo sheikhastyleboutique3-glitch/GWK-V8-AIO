@@ -98,7 +98,7 @@ export default function QrCodesPage() {
       <h1 class="no-print" style="margin-bottom:16px">QR Codes — ${qrType === 'menu' ? 'Menu' : qrType === 'table' ? 'Tables' : 'Kiosk'}</h1>
       <button class="no-print" onclick="window.print()" style="margin-bottom:16px;padding:8px 16px;cursor:pointer">🖨 Print</button>
       <div class="grid">
-        ${qrCodes.map((qr) => `
+        ${qrCodes.map((qr: any) => `
           <div class="card">
             <img src="${qrToDataUrl(qr.url, 300)}" alt="${qr.label}" />
             <h3>${qr.label}</h3>
@@ -125,9 +125,9 @@ export default function QrCodesPage() {
           <label className="block text-xs font-medium text-gray-500 mb-1">QR Type</label>
           <div className="flex rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
             {([
-              { key: 'menu', label: '🍽️ Menu', icon: '' },
-              { key: 'table', label: '🪑 Tables', icon: '' },
-              { key: 'kiosk', label: '📱 Kiosk', icon: '' },
+              { key: 'menu', label: '🍽️ Menu' },
+              { key: 'table', label: '🪑 Tables' },
+              { key: 'kiosk', label: '📱 Kiosk' },
             ] as { key: QrType; label: string }[]).map((opt) => (
               <button
                 key={opt.key}
@@ -195,7 +195,7 @@ export default function QrCodesPage() {
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {qrCodes.map((qr) => (
+          {qrCodes.map((qr: any) => (
             <div
               key={qr.id}
               className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 text-center hover:shadow-md transition"
