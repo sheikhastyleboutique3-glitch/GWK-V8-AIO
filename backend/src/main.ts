@@ -26,8 +26,9 @@ async function bootstrap() {
   const productsDir = join(uploadsDir, 'products');
   const brandingDir = join(uploadsDir, 'branding');
   const soundsDir = join(uploadsDir, 'sounds');
+  const generalDir = join(uploadsDir, 'general');
 
-  [uploadsDir, productsDir, brandingDir, soundsDir].forEach(dir => {
+  [uploadsDir, productsDir, brandingDir, soundsDir, generalDir].forEach(dir => {
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
