@@ -214,8 +214,13 @@ export default function KDSPage() {
   }, [board, station, advance, recall]);
 
   return (
-    <div>
-      <PageHeader title={t('nav.kds')} subtitle={activeBranch?.name} />
+    <div className="h-screen flex flex-col overflow-hidden p-4">
+      {/* Top bar with back button */}
+      <div className="flex items-center gap-3 mb-3 flex-shrink-0">
+        <button onClick={() => window.location.href = '/'} className="text-gray-400 hover:text-gray-700 dark:hover:text-white transition text-lg" title="Back to Dashboard">✕</button>
+        <h1 className="font-bold text-lg">{t('nav.kds')}</h1>
+        {activeBranch?.name && <span className="text-sm text-gray-500">{activeBranch.name}</span>}
+      </div>
 
       {/* ── Offline Warning Banner for Kitchen Staff ── */}
       {!isOnline && (
@@ -255,7 +260,7 @@ export default function KDSPage() {
       {isLoading ? (
         <LoadingSpinner />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1 overflow-auto">
           {columns.map((col) => {
             const rawItems = board?.[col] ?? [];
             // Filter by station if one is selected

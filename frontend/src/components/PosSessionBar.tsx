@@ -70,6 +70,8 @@ export default function PosSessionBar({ branchId, businessInfo }: { branchId?: n
       setShowClose(false);
       setCloseDenoms(emptyDenoms());
       await qc.refetchQueries({ queryKey: ['pos-session-current', branchId] });
+      // Odoo behavior: navigate back to dashboard after closing session
+      navigate('/');
     },
     onError: (e: any) => toast.error(e.response?.data?.message || 'Failed'),
   });
