@@ -99,9 +99,7 @@ export class SelfOrderPublicController {
       {
         branchId,
         tableName: body.tableName,
-        customerName: body.customerName,
-        customerPhone: body.customerPhone,
-        notes: body.notes,
+        notes: [body.customerName ? `Customer: ${body.customerName}` : null, body.customerPhone ? `Phone: ${body.customerPhone}` : null, body.notes].filter(Boolean).join(' | ') || undefined,
         isSelfOrder: true,
         selfOrderMode: 'QR_TABLE',
         channel: 'QR',

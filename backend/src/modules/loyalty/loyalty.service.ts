@@ -68,10 +68,18 @@ export class LoyaltyService {
       where: { code },
       include: {
         program: { select: { id: true, name: true, type: true, currency: true } },
-        customer: { select: { id: true, name: true, phone: true, email: true, loyaltyPoints: true } },
       },
     });
     if (!card) throw new NotFoundException(`Card with code "${code}" not found.`);
+
+    // Fetch customer separately (LoyaltyCard stores customerId without a Prisma relation)
+    const customer = card.customerId
+      ? await this.prisma.customer.findUnique({
+          where: { id: card.customerId },
+          select: { id: true, name: true, phone: true, email: true, loyaltyPoints: true },
+        })
+      : null;
+
     return {
       card: {
         code: card.code,
@@ -82,7 +90,7 @@ export class LoyaltyService {
         isExpired: card.expiresAt ? card.expiresAt < new Date() : false,
       },
       program: card.program,
-      customer: card.customer,
+      customer,
     };
   }
 }
