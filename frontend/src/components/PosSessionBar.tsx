@@ -186,22 +186,40 @@ export default function PosSessionBar({ branchId, businessInfo }: { branchId?: n
         </div>
       </div>
 
-      {/* Closing Cash Count Modal (simple + reliable) */}
-      <Modal open={showClose} onClose={() => setShowClose(false)} title="Close Session" size="md">
-        <p className="text-xs text-gray-500 mb-3">Count all cash in the drawer. The system will compare against expected sales.</p>
-        <DenomGrid rows={closeDenoms} onChange={(i, c) => updateDenom(closeDenoms, setCloseDenoms, i, c)} />
-        <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-200 dark:border-gray-800">
-          <span className="text-lg font-bold">Counted: {denomTotal(closeDenoms).toFixed(2)}</span>
-          <div className="flex gap-2">
-            <button onClick={() => { setShowClose(false); navigate('/'); }} className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm">Backend</button>
-            <button onClick={() => setShowClose(false)} className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm">Discard</button>
+      {/* Closing Session Panel — Odoo-style with Expected/Counted/Difference */}
+      <Modal open={showClose} onClose={() => setShowClose(false)} title="Closing Session" size="md">
+        <div className="space-y-4">
+          {/* Simple cash input (no denomination grid — just type the total) */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Cash in Drawer (counted)</label>
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              value={denomTotal(closeDenoms) || ''}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value) || 0;
+                // Set the first denomination count to represent the total
+                const newDenoms = emptyDenoms();
+                newDenoms[0] = { denomination: 1, count: val };
+                setCloseDenoms([{ denomination: 1, count: val }]);
+              }}
+              placeholder="Enter total cash counted"
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 text-lg font-bold text-center"
+            />
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-3 pt-2 border-t border-gray-200 dark:border-gray-800">
             <button
               onClick={() => closeMut.mutate()}
               disabled={closeMut.isPending}
-              className="px-5 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium disabled:opacity-50"
+              className="px-5 py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-bold disabled:opacity-50"
             >
               {closeMut.isPending ? 'Closing...' : 'Close Session'}
             </button>
+            <button onClick={() => { setShowClose(false); navigate('/'); }} className="px-4 py-2.5 rounded-lg border border-gray-300 text-sm font-medium">Backend</button>
+            <button onClick={() => setShowClose(false)} className="px-4 py-2.5 rounded-lg border border-gray-300 text-sm font-medium">Discard</button>
           </div>
         </div>
       </Modal>

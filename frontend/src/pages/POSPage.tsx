@@ -772,13 +772,13 @@ export default function POSPage() {
   const [showPinSwitch, setShowPinSwitch] = useState(false);
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-screen flex flex-col overflow-hidden">
       {/* Offline status banner */}
       <OfflineBanner />
       {/* ─── ODOO-STYLE TOP NAV BAR ─── */}
-      <div className="bg-gray-900 text-white px-3 md:px-4 py-2 flex items-center gap-2 md:gap-4 rounded-t-xl -mx-4 -mt-4 mb-0 no-print flex-shrink-0">
+      <div className="bg-gray-900 text-white px-4 py-2 flex items-center gap-3 flex-shrink-0">
         {/* Back to Dashboard button */}
-        <button onClick={() => window.location.href = '/'} className="text-gray-400 hover:text-white transition text-sm" title="Back to Dashboard">
+        <button onClick={() => window.location.href = '/'} className="text-gray-400 hover:text-white transition text-lg" title="Back to Dashboard">
           ✕
         </button>
         <span className="font-bold text-sm whitespace-nowrap">{activeBranch?.name || 'POS'}</span>
@@ -805,14 +805,14 @@ export default function POSPage() {
           {isSyncing && <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold">SYNCING...</span>}
         </div>
       </div>
-      {/* Session bar — always fully visible below the nav, never clipped */}
-      <div className="-mx-4 mb-4 no-print">
+      {/* Session bar */}
+      <div className="flex-shrink-0">
         <PosSessionBar branchId={branchId} businessInfo={businessInfo} />
       </div>
 
       {/* ─── FLOOR PLAN VIEW ─── */}
       {posView === 'floor' && (
-        <div>
+        <div className="flex-1 overflow-auto p-4">
           {/* Floor tabs + edit toggle */}
           <div className="flex items-center gap-2 mb-4">
             {(floors || []).map((f: any, idx: number) => (
@@ -1016,7 +1016,7 @@ export default function POSPage() {
 
       {/* ─── ORDER VIEW (existing checkout screen) ─── */}
       {posView === 'order' && (
-    <div>
+    <div className="flex-1 overflow-auto p-4">
       {comboPick && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setComboPick(null)}>
           <div className="w-full max-w-md rounded-xl bg-white dark:bg-gray-900 p-4 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
