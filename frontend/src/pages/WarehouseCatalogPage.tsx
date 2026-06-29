@@ -33,9 +33,11 @@ export default function WarehouseCatalogPage() {
     }).then(r => r.data.data),
   });
 
-  // Filter out MENU products client-side (in case backend doesn't have productType filter in this context)
+  // Filter out MENU products and inactive/archived items
   const filteredProducts = useMemo(() => {
-    return (products || []).filter((p: any) => p.productType !== 'MENU');
+    return (products || []).filter((p: any) =>
+      p.productType !== 'MENU' && p.isActive !== false && p.isArchived !== true
+    );
   }, [products]);
 
   const { data: categories } = useQuery({

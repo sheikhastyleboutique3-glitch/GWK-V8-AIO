@@ -42,7 +42,14 @@ export default function RecipesPage() {
   });
   const { data: rawProducts } = useQuery({
     queryKey: ['raw-products-for-recipes'],
-    queryFn: () => api.get('/products', { params: { productType: 'RAW' } }).then((r) => r.data.data),
+    queryFn: async () => {
+      // Fetch both RAW and SEMI_FINISHED — both can be recipe ingredients
+      const [raw, semi] = await Promise.all([
+        api.get('/products', { params: { productType: 'RAW' } }).then(r => r.data.data),
+        api.get('/products', { params: { productType: 'SEMI_FINISHED' } }).then(r => r.data.data),
+      ]);
+      return [...(raw || []), ...(semi || [])];
+    },
     
   });
   const { data: units } = useQuery({
