@@ -420,6 +420,19 @@ async function main() {
   // Approve all seeded users so the demo can log in (new hires start pending).
   await prisma.user.updateMany({ data: { isApproved: true } });
 
+  // Set POS PINs for demo users (used for quick PIN login + cashier switch)
+  await prisma.user.update({ where: { id: u.admin.id }, data: { posPin: '1111' } });
+  await prisma.user.update({ where: { id: u.mgrD.id },  data: { posPin: '2222' } });
+  await prisma.user.update({ where: { id: u.cash.id },  data: { posPin: '3333' } });
+  await prisma.user.update({ where: { id: u.wait.id },  data: { posPin: '4444' } });
+  await prisma.user.update({ where: { id: u.kit.id },   data: { posPin: '5555' } });
+  await prisma.user.update({ where: { id: u.bar.id },   data: { posPin: '6666' } });
+  await prisma.user.update({ where: { id: u.proc.id },  data: { posPin: '7777' } });
+  await prisma.user.update({ where: { id: u.wh.id },    data: { posPin: '8888' } });
+  await prisma.user.update({ where: { id: u.mgrW.id },  data: { posPin: '9999' } });
+  await prisma.user.update({ where: { id: u.pas.id },   data: { posPin: '1234' } });
+  console.log('✅ POS PINs set for all demo users');
+
   // ---- UserBranch assignments ----
   const ubAssignments = [
     { userId: u.admin.id, branchId: warehouse.id,   isPrimary: true  },

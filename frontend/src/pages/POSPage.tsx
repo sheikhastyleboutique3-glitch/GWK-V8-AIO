@@ -1022,7 +1022,7 @@ export default function POSPage() {
 
       {/* ─── ORDER VIEW (existing checkout screen) ─── */}
       {posView === 'order' && (
-    <div className="flex-1 overflow-auto p-4">
+    <div className="flex-1 overflow-hidden flex flex-col">{/* Order view fills remaining viewport, never scrolls page */}
       {comboPick && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setComboPick(null)}>
           <div className="w-full max-w-md rounded-xl bg-white dark:bg-gray-900 p-4 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -1214,9 +1214,9 @@ export default function POSPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Catalog */}
-        <div className="lg:col-span-2">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 overflow-hidden p-4">
+        {/* Catalog — scrolls independently */}
+        <div className="lg:col-span-2 overflow-y-auto">
           <div className="flex flex-wrap gap-2 mb-3">
             <input
               value={search}
@@ -1277,7 +1277,7 @@ export default function POSPage() {
         </div>
 
         {/* Cart / bill */}
-        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 flex flex-col">
+        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 flex flex-col overflow-y-auto">
           {mode === 'existing' ? (
             <div className="mb-3">
               <div className="flex items-center justify-between rounded-lg bg-primary/10 px-3 py-2">
