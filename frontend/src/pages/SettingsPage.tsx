@@ -35,7 +35,7 @@ export default function SettingsPage() {
     { group: 'localization', label: '\ud83c\udf0d Localization', keys: ['default_language'] },
     { group: 'review', label: '\u2b50 Customer Reviews', keys: ['review_url'] },
     { group: 'staff_perf', label: '\ud83d\udcca Staff Performance', keys: ['staff_performance_enabled'] },
-    { group: 'digital_menu', label: '\ud83d\udcf1 Digital Menu (QR)', keys: ['menu_banner_url', 'menu_enable_ordering', 'menu_show_prices', 'menu_closed_message', 'menu_footer_text', 'menu_3d_effects'] },
+    { group: 'digital_menu', label: '\ud83d\udcf1 Digital Menu (QR)', keys: ['menu_banner_url', 'theme_brand_color', 'menu_enable_ordering', 'menu_show_prices', 'menu_closed_message', 'menu_footer_text', 'menu_3d_effects'] },
   ];
   return (
     <div className="max-w-2xl">
@@ -50,6 +50,22 @@ export default function SettingsPage() {
                   {localSettings[key] && <img src={localSettings[key]} alt="Logo" className="h-12 w-auto rounded" />}
                   <input type="file" accept="image/png,image/svg+xml,image/jpeg" onChange={handleLogoUpload} className="text-sm" />
                 </div>
+              ) : key === 'menu_banner_url' ? (
+                <div className="space-y-2">
+                  {localSettings[key] && <img src={localSettings[key]} alt="Banner" className="w-full h-24 object-cover rounded-xl" />}
+                  <div className="flex gap-2">
+                    <input value={localSettings[key] || ''} onChange={e => setLocalSettings(p => ({ ...p, [key]: e.target.value }))} placeholder="https://... or upload below" className="flex-1 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm" />
+                    <label className="px-3 py-2 bg-primary text-white text-sm rounded-xl cursor-pointer font-medium">
+                      Upload
+                      <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                        const file = e.target.files?.[0]; if (!file) return;
+                        const fd = new FormData(); fd.append('file', file);
+                        try { const res = await api.post('/uploads', fd, { headers: { 'Content-Type': 'multipart/form-data' } }); setLocalSettings(p => ({ ...p, [key]: res.data.data.url })); toast.success('Banner uploaded'); } catch { toast.error('Upload failed'); }
+                      }} />
+                    </label>
+                  </div>
+                  <p className="text-xs text-gray-400">Recommended: 1200×400px landscape image. Shows at the top of your digital menu.</p>
+                </div>
               ) : key.includes('color') ? (
                 <div className="flex items-center gap-3"><input type="color" value={localSettings[key] || '#2563eb'} onChange={e => setLocalSettings(p => ({ ...p, [key]: e.target.value }))} className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer" /><input value={localSettings[key] || ''} onChange={e => setLocalSettings(p => ({ ...p, [key]: e.target.value }))} className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm" /></div>
               ) : key.startsWith('pos.') || key === 'staff_performance_enabled' || key === 'menu_enable_ordering' || key === 'menu_show_prices' || key === 'menu_3d_effects' ? (
@@ -61,7 +77,9 @@ export default function SettingsPage() {
                   <span className="text-xs text-gray-500">{localSettings[key] === 'true' ? 'Enabled' : 'Disabled'}</span>
                 </div>
               ) : (
-                <input value={localSettings[key] || ''} onChange={e => setLocalSettings(p => ({ ...p, [key]: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                <input value={localSettings[key] || ''} onChange={e => setLocalSettings(p => ({ ...p, [key]: e.target.value }))} placeholder={key === 'review_url' ? 'https://g.page/your-restaurant/review' : key === 'menu_closed_message' ? 'We are currently closed. See you soon!' : key === 'menu_footer_text' ? 'Follow us @yourrestaurant' : ''} className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                {key === 'review_url' && <p className="text-xs text-gray-400 mt-1">Google Maps review link or any review platform URL. Shows as "⭐ Leave a Review" button on your digital menu.</p>}
+                {key === 'theme_brand_color' && <p className="text-xs text-gray-400 mt-1">Your restaurant's brand color. Used for buttons, tabs, and accents on the digital menu.</p>}
               )}
             </div>
           ))}

@@ -98,6 +98,7 @@ export default function DigitalMenuPage() {
       footerText: map.menu_footer_text || '',
       enable3D: map.menu_3d_effects !== 'false',
       brandColor: map.theme_brand_color || '#0369a1',
+      reviewUrl: map.review_url || '',
     };
   }, [settings]);
 
@@ -290,6 +291,18 @@ export default function DigitalMenuPage() {
       {/* ═══ FOOTER ═══ */}
       <footer className="border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 py-6 mt-8">
         <div className="max-w-2xl mx-auto text-center">
+          {/* Leave a Review button */}
+          {config.reviewUrl && (
+            <a
+              href={config.reviewUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-white font-bold text-sm shadow-lg mb-4 active:scale-95 transition-transform"
+              style={{ backgroundColor: config.brandColor }}
+            >
+              ⭐ Leave a Review
+            </a>
+          )}
           {config.footerText && <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{config.footerText}</p>}
           <p className="text-xs text-gray-400">Powered by GWK Restaurant System</p>
         </div>
