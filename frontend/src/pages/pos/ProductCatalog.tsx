@@ -3,7 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../lib/api';
 import { useDebounce } from '../../lib/useDebounce';
+import { useLocalStock } from '../../lib/useLocalStock';
 import LoadingSpinner from '../../components/LoadingSpinner';
+
+type StockEstimate = { available: boolean; estimatedQty: number | null; isEstimate: boolean };
 
 interface ProductCatalogProps {
   onProductSelect: (product: any) => void;
@@ -18,6 +21,9 @@ const ProductCatalog = React.memo(function ProductCatalog({
   const [categoryId, setCategoryId] = useState<number | undefined>(undefined);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
+  // Offline-first: surface a local stock estimate so cashiers get an early
+  // warning before an offline order syncs and fails the server stock check.
+  const { checkStock, isOffline } = useLocalStock();
   const gridRef = useRef<HTMLDivElement>(null);
   const [visibleCount, setVisibleCount] = useState(VIRTUAL_PAGE_SIZE);
 
@@ -97,7 +103,12 @@ const ProductCatalog = React.memo(function ProductCatalog({
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
           {visibleProducts.map((p: any) => (
-            <ProductCard key={p.id} product={p} onSelect={onProductSelect} />
+            <ProductCard
+              key={p.id}
+              product={p}
+              onSelect={onProductSelect}
+              stock={isOffline ? checkStock(p.id) : null}
+            />
           ))}
           {!products?.length && <p className="text-sm text-gray-500 col-span-full">No products found.</p>}
           {products && visibleCount < products.length && (
@@ -119,15 +130,30 @@ const ProductCatalog = React.memo(function ProductCatalog({
 const ProductCard = React.memo(function ProductCard({
   product,
   onSelect,
+  stock,
 }: {
   product: any;
   onSelect: (p: any) => void;
+  stock: StockEstimate | null;
 }) {
+  // Offline estimate badges (no-op when online — `stock` is null).
+  const outOfStock = !!stock && !stock.available;
+  const lowStock = !!stock && stock.available && stock.estimatedQty != null && stock.estimatedQty <= 3;
   return (
     <button
       onClick={() => onSelect(product)}
-      className="text-left rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden hover:border-primary hover:shadow-sm active:scale-[0.96] transition-all duration-150 min-h-[120px]"
+      className="relative text-left rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden hover:border-primary hover:shadow-sm active:scale-[0.96] transition-all duration-150 min-h-[120px]"
     >
+      {outOfStock && (
+        <span className="absolute top-1 left-1 z-10 rounded-md bg-red-600 text-white text-[10px] font-semibold px-1.5 py-0.5 shadow">
+          Out (offline)
+        </span>
+      )}
+      {!outOfStock && lowStock && (
+        <span className="absolute top-1 left-1 z-10 rounded-md bg-amber-500 text-white text-[10px] font-semibold px-1.5 py-0.5 shadow">
+          Low: {stock!.estimatedQty}
+        </span>
+      )}
       <div className="h-20 bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden">
         {product.imageUrl ? (
           <img src={product.imageUrl} alt={product.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
