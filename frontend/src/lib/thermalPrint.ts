@@ -36,6 +36,7 @@ interface PaymentLike {
 }
 interface OrderLike {
   orderNo: string;
+  status?: string;
   tableName?: string | null;
   channel?: string;
   notes?: string | null;
@@ -148,6 +149,7 @@ export function printReceipt(order: OrderLike, info: BusinessInfo = {}) {
   const itemRows = items
     .map(
       (it) => {
+        const isVoided = (it as any).isVoided;
         const mods = Array.isArray(it.modifiers) ? it.modifiers : (typeof it.modifiers === 'string' ? JSON.parse(it.modifiers) : []);
         const modText = mods.map((m: any) => {
           const name = m?.name || m?.nameAr || '';
@@ -157,11 +159,13 @@ export function printReceipt(order: OrderLike, info: BusinessInfo = {}) {
         const lineTotal = it.unitPrice * it.quantity;
         const disc = (it as any).discount ?? 0;
         const discPct = lineTotal > 0 ? Math.round(disc / lineTotal * 100) : 0;
+        const strikeStyle = isVoided ? ' style="text-decoration:line-through;color:#999"' : '';
         return `
-      <div class="row"><span>${it.quantity} x ${esc(it.product?.name ?? `#${it.productId}`)}${it.product?.nameAr ? ` / ${esc(it.product.nameAr)}` : ''}</span><span>${money(lineTotal)}</span></div>
-      ${modText ? `<div class="row sm muted"><span>+ ${esc(modText)}</span><span></span></div>` : ''}
-      ${disc > 0 ? `<div class="row sm" style="color:#059669"><span>  Discount (${discPct}%)</span><span>-${money(disc)}</span></div>` : ''}
-      <div class="row sm muted"><span>@ ${money(it.unitPrice)}</span><span>${disc > 0 ? money(lineTotal - disc) : ''}</span></div>`;
+      <div class="row"${strikeStyle}><span>${it.quantity} x ${esc(it.product?.name ?? `#${it.productId}`)}${it.product?.nameAr ? ` / ${esc(it.product.nameAr)}` : ''}</span><span>${money(lineTotal)}</span></div>
+      ${isVoided ? `<div class="row sm" style="color:#dc2626"><span>  ↳ REFUNDED</span><span>-${money(lineTotal)}</span></div>` : ''}
+      ${modText && !isVoided ? `<div class="row sm muted"><span>+ ${esc(modText)}</span><span></span></div>` : ''}
+      ${disc > 0 && !isVoided ? `<div class="row sm" style="color:#059669"><span>  Discount (${discPct}%)</span><span>-${money(disc)}</span></div>` : ''}
+      <div class="row sm muted"${strikeStyle}><span>@ ${money(it.unitPrice)}</span><span>${disc > 0 && !isVoided ? money(lineTotal - disc) : ''}</span></div>`;
       },
     )
     .join('');
@@ -183,6 +187,8 @@ export function printReceipt(order: OrderLike, info: BusinessInfo = {}) {
       <div class="c sm">${esc(when)}</div>
       <div class="hr"></div>
       <div class="row"><span>Order</span><span>${esc(order.orderNo)}</span></div>
+      ${(order as any).status === 'REFUNDED' ? `<div class="c b" style="color:#dc2626;font-size:16px;border:2px solid #dc2626;padding:4px;margin:6px 0;">⚠️ REFUNDED</div>` : ''}
+      ${(order as any).status === 'VOIDED' ? `<div class="c b" style="color:#dc2626;font-size:14px;border:1px solid #dc2626;padding:3px;margin:4px 0;">VOIDED / CANCELLED</div>` : ''}
       ${order.channel ? `<div class="row"><span>Type</span><span>${esc(order.channel.replace('_', ' '))}</span></div>` : ''}
       ${order.channel === 'DINE_IN' && order.tableName ? `<div class="row"><span>Table</span><span>${esc(order.tableName)}</span></div>` : ''}
       ${order.channel === 'TAKEAWAY' && order.tableName ? `<div class="row"><span>Customer</span><span>${esc(order.tableName)}</span></div>` : ''}
@@ -199,6 +205,7 @@ export function printReceipt(order: OrderLike, info: BusinessInfo = {}) {
       ${(order as any).serviceCharge > 0 ? `<div class="row"><span>Service Charge</span><span>${money((order as any).serviceCharge)}</span></div>` : ''}
       ${(order as any).tip > 0 ? `<div class="row"><span>Tip</span><span>${money((order as any).tip)}</span></div>` : ''}
       <div class="row b lg"><span>TOTAL</span><span>${money(total)}</span></div>
+      ${(order as any).status === 'REFUNDED' ? `<div class="row b" style="color:#dc2626"><span>REFUND AMOUNT</span><span>-${money(total)}</span></div>` : ''}
       <div class="hr"></div>
       ${payRows}
       ${change > 0 ? `<div class="row"><span>Change</span><span>${money(change)}</span></div>` : ''}

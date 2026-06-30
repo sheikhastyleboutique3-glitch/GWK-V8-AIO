@@ -106,15 +106,60 @@ export default function SalesHistoryPage() {
 
   const refund = useMutation({
     mutationFn: (id: number) => api.post(`/sales/orders/${id}/refund`, {}).then((r) => r.data.data),
-    onSuccess: (o) => { toast.success(`Order ${o.orderNo} refunded`); qc.invalidateQueries({ queryKey: ['sales-history'] }); },
+    onSuccess: (o) => {
+      toast.success(`Order ${o.orderNo} refunded`);
+      qc.invalidateQueries({ queryKey: ['sales-history'] });
+      // Auto-print refund receipt showing REFUNDED status
+      printReceipt(o, businessInfo);
+      // Auto-generate credit note PDF
+      import('../lib/pdf').then(({ downloadCreditNotePdf }) => {
+        downloadCreditNotePdf({
+          order: o,
+          refundedItems: (o.items || []).map((it: any) => ({
+            product: it.product,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice,
+            discount: it.discount || 0,
+          })),
+          refundTotal: Math.abs(o.total || 0),
+          refundCost: Math.abs(o.foodCost || 0),
+          reason: 'Full refund',
+          businessName: businessInfo.businessName,
+          branchName: businessInfo.branchName,
+          currency: businessInfo.currency,
+        });
+      }).catch(() => {});
+    },
     onError: (e: any) => toast.error(e.response?.data?.message || 'Refund failed'),
   });
 
   const partialRefundMut = useMutation({
     mutationFn: (params: { orderId: number; itemIds: number[]; reason?: string }) =>
       api.post(`/sales/orders/${params.orderId}/partial-refund`, { itemIds: params.itemIds, reason: params.reason }),
-    onSuccess: () => {
+    onSuccess: (res: any) => {
       toast.success('Partial refund processed');
+      const data = res.data?.data || res.data || res;
+      // Auto-generate credit note for partial refund
+      if (data.order) {
+        printReceipt(data.order, businessInfo);
+        import('../lib/pdf').then(({ downloadCreditNotePdf }) => {
+          downloadCreditNotePdf({
+            order: data.order,
+            refundedItems: (data.order.items || []).filter((it: any) => it.isVoided).map((it: any) => ({
+              product: it.product,
+              quantity: it.quantity,
+              unitPrice: it.unitPrice,
+              discount: it.discount || 0,
+            })),
+            refundTotal: data.refundTotal || 0,
+            refundCost: data.refundCost || 0,
+            reason: 'Partial refund',
+            businessName: businessInfo.businessName,
+            branchName: businessInfo.branchName,
+            currency: businessInfo.currency,
+          });
+        }).catch(() => {});
+      }
       setPartialRefundOrder(null);
       setPartialRefundItems(new Set());
       qc.invalidateQueries({ queryKey: ['sales-history'] });

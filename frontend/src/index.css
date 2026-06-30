@@ -342,6 +342,25 @@ button:active:not(:disabled),
   scroll-behavior: smooth;
 }
 
+/* Fix table overflow: ensure all table containers scroll horizontally on small screens */
+[class*="overflow-hidden"]:has(> table),
+[class*="overflow-hidden"]:has(> .overflow-x-auto) {
+  overflow: visible;
+}
+/* All tables in rounded containers need horizontal scroll on mobile */
+.rounded-xl > table,
+.rounded-2xl > table {
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+/* Ensure table wrappers with overflow-hidden still allow horizontal scroll */
+div[class*="rounded"][class*="border"][class*="overflow-hidden"] {
+  overflow-x: auto !important;
+  overflow-y: visible;
+}
+
+
 /* Prevent pull-to-refresh on POS (mobile Chrome) */
 body {
   overscroll-behavior-y: contain;
