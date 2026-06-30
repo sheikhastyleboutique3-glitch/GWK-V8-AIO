@@ -87,6 +87,153 @@ export default function SettingsPage() {
           ))}
         </div></div>))}
         <button onClick={handleSave} disabled={saveMutation.isPending} className="w-full bg-brand-600 hover:bg-brand-700 disabled:bg-brand-300 text-white font-semibold py-3 rounded-xl">{saveMutation.isPending ? 'Saving...' : t('common.save') + ' Settings'}</button>
+
+        {/* Per-Branch Digital Menu Overrides */}
+        <BranchMenuSettings />
+      </div>
+    </div>
+  );
+}
+
+
+
+/**
+ * Per-Branch Digital Menu Settings — allows each branch to have its own
+ * banner, brand color, review link, and footer text that override the global defaults.
+ */
+function BranchMenuSettings() {
+  const { t } = useTranslation();
+  const [selectedBranch, setSelectedBranch] = useState<string>('');
+  const [branchSettings, setBranchSettings] = useState<Record<string, string>>({});
+  const { data: branches } = useQuery({ queryKey: ['branches-settings'], queryFn: () => api.get('/branches').then(r => r.data.data) });
+  const { data: allSettings } = useQuery({ queryKey: ['settings'], queryFn: () => api.get('/settings').then(r => r.data.data) });
+
+  const BRANCH_KEYS = ['menu_banner_url', 'theme_brand_color', 'review_url', 'menu_footer_text', 'menu_closed_message'];
+
+  // Load branch-specific settings when a branch is selected
+  useEffect(() => {
+    if (!selectedBranch || !allSettings) return;
+    const prefix = `branch_${selectedBranch}_`;
+    const overrides: Record<string, string> = {};
+    (allSettings as any[]).forEach((s: any) => {
+      if (s.key.startsWith(prefix)) {
+        const baseKey = s.key.replace(prefix, '');
+        overrides[baseKey] = s.value;
+      }
+    });
+    setBranchSettings(overrides);
+  }, [selectedBranch, allSettings]);
+
+  const saveBranchSettings = async () => {
+    if (!selectedBranch) return;
+    const prefix = `branch_${selectedBranch}_`;
+    const settings = Object.entries(branchSettings)
+      .filter(([, value]) => value.trim())
+      .map(([key, value]) => ({ key: `${prefix}${key}`, value, group: 'branch_menu' }));
+    try {
+      await api.post('/settings/bulk', { settings });
+      toast.success(`Branch menu settings saved!`);
+    } catch {
+      toast.error('Failed to save branch settings');
+    }
+  };
+
+  const clearBranchSettings = async () => {
+    if (!selectedBranch) return;
+    const prefix = `branch_${selectedBranch}_`;
+    // Save empty values to effectively clear overrides
+    const settings = BRANCH_KEYS.map(key => ({ key: `${prefix}${key}`, value: '', group: 'branch_menu' }));
+    try {
+      await api.post('/settings/bulk', { settings });
+      setBranchSettings({});
+      toast.success('Branch overrides cleared — will use global settings');
+    } catch {
+      toast.error('Failed to clear');
+    }
+  };
+
+  return (
+    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-blue-200 dark:border-blue-800 overflow-hidden">
+      <div className="px-5 py-4 border-b border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20">
+        <h3 className="font-semibold text-blue-900 dark:text-blue-100">🏪 Per-Branch Menu Customization</h3>
+        <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">Override the global digital menu settings for a specific branch. Leave empty to use global defaults.</p>
+      </div>
+      <div className="p-5 space-y-4">
+        {/* Branch selector */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Select Branch</label>
+          <select value={selectedBranch} onChange={e => setSelectedBranch(e.target.value)}
+            className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm">
+            <option value="">Choose a branch...</option>
+            {(branches || []).map((b: any) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {selectedBranch && (
+          <>
+            {/* Banner URL */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Banner Image (this branch)</label>
+              {branchSettings.menu_banner_url && <img src={branchSettings.menu_banner_url} alt="Banner" className="w-full h-20 object-cover rounded-xl mb-2" />}
+              <div className="flex gap-2">
+                <input value={branchSettings.menu_banner_url || ''} onChange={e => setBranchSettings(p => ({ ...p, menu_banner_url: e.target.value }))}
+                  placeholder="URL or upload" className="flex-1 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm" />
+                <label className="px-3 py-2 bg-primary text-white text-sm rounded-xl cursor-pointer font-medium">
+                  Upload
+                  <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                    const file = e.target.files?.[0]; if (!file) return;
+                    const fd = new FormData(); fd.append('file', file);
+                    try { const res = await api.post('/uploads', fd, { headers: { 'Content-Type': 'multipart/form-data' } }); setBranchSettings(p => ({ ...p, menu_banner_url: res.data.data.url })); toast.success('Uploaded'); } catch { toast.error('Failed'); }
+                  }} />
+                </label>
+              </div>
+            </div>
+
+            {/* Brand Color */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Brand Color (this branch)</label>
+              <div className="flex items-center gap-3">
+                <input type="color" value={branchSettings.theme_brand_color || '#0369a1'} onChange={e => setBranchSettings(p => ({ ...p, theme_brand_color: e.target.value }))}
+                  className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer" />
+                <input value={branchSettings.theme_brand_color || ''} onChange={e => setBranchSettings(p => ({ ...p, theme_brand_color: e.target.value }))}
+                  placeholder="#0369a1" className="flex-1 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm" />
+              </div>
+            </div>
+
+            {/* Review URL */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Review URL (this branch)</label>
+              <input value={branchSettings.review_url || ''} onChange={e => setBranchSettings(p => ({ ...p, review_url: e.target.value }))}
+                placeholder="https://g.page/branch-name/review" className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm" />
+            </div>
+
+            {/* Footer Text */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Footer Text (this branch)</label>
+              <input value={branchSettings.menu_footer_text || ''} onChange={e => setBranchSettings(p => ({ ...p, menu_footer_text: e.target.value }))}
+                placeholder="Follow us @branch_instagram" className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm" />
+            </div>
+
+            {/* Closed Message */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Closed Message (this branch)</label>
+              <input value={branchSettings.menu_closed_message || ''} onChange={e => setBranchSettings(p => ({ ...p, menu_closed_message: e.target.value }))}
+                placeholder="This branch is currently closed" className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm" />
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-2">
+              <button onClick={saveBranchSettings} className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700">
+                Save Branch Overrides
+              </button>
+              <button onClick={clearBranchSettings} className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800">
+                Clear (use global)
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

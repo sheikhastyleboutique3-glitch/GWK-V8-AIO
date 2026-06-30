@@ -41,7 +41,7 @@ export class SettingsController {
   /** Public endpoint for digital menu — returns only public-safe branding/menu settings (no secrets). */
   @Public()
   @Get('public')
-  async publicSettings() {
+  async publicSettings(@Query('branchId') branchId?: string) {
     const all = await this.svc.findAll();
     const PUBLIC_KEYS = [
       'company_name', 'company_name_ar', 'company_logo', 'company_address', 'company_phone',
@@ -50,7 +50,26 @@ export class SettingsController {
       'menu_closed_message', 'menu_footer_text', 'menu_3d_effects',
       'review_url', 'theme_brand_color',
     ];
-    return all.filter((s: any) => PUBLIC_KEYS.includes(s.key));
+    const globalSettings = all.filter((s: any) => PUBLIC_KEYS.includes(s.key));
+
+    // Per-branch overrides: keys stored as "branch_{id}_{key}" override global values
+    if (branchId) {
+      const branchPrefix = `branch_${branchId}_`;
+      const branchOverrides = all.filter((s: any) => s.key.startsWith(branchPrefix));
+      // Merge: branch-specific values override global ones
+      const merged = [...globalSettings];
+      for (const override of branchOverrides) {
+        const baseKey = override.key.replace(branchPrefix, '');
+        if (PUBLIC_KEYS.includes(baseKey)) {
+          const idx = merged.findIndex((s: any) => s.key === baseKey);
+          if (idx >= 0) merged[idx] = { ...merged[idx], key: baseKey, value: override.value };
+          else merged.push({ ...override, key: baseKey });
+        }
+      }
+      return merged;
+    }
+
+    return globalSettings;
   }
   
   @Post() 
