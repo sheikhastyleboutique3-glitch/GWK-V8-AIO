@@ -86,7 +86,7 @@
     --border:        #1e293b;
     --border-strong: #334155;
 
-    --primary:       #0b1220;
+    --primary:       #1e293b; /* slate-800 — sidebar stays distinct from bg in dark */
     --primary-fg:    #f1f5f9;
     --secondary:     #cbd5e1;
 

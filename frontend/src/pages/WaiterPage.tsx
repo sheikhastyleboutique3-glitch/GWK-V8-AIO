@@ -35,7 +35,8 @@ export default function WaiterPage() {
   const { t } = useTranslation();
   const { activeBranch, user } = useAuth();
   const qc = useQueryClient();
-  const branchId = activeBranch?.id;
+  // Use activeBranch if set, otherwise fall back to user's assigned branch
+  const branchId = activeBranch?.id || user?.branchId || (user?.assignedBranches?.[0] as any)?.id;
 
   const [selectedTable, setSelectedTable] = useState<TableRow | null>(null);
   const [activeOrderId, setActiveOrderId] = useState<number | null>(null);
