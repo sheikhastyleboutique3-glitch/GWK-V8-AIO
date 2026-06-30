@@ -43,6 +43,7 @@ import { ReplenishmentModule } from './modules/replenishment/replenishment.modul
 // Restaurant ERP — Increment 8
 import { StaffTasksModule } from './modules/staff-tasks/staff-tasks.module';
 import { PosSessionsModule } from './modules/pos-sessions/pos-sessions.module';
+import { PosConfigsModule } from './modules/pos-configs/pos-configs.module';
 import { ModifiersModule } from './modules/modifiers/modifiers.module';
 import { DeliveriesModule } from './modules/deliveries/deliveries.module';
 import { SalesQuotesModule } from './modules/sales-quotes/sales-quotes.module';
@@ -122,6 +123,7 @@ import { ShiftsModule } from './modules/shifts/shifts.module';
     // Restaurant ERP — Increment 8
     StaffTasksModule,
     PosSessionsModule,
+    PosConfigsModule,
     ModifiersModule,
     DeliveriesModule,
     SalesQuotesModule,

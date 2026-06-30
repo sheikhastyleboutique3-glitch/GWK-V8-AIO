@@ -51,7 +51,7 @@ export default function KDSPage() {
       api
         .get('/kds/board', { params: activeBranch?.id ? { branchId: activeBranch.id } : {} })
         .then((r) => r.data.data),
-    refetchInterval: 20_000,
+    refetchInterval: 60_000, // Slow fallback — WebSocket is primary via connectKds()
   });
 
   // Floor data for table→floor lookup
