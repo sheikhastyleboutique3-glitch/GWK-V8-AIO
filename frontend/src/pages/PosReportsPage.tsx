@@ -66,7 +66,7 @@ export default function PosReportsPage() {
 
       {/* Tab bar + period selector */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
-        <div className="flex gap-1 flex-1">
+        <div className="flex gap-1 flex-1 overflow-x-auto pb-1 scrollbar-hide">
           {tabs.map((tb) => (
             <button
               key={tb.key}

@@ -56,16 +56,14 @@ export default function ReportsPage() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
-  const bp = activeBranch?.id ? `?branchId=${activeBranch.id}` : '';
-
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => api.get('/settings').then(r => r.data.data) });
   const cur = (settings?.find((s: any) => s.key === 'default_currency')?.value) || 'QAR';
 
-  const { data: wastageData,     isLoading: wL } = useQuery({ queryKey: ['report-wastage',     activeBranch?.id, fromDate, toDate], queryFn: () => api.get(`/reports/wastage-summary${bp}${bp ? '&' : '?'}from=${fromDate}&to=${toDate}`).then(r => r.data.data), enabled: tab === 'wastage' });
-  const { data: costData,        isLoading: cL } = useQuery({ queryKey: ['report-cost',         activeBranch?.id], queryFn: () => api.get(`/reports/cost-variance${bp}`).then(r => r.data.data),       enabled: tab === 'cost' });
-  const { data: consumptionData, isLoading: hL } = useQuery({ queryKey: ['report-consumption',  activeBranch?.id], queryFn: () => api.get(`/reports/high-consumption${bp}`).then(r => r.data.data),  enabled: tab === 'consumption' });
-  const { data: inventoryData,   isLoading: iL } = useQuery({ queryKey: ['report-inv-value',    activeBranch?.id], queryFn: () => api.get(`/inventory${bp}`).then(r => r.data.data),                  enabled: tab === 'inventory-value' });
-  const { data: priceHistory,    isLoading: pH } = useQuery({ queryKey: ['report-price-history', activeBranch?.id], queryFn: () => api.get(`/inventory/transactions${bp}`).then(r => r.data.data), enabled: tab === 'price-history' });
+  const { data: wastageData,     isLoading: wL } = useQuery({ queryKey: ['report-wastage',     activeBranch?.id, fromDate, toDate], queryFn: () => { const p: any = {}; if (activeBranch?.id) p.branchId = activeBranch.id; if (fromDate) p.from = fromDate; if (toDate) p.to = toDate; return api.get('/reports/wastage-summary', { params: p }).then(r => r.data.data); }, enabled: tab === 'wastage' });
+  const { data: costData,        isLoading: cL } = useQuery({ queryKey: ['report-cost',         activeBranch?.id], queryFn: () => api.get('/reports/cost-variance', { params: activeBranch?.id ? { branchId: activeBranch.id } : {} }).then(r => r.data.data), enabled: tab === 'cost' });
+  const { data: consumptionData, isLoading: hL } = useQuery({ queryKey: ['report-consumption',  activeBranch?.id], queryFn: () => api.get('/reports/high-consumption', { params: activeBranch?.id ? { branchId: activeBranch.id } : {} }).then(r => r.data.data), enabled: tab === 'consumption' });
+  const { data: inventoryData,   isLoading: iL } = useQuery({ queryKey: ['report-inv-value',    activeBranch?.id], queryFn: () => api.get('/inventory', { params: activeBranch?.id ? { branchId: activeBranch.id } : {} }).then(r => r.data.data), enabled: tab === 'inventory-value' });
+  const { data: priceHistory,    isLoading: pH } = useQuery({ queryKey: ['report-price-history', activeBranch?.id], queryFn: () => api.get('/inventory/transactions', { params: activeBranch?.id ? { branchId: activeBranch.id } : {} }).then(r => r.data.data), enabled: tab === 'price-history' });
 
   const wastagePie = wastageData?.byReason?.map((r: any) => ({ name: r.reason, value: r._sum?.quantity || 0 })) || [];
   const costBars   = costData?.map((c: any) => ({ name: c.name?.substring(0, 14), base: c.baseCost, actual: c.avgActualCost })) || [];
@@ -246,7 +244,7 @@ export default function ReportsPage() {
                 <Tooltip />
               </PieChart>
             </ResponsiveContainer>
-          ) : <p className="text-center text-fg-subtle py-12">{t('common.noData')}</p>}
+          ) : <div className="text-center py-10"><div className="text-3xl mb-2">📊</div><p className="text-fg-muted font-medium">No data for this period</p><p className="text-xs text-fg-subtle mt-1">Complete orders, log wastage, or receive purchase orders to populate this report.</p></div>}
         </Card>
       ))}
 
@@ -265,7 +263,7 @@ export default function ReportsPage() {
                 <Bar dataKey="actual" fill="#f97316" name="Actual Cost" radius={[4,4,0,0]} />
               </BarChart>
             </ResponsiveContainer>
-          ) : <p className="text-center text-fg-subtle py-12">{t('common.noData')}</p>}
+          ) : <div className="text-center py-10"><div className="text-3xl mb-2">📊</div><p className="text-fg-muted font-medium">No data for this period</p><p className="text-xs text-fg-subtle mt-1">Complete orders, log wastage, or receive purchase orders to populate this report.</p></div>}
         </Card>
       ))}
 
@@ -282,7 +280,7 @@ export default function ReportsPage() {
                 <Bar dataKey="qty" fill="#22c55e" name="Quantity" radius={[4,4,0,0]} />
               </BarChart>
             </ResponsiveContainer>
-          ) : <p className="text-center text-fg-subtle py-12">{t('common.noData')}</p>}
+          ) : <div className="text-center py-10"><div className="text-3xl mb-2">📊</div><p className="text-fg-muted font-medium">No data for this period</p><p className="text-xs text-fg-subtle mt-1">Complete orders, log wastage, or receive purchase orders to populate this report.</p></div>}
         </Card>
       ))}
 
@@ -300,7 +298,7 @@ export default function ReportsPage() {
                   <Bar dataKey="value" fill="#8b5cf6" name={`Stock Value (${cur})`} radius={[4,4,0,0]} />
                 </BarChart>
               </ResponsiveContainer>
-            ) : <p className="text-center text-fg-subtle py-12">{t('common.noData')}</p>}
+            ) : <div className="text-center py-10"><div className="text-3xl mb-2">📊</div><p className="text-fg-muted font-medium">No data for this period</p><p className="text-xs text-fg-subtle mt-1">Complete orders, log wastage, or receive purchase orders to populate this report.</p></div>}
           </Card>
           {invValueBars.length > 0 && (
             <div className="bg-surface rounded-2xl border border-border shadow-elev-sm overflow-hidden">
@@ -346,7 +344,7 @@ export default function ReportsPage() {
                 <Line type="monotone" dataKey="count"    stroke="#f97316" name="# Transactions"    dot={false} strokeWidth={1.5} strokeDasharray="4 2" />
               </LineChart>
             </ResponsiveContainer>
-          ) : <p className="text-center text-fg-subtle py-12">{t('common.noData')}</p>}
+          ) : <div className="text-center py-10"><div className="text-3xl mb-2">📊</div><p className="text-fg-muted font-medium">No data for this period</p><p className="text-xs text-fg-subtle mt-1">Complete orders, log wastage, or receive purchase orders to populate this report.</p></div>}
         </Card>
       ))}
     </div>

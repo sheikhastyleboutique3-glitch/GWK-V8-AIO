@@ -284,6 +284,9 @@ export default function DigitalMenuPage() {
         )}
       </div>
 
+      {/* ═══ FLOATING CART BAR (self-order) ═══ */}
+      <DigitalMenuCart branchId={bid} brandColor={config.brandColor} currency={config.currency} enableOrdering={config.enableOrdering} />
+
       {/* ═══ FOOTER ═══ */}
       <footer className="border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 py-6 mt-8">
         <div className="max-w-2xl mx-auto text-center">
@@ -383,11 +386,23 @@ function ProductCard({ product, currency, showPrice, enableOrdering, enable3D, b
               </button>
               {enableOrdering && (
                 <button
-                  onClick={() => { setShowDetail(false); /* TODO: integrate with self-order */ }}
-                  className="flex-1 py-3 rounded-xl text-white text-sm font-bold shadow-lg"
+                  onClick={() => {
+                    // Add to local cart state for self-ordering
+                    setShowDetail(false);
+                    // Use the self-order endpoint to place order
+                    const existing = JSON.parse(sessionStorage.getItem('digital_menu_cart') || '[]');
+                    const found = existing.find((c: any) => c.productId === product.id);
+                    if (found) { found.quantity += 1; } else {
+                      existing.push({ productId: product.id, name: product.name, quantity: 1, unitPrice: product.salePrice || product.costPrice || 0 });
+                    }
+                    sessionStorage.setItem('digital_menu_cart', JSON.stringify(existing));
+                    // Dispatch custom event so the floating cart badge updates
+                    window.dispatchEvent(new Event('cart_updated'));
+                  }}
+                  className="flex-1 py-3 rounded-xl text-white text-sm font-bold shadow-lg active:scale-95 transition-transform"
                   style={{ backgroundColor: brandColor }}
                 >
-                  Add to Order
+                  + Add to Order
                 </button>
               )}
             </div>
@@ -488,5 +503,114 @@ function ZoomableImage({ src, alt }: { src: string; alt: string }) {
         🔍
       </div>
     </div>
+  );
+}
+
+
+// ─── Digital Menu Floating Cart ───────────────────────────────────────────────
+function DigitalMenuCart({ branchId, brandColor, currency, enableOrdering }: { branchId: number; brandColor: string; currency: string; enableOrdering: boolean }) {
+  const [cart, setCart] = useState<{ productId: number; name: string; quantity: number; unitPrice: number }[]>([]);
+  const [showCart, setShowCart] = useState(false);
+  const [placing, setPlacing] = useState(false);
+  const [tableName, setTableName] = useState('');
+
+  // Listen for cart updates from product cards
+  useEffect(() => {
+    const sync = () => {
+      const raw = sessionStorage.getItem('digital_menu_cart');
+      setCart(raw ? JSON.parse(raw) : []);
+    };
+    sync();
+    window.addEventListener('cart_updated', sync);
+    return () => window.removeEventListener('cart_updated', sync);
+  }, []);
+
+  if (!enableOrdering || cart.length === 0) return null;
+
+  const total = cart.reduce((s, c) => s + c.unitPrice * c.quantity, 0);
+  const itemCount = cart.reduce((s, c) => s + c.quantity, 0);
+
+  const removeItem = (productId: number) => {
+    const next = cart.filter(c => c.productId !== productId);
+    setCart(next);
+    sessionStorage.setItem('digital_menu_cart', JSON.stringify(next));
+  };
+
+  const placeOrder = async () => {
+    setPlacing(true);
+    try {
+      await fetch(`/api/self-order/branch/${branchId}/order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tableName: tableName || undefined,
+          items: cart.map(c => ({ productId: c.productId, quantity: c.quantity, unitPrice: c.unitPrice })),
+        }),
+      });
+      sessionStorage.removeItem('digital_menu_cart');
+      setCart([]);
+      setShowCart(false);
+      alert('Order placed! Your food will be prepared shortly.');
+    } catch {
+      alert('Failed to place order. Please try again.');
+    } finally {
+      setPlacing(false);
+    }
+  };
+
+  return (
+    <>
+      {/* Floating cart button */}
+      <button
+        onClick={() => setShowCart(true)}
+        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-5 py-3 rounded-full text-white font-bold shadow-2xl active:scale-95 transition-transform"
+        style={{ backgroundColor: brandColor }}
+      >
+        🛒 {itemCount} · {currency} {total.toFixed(2)}
+      </button>
+
+      {/* Cart drawer */}
+      {showCart && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/50" onClick={() => setShowCart(false)}>
+          <div className="bg-white dark:bg-gray-900 w-full max-w-lg rounded-t-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center">
+              <h3 className="font-bold text-lg">Your Order</h3>
+              <button onClick={() => setShowCart(false)} className="text-gray-400 text-xl">✕</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {cart.map(item => (
+                <div key={item.productId} className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-800">
+                  <div>
+                    <div className="font-medium text-sm">{item.name}</div>
+                    <div className="text-xs text-gray-500">×{item.quantity} · {currency} {(item.unitPrice * item.quantity).toFixed(2)}</div>
+                  </div>
+                  <button onClick={() => removeItem(item.productId)} className="text-red-500 text-sm">Remove</button>
+                </div>
+              ))}
+            </div>
+            <div className="p-4 border-t border-gray-200 dark:border-gray-800 space-y-3">
+              <input
+                value={tableName}
+                onChange={e => setTableName(e.target.value)}
+                placeholder="Table number (optional)"
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-2.5 text-sm"
+              />
+              <div className="flex justify-between font-bold text-lg">
+                <span>Total</span>
+                <span>{currency} {total.toFixed(2)}</span>
+              </div>
+              <button
+                onClick={placeOrder}
+                disabled={placing}
+                className="w-full py-3.5 rounded-xl text-white font-bold text-base disabled:opacity-50 active:scale-[0.97] transition-transform"
+                style={{ backgroundColor: brandColor }}
+              >
+                {placing ? 'Placing...' : 'Place Order'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
