@@ -78,8 +78,15 @@ export default function DigitalMenuPage() {
   // ─── Fetch Settings (branding, menu config) — PUBLIC endpoint with branch overrides ─────
   const { data: settings } = useQuery({
     queryKey: ['menu-settings', bid],
-    queryFn: () => fetch(`/api/settings/public?branchId=${bid}`).then(r => r.json()).then(d => d.data),
+    queryFn: async () => {
+      const r = await fetch(`/api/settings/public?branchId=${bid}`);
+      if (!r.ok) return [];
+      const json = await r.json();
+      return json?.data || json || [];
+    },
     staleTime: 5 * 60_000,
+    retry: 2,
+    retryDelay: 1000,
   });
 
   const config = useMemo(() => {
@@ -105,12 +112,16 @@ export default function DigitalMenuPage() {
   // ─── Fetch Categories + Products from PUBLIC self-order endpoint ──────
   const { data: menuData, isLoading } = useQuery({
     queryKey: ['digital-menu-data', bid],
-    queryFn: () => fetch(`/api/self-order/branch/${bid}/menu`).then(r => {
+    queryFn: async () => {
+      const r = await fetch(`/api/self-order/branch/${bid}/menu`);
       if (!r.ok) throw new Error('Branch not found');
-      return r.json();
-    }).then(d => d.data),
-    staleTime: 60_000,
-    refetchInterval: 30_000,
+      const json = await r.json();
+      return json?.data || json || {};
+    },
+    staleTime: 2 * 60_000,
+    refetchInterval: 60_000,
+    retry: 2,
+    retryDelay: 1000,
   });
 
   const categories = menuData?.categories || [];
