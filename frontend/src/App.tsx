@@ -76,6 +76,7 @@ const TablesPage = lazyRetry(() => import('./pages/TablesPage'));
 
 // Finance & Insights
 const ReportsPage = lazyRetry(() => import('./pages/ReportsPage'));
+const ReportsHubPage = lazyRetry(() => import('./pages/ReportsHubPage'));
 const AdvancedAnalyticsPage = lazyRetry(() => import('./pages/AdvancedAnalyticsPage'));
 const ReceivablesPage = lazyRetry(() => import('./pages/ReceivablesPage'));
 const PayablesPage = lazyRetry(() => import('./pages/PayablesPage'));
@@ -472,6 +473,14 @@ export default function App() {
         />
 
         {/* Reports — report roles */}
+        <Route
+          path="reports-hub"
+          element={
+            <ProtectedRoute roles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'PROCUREMENT']}>
+              <ReportsHubPage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="reports"
           element={

@@ -45,7 +45,6 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'overview',
     items: [
       { key: 'dashboard',      path: '/',                icon: Squares2X2Icon, roles: [] },
-      { key: 'salesDashboard', path: '/sales-dashboard', icon: ChartBarIcon,   roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
     ],
   },
   {
@@ -105,9 +104,8 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'insights',
     items: [
-      { key: 'salesDashboard', path: '/sales-dashboard', icon: ChartBarIcon,   roles: ['SUPER_ADMIN', 'BRANCH_MANAGER'] },
+      { key: 'reportsHub',    path: '/reports-hub',   icon: ChartBarIcon,       roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'PROCUREMENT'] },
       { key: 'salesHistory',  path: '/sales-history', icon: DocumentTextIcon,   roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER'] },
-      { key: 'reports',       path: '/reports',       icon: ChartBarIcon,       roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'PROCUREMENT'] },
       { key: 'sessions',      path: '/sessions',      icon: CurrencyDollarIcon, roles: ['SUPER_ADMIN', 'BRANCH_MANAGER', 'CASHIER'] },
       { key: 'alerts',        path: '/alerts',        icon: BellAlertIcon,      roles: [] },
       { key: 'audit',         path: '/audit',         icon: DocumentMagnifyingGlassIcon, roles: ['SUPER_ADMIN'] },

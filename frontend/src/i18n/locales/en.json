@@ -38,6 +38,8 @@
     "menu": "Menu / 86",
     "kds": "Kitchen Display",
     "salesDashboard": "Sales Dashboard",
+    "posDashboard": "POS Dashboard",
+    "reportsHub": "Reports & Analytics",
     "production": "Production",
     "tables": "Tables",
     "promotions": "Promotions",
