@@ -46,8 +46,15 @@ sales/
 1. **Single file preserved** — The service is logically well-organized with clear
    region markers. Splitting now would create circular dependencies (completion
    needs queries, modifications need recompute, creation needs commission).
+   The full multi-file split (below) is deferred to a build-verifiable session.
 
-2. **Transaction boundaries** — `complete()` and `refund()` use serializable
+2. **Recipe explosion is DRY (v1.2)** — `explodeForStock(tx, productId, qty)` is
+   the single source of truth for the BOM loss formula (yield + prep/cooking/
+   waste). `complete()`, `refund()`, and `partialRefund()` all call it. Previously
+   the identical math was copy-pasted three times; independent copies could drift
+   and silently desync inventory. Behaviour is unchanged — only de-duplicated.
+
+3. **Transaction boundaries** — `complete()` and `refund()` use serializable
    isolation with retry logic. All other methods use auto-commit.
 
 3. **Event emission** — Side effects (KDS, analytics, realtime) are fire-and-forget

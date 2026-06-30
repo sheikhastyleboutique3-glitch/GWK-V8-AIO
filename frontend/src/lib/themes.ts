@@ -322,12 +322,15 @@ export function applyThemeToDOM(state: ThemeState) {
   root.setAttribute('data-theme', effectiveTheme);
   root.setAttribute('data-density', effectiveDensity);
 
-  // Toggle Tailwind dark class
-  if (effectiveTheme === 'deep-slate' || effectiveTheme === 'amoled-pos') {
-    root.classList.add('dark');
-  } else {
-    root.classList.remove('dark');
-  }
+  // NOTE: The `.dark` class is the SINGLE switch that flips the entire palette
+  // (--bg / --surface / --fg / --primary / --accent ... in index.css). It is
+  // owned EXCLUSIVELY by theme.ts, driven by the user's dark toggle (persisted
+  // as `theme_dark`). This density/preset engine must NOT toggle `.dark` too —
+  // doing so caused the two engines to fight: the header dark toggle (theme.ts)
+  // was reverted on the next boot by this function's default 'corporate-light'
+  // preset. Density + data-attributes above are this engine's only DOM effects.
+  // (The `--color-*` palette this engine used to set is unused — Tailwind binds
+  //  to `--bg`/`--primary`/etc., not `--color-background`/`--color-primary`.)
 }
 
 function camelToKebab(str: string): string {

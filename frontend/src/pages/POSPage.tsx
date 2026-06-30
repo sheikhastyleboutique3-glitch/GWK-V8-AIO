@@ -321,6 +321,11 @@ export default function POSPage() {
     setShipLater(false);
   }, []);
 
+  // Stable callback so CartPanel's React.memo is actually effective. Passing an
+  // inline `() => setPosView('floor')` created a new function every render,
+  // forcing CartPanel (and its numpad/cart subtree) to re-render needlessly.
+  const switchToFloor = useCallback(() => setPosView('floor'), []);
+
   // ─── Floor plan table open ───
   const openTableOrder = useCallback(async (table: any) => {
     try {
@@ -516,7 +521,7 @@ export default function POSPage() {
               posSession={posSession} businessInfo={businessInfo}
               lastReceipt={lastReceipt} setLastReceipt={setLastReceipt}
               showPayment={showPayment} setShowPayment={setShowPayment}
-              onSwitchToFloor={() => setPosView('floor')} onCloseBill={closeBill}
+              onSwitchToFloor={switchToFloor} onCloseBill={closeBill}
               refetchLoaded={refetchLoaded} canRefund={canRefund}
               shipLater={shipLater} setShipLater={setShipLater}
             />

@@ -613,6 +613,43 @@ export class SalesService {
     }
   }
 
+  /**
+   * Explode a product's active Recipe (BOM) into the component stock movements
+   * needed for `quantity` units, applying the yield + prep/cooking/waste loss
+   * factors. Returns `null` when the product has no active recipe — the caller
+   * then moves the product itself as a direct stock item.
+   *
+   * SINGLE SOURCE OF TRUTH for the loss formula. Previously this identical math
+   * was copy-pasted in complete()/refund()/partialRefund(); three independent
+   * copies could silently drift and desync inventory. Keep it here only.
+   */
+  private async explodeForStock(
+    tx: Prisma.TransactionClient,
+    productId: number,
+    quantity: number,
+  ): Promise<Array<{ componentProductId: number; qty: number; costPrice: number }> | null> {
+    const recipe = await tx.recipe.findFirst({
+      where: { productId, isActive: true },
+      orderBy: { version: 'desc' },
+      include: { components: { include: { componentProduct: { select: { costPrice: true } } } } },
+    });
+    if (!recipe || !recipe.components.length) return null;
+    const yieldQty = recipe.yieldQty || 1;
+    const recipeLoss = 1 + (recipe.prepLossPct + recipe.cookingLossPct + recipe.wastePct) / 100;
+    const lines: Array<{ componentProductId: number; qty: number; costPrice: number }> = [];
+    for (const comp of recipe.components) {
+      const perUnit = (comp.quantity * (1 + (comp.wastePct ?? 0) / 100)) / yieldQty;
+      const qty = perUnit * quantity * recipeLoss;
+      if (qty <= 0) continue;
+      lines.push({
+        componentProductId: comp.componentProductId,
+        qty,
+        costPrice: comp.componentProduct?.costPrice ?? 0,
+      });
+    }
+    return lines;
+  }
+
   /** Move an open ticket to a different table. */
   async transferTable(orderId: number, tableName: string) {
     const order = await this.assertOpen(orderId);
@@ -815,23 +852,14 @@ export class SalesService {
     const refunded = await this.prisma.$transaction(
       async (tx) => {
         for (const item of pre.items) {
-          const recipe = await tx.recipe.findFirst({
-            where: { productId: item.productId, isActive: true },
-            orderBy: { version: 'desc' },
-            include: { components: true },
-          });
+          const recipeLines = await this.explodeForStock(tx, item.productId, item.quantity);
 
-          if (recipe && recipe.components.length) {
-            const yieldQty = recipe.yieldQty || 1;
-            const recipeLoss = 1 + (recipe.prepLossPct + recipe.cookingLossPct + recipe.wastePct) / 100;
-            for (const comp of recipe.components) {
-              const perUnit = (comp.quantity * (1 + (comp.wastePct ?? 0) / 100)) / yieldQty;
-              const qty = perUnit * item.quantity * recipeLoss;
-              if (qty <= 0) continue;
+          if (recipeLines) {
+            for (const line of recipeLines) {
               await this.inventory.applyManualAdjustment(tx, {
-                productId: comp.componentProductId,
+                productId: line.componentProductId,
                 branchId: pre.branchId,
-                quantity: qty,
+                quantity: line.qty,
                 type: InventoryTxType.RETURN_IN,
                 notes: `Refund ${pre.orderNo} — recipe of product #${item.productId}`,
                 performedById: userId,
@@ -911,22 +939,14 @@ export class SalesService {
 
     await this.prisma.$transaction(async (tx) => {
       for (const item of itemsToRefund) {
-        // Restock via FEFO (same logic as full refund)
-        const recipe = await tx.recipe.findFirst({
-          where: { productId: item.productId, isActive: true },
-          orderBy: { version: 'desc' },
-          include: { components: true },
-        });
-        if (recipe && recipe.components.length) {
-          const yieldQty = recipe.yieldQty || 1;
-          const recipeLoss = 1 + (recipe.prepLossPct + recipe.cookingLossPct + recipe.wastePct) / 100;
-          for (const comp of recipe.components) {
-            const qty = (comp.quantity * (1 + (comp.wastePct ?? 0) / 100) / yieldQty) * item.quantity * recipeLoss;
-            if (qty <= 0) continue;
+        // Restock via FEFO (shared recipe explosion — same loss math as complete/refund)
+        const recipeLines = await this.explodeForStock(tx, item.productId, item.quantity);
+        if (recipeLines) {
+          for (const line of recipeLines) {
             await this.inventory.applyManualAdjustment(tx, {
-              productId: comp.componentProductId,
+              productId: line.componentProductId,
               branchId: pre.branchId,
-              quantity: qty,
+              quantity: line.qty,
               type: InventoryTxType.RETURN_IN,
               notes: `Partial refund ${pre.orderNo} — item #${item.id}`,
               performedById: userId,
@@ -1178,38 +1198,25 @@ export class SalesService {
         let orderFoodCost = 0;
 
         for (const item of pre.items) {
-          const recipe = await tx.recipe.findFirst({
-            where: { productId: item.productId, isActive: true },
-            orderBy: { version: 'desc' },
-            include: { components: { include: { componentProduct: { select: { costPrice: true } } } } },
-          });
-
           let lineCost = 0;
           // Check if this product allows negative stock (skip FEFO constraint)
           const itemProduct = await tx.product.findUnique({ where: { id: item.productId }, select: { allowNegativeStock: true } });
           const allowNeg = globalAllowNeg || itemProduct?.allowNegativeStock;
 
-          if (recipe && recipe.components.length) {
-            const yieldQty = recipe.yieldQty || 1;
-            const recipeLoss =
-              1 + (recipe.prepLossPct + recipe.cookingLossPct + recipe.wastePct) / 100;
+          const recipeLines = await this.explodeForStock(tx, item.productId, item.quantity);
 
-            for (const comp of recipe.components) {
-              const perUnit =
-                (comp.quantity * (1 + (comp.wastePct ?? 0) / 100)) / yieldQty;
-              const deductQty = perUnit * item.quantity * recipeLoss;
-              if (deductQty <= 0) continue;
-
+          if (recipeLines) {
+            for (const line of recipeLines) {
               await this.inventory.applyManualAdjustment(tx, {
-                productId: comp.componentProductId,
+                productId: line.componentProductId,
                 branchId: pre.branchId,
-                quantity: deductQty,
+                quantity: line.qty,
                 type: InventoryTxType.SALE,
                 notes: `Sale ${pre.orderNo} — recipe of product #${item.productId}`,
                 performedById: userId,
               }, { allowNegative: !!allowNeg });
 
-              lineCost += deductQty * (comp.componentProduct?.costPrice ?? 0);
+              lineCost += line.qty * line.costPrice;
             }
           } else {
             // No recipe: treat the sold product as a stocked item and deduct it directly.
