@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
 import { useNotificationSounds } from '../lib/useNotificationSounds';
+import { connectRealtime } from '../lib/realtimeSocket';
 import { unlockAudio } from '../lib/sound';
 import { toggleDarkMode, loadThemeLocal } from '../lib/theme';
 import ThemePanel from './ThemePanel';
@@ -139,6 +140,7 @@ export default function Layout() {
   const { user, logout, updateLanguage, activeBranch, isAllBranches, switchBranch, selectAllBranches } = useAuth();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
+  const qc = useQueryClient();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [branchDropdown, setBranchDropdown] = useState(false);
@@ -158,6 +160,20 @@ export default function Layout() {
 
   // Real-time audible + popup notifications, scoped to the active branch.
   useNotificationSounds(activeBranch?.id);
+
+  // Instant badge + sound refresh on realtime push (polling below is fallback).
+  useEffect(() => {
+    const disconnect = connectRealtime(() => {}, {
+      branchId: activeBranch?.id,
+      onNotification: () => {
+        qc.invalidateQueries({ queryKey: ['notif-unread-count'] });
+        qc.invalidateQueries({ queryKey: ['alerts-count'] });
+        qc.invalidateQueries({ queryKey: ['snd-inbox'] });
+        qc.invalidateQueries({ queryKey: ['snd-alerts'] });
+      },
+    });
+    return disconnect;
+  }, [activeBranch?.id, qc]);
 
   // Per-device sound mute (does not change the global admin config).
   const [soundMuted, setSoundMuted] = useState(() => localStorage.getItem('sound_muted') === 'true');
@@ -192,7 +208,7 @@ export default function Layout() {
   const { data: notifCount } = useQuery({
     queryKey: ['notif-unread-count'],
     queryFn: () => api.get('/notifications/unread-count').then(r => r.data.data),
-    refetchInterval: 15000,
+    refetchInterval: 60000, // fallback — realtime push refreshes this instantly
   });
   const unreadNotifs = notifCount?.count || 0;
 

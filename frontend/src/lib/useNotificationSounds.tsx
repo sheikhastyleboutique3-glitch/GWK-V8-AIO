@@ -27,7 +27,7 @@ import i18n from '../i18n';
 import { playNotificationSound, unlockAudio } from './sound';
 import { showSystemNotification, ensureNotificationPermission } from './webNotify';
 
-const POLL_MS = 15_000;
+const POLL_MS = 45_000; // fallback poll — realtime push triggers instant refetch
 
 interface ChannelCfg {
   enabled: boolean;

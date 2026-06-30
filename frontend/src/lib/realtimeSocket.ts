@@ -17,8 +17,8 @@ import { getToken } from './api';
  */
 export function connectRealtime(
   onProductChanged: (data: { productId: number; action: string; data?: any }) => void,
-  opts?: { branchId?: number; joinPublic?: boolean },
-): () => void {
+  opts?: { branchId?: number; joinPublic?: boolean; onNotification?: (data: { channel: string }) => void },
+) {
   let socket: Socket | null = null;
   try {
     const token = getToken();
@@ -58,6 +58,11 @@ export function connectRealtime(
     socket.on('product_changed', (payload) => {
       onProductChanged(payload);
     });
+
+    // Per-user inbox push (badges/sounds). User room is auto-joined server-side.
+    if (opts?.onNotification) {
+      socket.on('notification_created', (payload) => opts.onNotification!(payload));
+    }
   } catch {
     /* Silent fail — polling fallback remains active */
   }
@@ -65,6 +70,7 @@ export function connectRealtime(
   return () => {
     try {
       socket?.off('product_changed');
+      socket?.off('notification_created');
       socket?.disconnect();
     } catch {
       /* ignore */

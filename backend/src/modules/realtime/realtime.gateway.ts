@@ -5,6 +5,7 @@ import {
   ConnectedSocket,
   MessageBody,
   OnGatewayInit,
+  OnGatewayConnection,
 } from '@nestjs/websockets';
 import { OnEvent } from '@nestjs/event-emitter';
 import { Injectable } from '@nestjs/common';
@@ -16,6 +17,7 @@ import {
   TABLE_CHANGED, TableChangedEvent,
   ORDER_CHANGED, OrderChangedEvent,
   SESSION_CHANGED, SessionChangedEvent,
+  NOTIFICATION_CREATED, NotificationCreatedEvent,
 } from '../../common/events/realtime-events';
 import { createWsAuthMiddleware } from '../../common/guards/ws-auth.middleware';
 
@@ -29,7 +31,7 @@ import { createWsAuthMiddleware } from '../../common/guards/ws-auth.middleware';
  */
 @WebSocketGateway({ namespace: 'realtime', path: '/socket.io', cors: true })
 @Injectable()
-export class RealtimeGateway implements OnGatewayInit {
+export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection {
   @WebSocketServer() server: Server;
 
   constructor(
@@ -40,6 +42,14 @@ export class RealtimeGateway implements OnGatewayInit {
   afterInit(server: Server) {
     // Apply JWT auth middleware — allow public for menu displays
     server.use(createWsAuthMiddleware(this.jwtService, this.configService, true));
+  }
+
+  // Auto-join each authenticated socket to its own user room so we can push
+  // per-recipient notifications. JWT payload carries the user id as `sub`.
+  handleConnection(client: Socket) {
+    const user = (client as any).user;
+    const uid = user?.sub ?? user?.id;
+    if (uid != null) client.join(`user_${uid}`);
   }
 
   @SubscribeMessage('join_branch')
@@ -115,5 +125,16 @@ export class RealtimeGateway implements OnGatewayInit {
       action: evt.action,
       at: Date.now(),
     });
+  }
+
+  // ── Notifications (per-recipient inbox push) ──────────────────────────────
+
+  @OnEvent(NOTIFICATION_CREATED)
+  onNotificationCreated(evt: NotificationCreatedEvent) {
+    if (!this.server || !evt?.userIds?.length) return;
+    const payload = { channel: evt.channel, at: Date.now() };
+    for (const uid of evt.userIds) {
+      this.server.to(`user_${uid}`).emit('notification_created', payload);
+    }
   }
 }

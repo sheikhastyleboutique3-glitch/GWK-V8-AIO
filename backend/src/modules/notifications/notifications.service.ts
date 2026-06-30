@@ -1,7 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { NOTIFICATION_CREATED } from '../../common/events/realtime-events';
 
 export type NotificationEntityType = 'requisition' | 'purchase_order' | 'alert';
 
@@ -12,6 +14,7 @@ export class NotificationsService {
   constructor(
     private prisma: PrismaService,
     private config: ConfigService,
+    private events: EventEmitter2,
   ) {}
 
   // ============================================================
@@ -129,6 +132,9 @@ export class NotificationsService {
             actorId: input.actorId ?? undefined,
           })),
         });
+        // Realtime push to each recipient so badges/sounds update instantly.
+        // Fire-and-forget; clients still poll as a fallback.
+        this.events.emit(NOTIFICATION_CREATED, { userIds: finalIds, channel });
       }
     } catch (err) {
       this.logger.error(`emit notification failed: ${err}`);

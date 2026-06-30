@@ -31,3 +31,12 @@ export interface SessionChangedEvent {
   sessionId: number;
   action: 'opened' | 'closed' | 'cash_movement';
 }
+
+// ── Notifications (in-app inbox) ──────────────────────────────────────────────
+// Pushed per-recipient so badges + sounds update instantly. Polling remains as
+// a safety-net fallback in the clients.
+export const NOTIFICATION_CREATED = 'notification.created';
+export interface NotificationCreatedEvent {
+  userIds: number[];
+  channel: string;
+}
