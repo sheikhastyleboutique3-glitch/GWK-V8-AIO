@@ -77,9 +77,11 @@ export default function SettingsPage() {
                   <span className="text-xs text-gray-500">{localSettings[key] === 'true' ? 'Enabled' : 'Disabled'}</span>
                 </div>
               ) : (
+                <>
                 <input value={localSettings[key] || ''} onChange={e => setLocalSettings(p => ({ ...p, [key]: e.target.value }))} placeholder={key === 'review_url' ? 'https://g.page/your-restaurant/review' : key === 'menu_closed_message' ? 'We are currently closed. See you soon!' : key === 'menu_footer_text' ? 'Follow us @yourrestaurant' : ''} className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-                {key === 'review_url' && <p className="text-xs text-gray-400 mt-1">Google Maps review link or any review platform URL. Shows as "⭐ Leave a Review" button on your digital menu.</p>}
-                {key === 'theme_brand_color' && <p className="text-xs text-gray-400 mt-1">Your restaurant's brand color. Used for buttons, tabs, and accents on the digital menu.</p>}
+                {key === 'review_url' && <p className="text-xs text-gray-400 mt-1">Google Maps review link or any review platform URL. Shows as &quot;⭐ Leave a Review&quot; button on your digital menu.</p>}
+                {key === 'theme_brand_color' && <p className="text-xs text-gray-400 mt-1">Your restaurant&apos;s brand color. Used for buttons, tabs, and accents on the digital menu.</p>}
+                </>
               )}
             </div>
           ))}
