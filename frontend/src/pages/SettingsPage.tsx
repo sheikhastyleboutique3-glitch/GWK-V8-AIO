@@ -10,6 +10,7 @@ export default function SettingsPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [localSettings, setLocalSettings] = useState<Record<string, string>>({});
+  const [activeTab, setActiveTab] = useState<string>('company');
   const { data: settings, isLoading } = useQuery({ queryKey: ['settings'], queryFn: () => api.get('/settings').then(r => r.data.data) });
   useEffect(() => { if (settings) { const map: Record<string, string> = {}; settings.forEach((s: any) => { map[s.key] = s.value; }); setLocalSettings(map); } }, [settings]);
   const saveMutation = useMutation({ mutationFn: (data: any) => api.post('/settings/bulk', { settings: data }), onSuccess: () => { toast.success('Settings saved'); qc.invalidateQueries({ queryKey: ['settings'] }); }, onError: (e: any) => toast.error(e.response?.data?.message || 'Failed') });
@@ -37,11 +38,33 @@ export default function SettingsPage() {
     { group: 'staff_perf', label: '\ud83d\udcca Staff Performance', keys: ['staff_performance_enabled'] },
     { group: 'digital_menu', label: '\ud83d\udcf1 Digital Menu (QR)', keys: ['menu_banner_url', 'theme_brand_color', 'menu_enable_ordering', 'menu_show_prices', 'menu_closed_message', 'menu_footer_text', 'menu_3d_effects'] },
   ];
+  // Group the settings into domain tabs so each area has its own panel instead
+  // of one endless scrolling form. Saving still persists every loaded key.
+  const TABS: { id: string; label: string; groups: string[] }[] = [
+    { id: 'company', label: '\ud83c\udfe2 Company', groups: ['branding', 'general'] },
+    { id: 'pos', label: '\ud83d\udecd\ufe0f POS & Sales', groups: ['pos'] },
+    { id: 'finance', label: '\ud83d\udcb0 Finance', groups: ['finance'] },
+    { id: 'inventory', label: '\ud83d\udce6 Inventory', groups: ['inventory'] },
+    { id: 'localization', label: '\ud83c\udf0d Localization', groups: ['localization'] },
+    { id: 'digital_menu', label: '\ud83d\udcf1 Digital Menu', groups: ['digital_menu', 'review'] },
+    { id: 'staff', label: '\ud83d\udcca Staff', groups: ['staff_perf'] },
+  ];
+  const activeGroups = TABS.find((tb) => tb.id === activeTab)?.groups ?? [];
+  const visibleGroups = settingGroups.filter((g) => activeGroups.includes(g.group));
   return (
     <div className="max-w-2xl">
       <PageHeader title={t('nav.settings')} subtitle="System configuration" />
+      {/* Domain tabs — each section is its own panel for easier navigation */}
+      <div className="flex gap-1.5 mb-5 overflow-x-auto pb-1">
+        {TABS.map((tb) => (
+          <button key={tb.id} onClick={() => setActiveTab(tb.id)}
+            className={`px-3.5 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${activeTab === tb.id ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
+            {tb.label}
+          </button>
+        ))}
+      </div>
       <div className="space-y-5">
-        {settingGroups.map(group => (<div key={group.group} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden"><div className="flex items-center gap-2 px-5 py-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50"><h3 className="font-semibold text-gray-900 dark:text-gray-100">{group.label}</h3></div><div className="p-5 space-y-4">
+        {visibleGroups.map(group => (<div key={group.group} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden"><div className="flex items-center gap-2 px-5 py-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50"><h3 className="font-semibold text-gray-900 dark:text-gray-100">{group.label}</h3></div><div className="p-5 space-y-4">
           {group.keys.map(key => (
             <div key={key}>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">{key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</label>
@@ -88,8 +111,8 @@ export default function SettingsPage() {
         </div></div>))}
         <button onClick={handleSave} disabled={saveMutation.isPending} className="w-full bg-brand-600 hover:bg-brand-700 disabled:bg-brand-300 text-white font-semibold py-3 rounded-xl">{saveMutation.isPending ? 'Saving...' : t('common.save') + ' Settings'}</button>
 
-        {/* Per-Branch Digital Menu Overrides */}
-        <BranchMenuSettings />
+        {/* Per-Branch Digital Menu Overrides — shown on the Digital Menu tab */}
+        {activeTab === 'digital_menu' && <BranchMenuSettings />}
       </div>
     </div>
   );
