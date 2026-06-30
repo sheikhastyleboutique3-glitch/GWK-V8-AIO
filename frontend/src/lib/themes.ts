@@ -308,12 +308,7 @@ export function applyThemeToDOM(state: ThemeState) {
   const density = DENSITIES.find((d) => d.id === effectiveDensity) || DENSITIES[1];
   const root = document.documentElement;
 
-  // Theme colors
-  Object.entries(theme.colors).forEach(([key, value]) => {
-    root.style.setProperty(`--color-${camelToKebab(key)}`, value);
-  });
-
-  // Density values
+  // Density values (this engine's real contribution to the DOM).
   Object.entries(density.values).forEach(([key, value]) => {
     root.style.setProperty(`--density-${camelToKebab(key)}`, value);
   });
@@ -329,8 +324,10 @@ export function applyThemeToDOM(state: ThemeState) {
   // doing so caused the two engines to fight: the header dark toggle (theme.ts)
   // was reverted on the next boot by this function's default 'corporate-light'
   // preset. Density + data-attributes above are this engine's only DOM effects.
-  // (The `--color-*` palette this engine used to set is unused — Tailwind binds
-  //  to `--bg`/`--primary`/etc., not `--color-background`/`--color-primary`.)
+  // (The per-theme `--color-*` palette is intentionally NOT written here —
+  //  Tailwind binds to `--bg`/`--primary`/etc., never `--color-background`, so
+  //  those writes were dead. `theme` is kept only for the data-theme attribute.)
+  void theme;
 }
 
 function camelToKebab(str: string): string {
