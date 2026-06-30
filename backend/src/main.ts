@@ -14,6 +14,17 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 
 async function bootstrap() {
+  // ── GLOBAL SAFETY NET: Catch unhandled rejections that escape all try/catch ──
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('⚠️ UNHANDLED REJECTION:', reason);
+    // Don't crash — log and continue (NestJS handles most errors already)
+  });
+  process.on('uncaughtException', (error) => {
+    console.error('🔴 UNCAUGHT EXCEPTION:', error);
+    // Give active requests 5s to finish, then exit cleanly
+    setTimeout(() => process.exit(1), 5000);
+  });
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger:
       process.env.NODE_ENV === 'production'
@@ -46,9 +57,18 @@ async function bootstrap() {
   // Gzip responses (JSON payloads, reports, etc.)
   app.use(compression());
 
+  // Request ID for distributed tracing (every request gets a unique ID in response headers)
+  app.use((req: any, res: any, next: any) => {
+    const id = req.headers['x-request-id'] || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    req.requestId = id;
+    res.setHeader('X-Request-Id', id);
+    next();
+  });
+
   // Request body size limit — prevents DOS via large payloads
-  app.use(require('express').json({ limit: '2mb' }));
-  app.use(require('express').urlencoded({ limit: '2mb', extended: true }));
+  const express = require('express');
+  app.use(express.json({ limit: '2mb' }));
+  app.use(express.urlencoded({ limit: '2mb', extended: true }));
 
   const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? '')
     .split(',')

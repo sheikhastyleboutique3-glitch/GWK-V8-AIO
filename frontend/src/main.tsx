@@ -47,7 +47,8 @@ const queryClient = new QueryClient({
 });
 
 // ─── Prefetch critical data on app boot (pages load instantly from cache) ───
-const token = localStorage.getItem('token');
+let token: string | null = null;
+try { token = localStorage.getItem('token'); } catch { /* private browsing */ }
 if (token) {
   // Preload ALL critical data into cache (survives offline for entire shift)
   import('./lib/offlineCache').then(({ preloadCriticalData }) => {

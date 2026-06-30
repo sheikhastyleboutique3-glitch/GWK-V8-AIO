@@ -155,7 +155,8 @@ export function initSyncManager() {
   }).catch(() => {});
 
   // Periodic cache refresh every 5 minutes while online
-  setInterval(() => {
+  // Store interval ID for potential cleanup (SPA hot-reload scenarios)
+  const cacheInterval = setInterval(() => {
     if (navigator.onLine) {
       import('./offlineCache').then(({ preloadCriticalData }) => {
         const branchRaw = localStorage.getItem('activeBranch');
@@ -164,6 +165,9 @@ export function initSyncManager() {
       });
     }
   }, 5 * 60_000);
+
+  // Cleanup on page unload (prevents memory leak in SPA hot-reload)
+  window.addEventListener('beforeunload', () => clearInterval(cacheInterval));
 }
 
 /** Request a background sync (for when we go offline during a mutation). */
