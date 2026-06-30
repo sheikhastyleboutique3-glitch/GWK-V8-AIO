@@ -100,6 +100,17 @@ const CartPanel = React.memo(function CartPanel(props: CartPanelProps) {
   const [selectedLineIdx, setSelectedLineIdx] = useState<number>(-1);
   const [numBuffer, setNumBuffer] = useState<string>('');
   const [numMode, setNumMode] = useState<'Qty' | '%Disc' | 'Price' | null>(null);
+  // Auto-fire to kitchen when taking payment (default ON — food must always
+  // reach the kitchen). Persisted locally so each terminal keeps its choice.
+  const [autoFire, setAutoFire] = useState(() => localStorage.getItem('pos_auto_fire') !== 'false');
+  // Items on an open order that have NOT been sent to the kitchen yet.
+  const unfiredCount = useMemo(
+    () =>
+      mode === 'existing'
+        ? (loadedOrder?.items || []).filter((it: any) => !it.firedAt && !it.isVoided).length
+        : 0,
+    [mode, loadedOrder],
+  );
   // Split bill modal state
   const [splitModal, setSplitModal] = useState(false);
   const [splitSelected, setSplitSelected] = useState<Record<number, number>>({});
@@ -408,7 +419,7 @@ const CartPanel = React.memo(function CartPanel(props: CartPanelProps) {
 
       {/* Quick actions bar (compact) */}
       <div className="grid grid-cols-5 gap-1 text-[10px]">
-        <button onClick={handleKitchenFire} className="px-1 py-1.5 rounded-lg bg-orange-100 dark:bg-orange-500/10 text-orange-700 text-center font-medium">🔥 KOT</button>
+        <button onClick={handleKitchenFire} className={`px-1 py-1.5 rounded-lg bg-orange-100 dark:bg-orange-500/10 text-orange-700 text-center font-medium ${unfiredCount > 0 ? 'ring-2 ring-amber-400 animate-pulse' : ''}`}>🔥 KOT{unfiredCount > 0 ? ` (${unfiredCount})` : ''}</button>
         <button onClick={async () => { const note = await prompt({ title: 'Customer Note', placeholder: 'e.g. Allergic to nuts' }); if (note != null && mode === 'existing' && loadedOrderId) { api.patch(`/sales/orders/${loadedOrderId}`, { notes: note }).then(() => { toast.success('Note saved'); qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] }); }); } }}
           className="px-1 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-center">📝</button>
         <button onClick={() => { if (mode === 'existing' && loadedOrder) { printReceipt(loadedOrder, businessInfo); toast.success('Bill printed'); } else if (mode === 'new' && lines.length > 0) { printReceipt({ orderNo: 'PREVIEW', tableName, items: lines.map(l => ({ productId: l.productId, product: { name: l.name }, quantity: l.quantity, unitPrice: l.unitPrice, modifiers: l.modifiers })), total, subtotal } as any, businessInfo); } else toast('Add items first'); }}
@@ -472,10 +483,26 @@ const CartPanel = React.memo(function CartPanel(props: CartPanelProps) {
 
       {/* Totals + Payment */}
       <div className="border-t border-gray-200 dark:border-gray-800 pt-1">
+        {/* Unfired-items guard: the #1 "kitchen didn't get the order" failure. */}
+        {unfiredCount > 0 && (
+          <div className="flex items-center justify-between gap-2 rounded-lg bg-amber-100 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 px-3 py-2 mb-1.5">
+            <span className="text-xs font-semibold text-amber-800 dark:text-amber-300">⚠ {unfiredCount} item(s) not sent to kitchen</span>
+            <button onClick={handleKitchenFire} className="px-2 py-1 rounded-lg bg-amber-600 text-white text-xs font-bold whitespace-nowrap active:scale-95">🔥 Send now</button>
+          </div>
+        )}
         <div className="flex justify-between text-xs text-gray-500"><span>Subtotal</span><span>{subtotal.toFixed(2)}</span></div>
         {discount > 0 && <div className="flex justify-between text-xs text-green-600"><span>Coupon {appliedCouponCode}</span><span>-{discount.toFixed(2)}</span></div>}
         <div className="flex justify-between text-base font-bold mt-1"><span>Total</span><span>{total.toFixed(2)}</span></div>
-        <button disabled={(!lines.length && !comboCart.length) || !posSession} onClick={() => setShowPayment(true)}
+        <label className="flex items-center gap-1.5 mt-1 text-[10px] text-gray-500 cursor-pointer select-none">
+          <input type="checkbox" checked={autoFire} onChange={(e) => { setAutoFire(e.target.checked); localStorage.setItem('pos_auto_fire', String(e.target.checked)); }}
+            className="rounded border-gray-300 text-primary focus:ring-primary" />
+          🔥 Auto-send to kitchen when taking payment
+        </label>
+        <button disabled={(!lines.length && !comboCart.length) || !posSession} onClick={async () => {
+            // Auto-fire any unsent items before payment so the kitchen is never skipped.
+            if (autoFire && unfiredCount > 0) { try { await handleKitchenFire(); } catch { /* fire surfaces its own error */ } }
+            setShowPayment(true);
+          }}
           className="w-full mt-1 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm disabled:opacity-50 active:scale-[0.97] transition-transform">
           {!posSession ? t('pos.session.openSessionFirst') : `💳 Payment · ${total.toFixed(2)}`}
         </button>
