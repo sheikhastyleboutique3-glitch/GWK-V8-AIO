@@ -18,15 +18,43 @@ bootstrapTheme();
 // Apply theme engine (colors + density) on boot.
 applyThemeToDOM(loadThemeState());
 
-// Register service worker for offline support.
+// Register service worker for offline support + detect updates.
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    navigator.serviceWorker.register('/sw.js').then((reg) => {
+      // Check for updates every 30 minutes
+      setInterval(() => reg.update(), 30 * 60_000);
+      // If a new SW is waiting, prompt user to refresh
+      reg.addEventListener('updatefound', () => {
+        const newWorker = reg.installing;
+        newWorker?.addEventListener('statechange', () => {
+          if (newWorker.state === 'activated' && navigator.serviceWorker.controller) {
+            // New version available — the lazyRetry mechanism handles this
+            // but we can also show a subtle banner
+            import('react-hot-toast').then(({ default: toast }) => {
+              toast('New version available. Refresh for updates.', { icon: '🔄', duration: 10000 });
+            });
+          }
+        });
+      });
+    }).catch(() => {});
   });
 }
 
 // Initialize offline sync manager.
 initSyncManager();
+
+// ── GLOBAL ERROR SAFETY NET (catches async errors that escape React) ──
+window.addEventListener('unhandledrejection', (event) => {
+  // Don't show errors for cancelled requests or offline queue events
+  const msg = event.reason?.message || String(event.reason || '');
+  if (msg.includes('queued') || msg.includes('cancel') || msg.includes('AbortError')) return;
+  // Show a non-intrusive toast for unexpected errors
+  import('react-hot-toast').then(({ default: toast }) => {
+    toast.error(`Unexpected error: ${msg.slice(0, 80)}`, { duration: 5000, id: 'global-error' });
+  });
+});
+
 
 const queryClient = new QueryClient({
   defaultOptions: {
