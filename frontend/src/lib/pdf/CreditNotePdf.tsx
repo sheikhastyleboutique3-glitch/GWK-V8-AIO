@@ -23,6 +23,7 @@ export interface CreditNoteProps {
   reason?: string;
   businessName?: string;
   branchName?: string;
+  currency?: string;
 }
 
 export function CreditNotePdf({ order, refundedItems, refundTotal, reason, businessName, branchName }: CreditNoteProps) {
