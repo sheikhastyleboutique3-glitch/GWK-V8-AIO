@@ -210,8 +210,8 @@ async function connectWebSocket() {
   }
   const { io } = ioModule;
 
-  const wsUrl = API_URL.replace(/^http/, 'ws');
-  const socket = io(`${API_URL}/realtime`, {
+  const branchId = BRANCH_ID ? parseInt(BRANCH_ID, 10) : null;
+  const commonOpts = {
     path: '/socket.io',
     transports: ['websocket', 'polling'],
     reconnection: true,
@@ -219,58 +219,56 @@ async function connectWebSocket() {
     reconnectionDelay: 2000,
     reconnectionDelayMax: 10000,
     timeout: 15000,
-  });
+    auth: API_TOKEN ? { token: API_TOKEN } : undefined,
+  };
 
-  socket.on('connect', () => {
-    wsConnected = true;
-    console.log('⚡ WebSocket connected — printing is INSTANT');
-    if (BRANCH_ID) {
-      socket.emit('join', { branchId: parseInt(BRANCH_ID, 10) });
-    } else {
-      // No branch filter → join ALL branches (global room)
-      socket.emit('join', { branchId: null });
-    }
-  });
+  // The backend emits room-scoped events, so we MUST join the branch room.
+  // Real-time only works with a specific BRANCH_ID; in ALL-branches mode we
+  // keep wsConnected=false so the polling fallback stays active.
+  if (branchId == null) {
+    console.warn('⚠️  No BRANCH_ID set — real-time prints need a branch; using polling.');
+  }
 
-  socket.on('disconnect', (reason) => {
+  // ─── /realtime namespace → order lifecycle (receipts on completion) ───
+  const rt = io(`${API_URL}/realtime`, commonOpts);
+  const joinRealtime = () => { if (branchId != null) rt.emit('join_branch', { branchId }); };
+
+  rt.on('connect', () => {
+    wsConnected = branchId != null; // only suppress polling when we joined a room
+    console.log('⚡ /realtime connected' + (branchId != null ? ' — instant receipts' : ''));
+    joinRealtime();
+  });
+  rt.on('reconnect', () => { wsConnected = branchId != null; joinRealtime(); });
+  rt.on('disconnect', (reason) => {
     wsConnected = false;
-    console.warn(`⚠️  WebSocket disconnected (${reason}) — falling back to polling`);
+    console.warn(`⚠️  /realtime disconnected (${reason}) — polling fallback active`);
   });
 
-  socket.on('reconnect', () => {
-    wsConnected = true;
-    console.log('⚡ WebSocket reconnected — instant printing restored');
-    if (BRANCH_ID) {
-      socket.emit('join', { branchId: parseInt(BRANCH_ID, 10) });
-    } else {
-      socket.emit('join', { branchId: null });
-    }
-  });
-
-  // ─── Handle real-time order events ───
-  socket.on('order:changed', async (payload) => {
+  // Backend event is `order_changed` with action 'completed' on payment.
+  rt.on('order_changed', async (payload) => {
     const { orderId, orderNo, action } = payload || {};
     if (!orderId) return;
-
-    if (action === 'fired') {
-      console.log(`⚡ INSTANT KOT: ${orderNo || orderId} (fired)`);
-      await printKot(orderId);
-    } else if (action === 'completed') {
-      console.log(`⚡ INSTANT RECEIPT: ${orderNo || orderId} (completed)`);
+    if (action === 'completed') {
+      console.log(`⚡ INSTANT RECEIPT: ${orderNo || orderId}`);
       await printReceipt(orderId);
     }
   });
 
-  // Also listen for kds:update as backup (catches fires from fireCourse)
-  socket.on('kds:update', async () => {
-    // When KDS updates, check for any new fired orders we haven't printed
+  // ─── /kds namespace → fires (kitchen tickets) ───
+  // fireCourse → KDS_CHANGED → gateway emits `kds_update` on the /kds namespace.
+  const kds = io(`${API_URL}/kds`, commonOpts);
+  const joinKds = () => { if (branchId != null) kds.emit('join_branch', { branchId }); };
+  kds.on('connect', () => { console.log('⚡ /kds connected — instant KOT'); joinKds(); });
+  kds.on('reconnect', joinKds);
+  kds.on('kds_update', async () => {
+    // A course was fired/changed — print any newly-fired, unprinted KOTs.
     await scanForNewKots();
   });
 
   return true;
 }
 
-// ── Scan for un-printed KOTs (used by WebSocket kds:update + fallback poll) ──
+// ── Scan for un-printed KOTs (used by /kds kds_update + fallback poll) ──
 async function scanForNewKots() {
   try {
     const params = BRANCH_ID ? `?branchId=${BRANCH_ID}&status=OPEN` : '?status=OPEN';
