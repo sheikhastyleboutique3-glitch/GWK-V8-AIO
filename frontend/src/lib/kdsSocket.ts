@@ -8,6 +8,9 @@
  *
  * @param branchId - the branch to listen for updates on
  * @param onUpdate - callback fired when any KDS item changes
+ * @param onStatus - optional callback fired with the live socket connection
+ *                   state, so the page can tighten its polling fallback when
+ *                   the socket is down (avoids tickets sitting unseen).
  * @returns disconnect function
  */
 import { io, Socket } from 'socket.io-client';
@@ -16,6 +19,7 @@ import { getToken } from './api';
 export function connectKds(
   branchId: number | undefined | null,
   onUpdate: () => void,
+  onStatus?: (connected: boolean) => void,
 ): () => void {
   let socket: Socket | null = null;
 
@@ -32,10 +36,14 @@ export function connectKds(
     });
 
     socket.on('connect', () => {
+      onStatus?.(true);
       if (branchId != null) {
         socket?.emit('join_branch', { branchId });
       }
     });
+
+    socket.on('disconnect', () => onStatus?.(false));
+    socket.on('connect_error', () => onStatus?.(false));
 
     socket.on('reconnect', () => {
       // Re-send fresh token + re-join room on reconnect
@@ -43,6 +51,7 @@ export function connectKds(
       if (freshToken && socket) {
         (socket.auth as any) = { token: freshToken };
       }
+      onStatus?.(true);
       if (branchId != null) {
         socket?.emit('join_branch', { branchId });
       }
@@ -53,6 +62,7 @@ export function connectKds(
     });
   } catch {
     /* Silent fail — polling fallback remains active via refetchInterval */
+    onStatus?.(false);
   }
 
   return () => {

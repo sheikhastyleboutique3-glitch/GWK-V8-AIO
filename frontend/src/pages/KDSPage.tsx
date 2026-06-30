@@ -41,6 +41,10 @@ export default function KDSPage() {
   const qc = useQueryClient();
   const [station, setStation] = useState<string | null>(null); // null = ALL stations
   const { isOnline } = useOnlineStatus();
+  // Live socket state — when the /kds socket is down we poll fast (10s) so a
+  // ticket never sits unseen; when it's up, the socket is primary and we only
+  // keep a slow 60s safety-net poll.
+  const [kdsConnected, setKdsConnected] = useState(false);
 
   // Force dark mode on KDS (kitchen visibility)
   useKdsDarkMode();
@@ -51,7 +55,7 @@ export default function KDSPage() {
       api
         .get('/kds/board', { params: activeBranch?.id ? { branchId: activeBranch.id } : {} })
         .then((r) => r.data.data),
-    refetchInterval: 60_000, // Slow fallback — WebSocket is primary via connectKds()
+    refetchInterval: kdsConnected ? 60_000 : 10_000, // fast fallback when socket is down
   });
 
   // Floor data for table→floor lookup
@@ -70,10 +74,15 @@ export default function KDSPage() {
 
   // Real-time push: refresh the board instantly on kitchen changes (polling is the fallback).
   useEffect(() => {
-    const disconnect = connectKds(activeBranch?.id, () =>
-      qc.invalidateQueries({ queryKey: ['kds-board'] }),
+    const disconnect = connectKds(
+      activeBranch?.id,
+      () => qc.invalidateQueries({ queryKey: ['kds-board'] }),
+      setKdsConnected,
     );
-    return disconnect;
+    return () => {
+      setKdsConnected(false);
+      disconnect();
+    };
   }, [activeBranch?.id, qc]);
 
   // ── KDS Sound Alert: play a bell/chime when new items arrive ──────────
@@ -220,6 +229,13 @@ export default function KDSPage() {
         <button onClick={() => window.location.replace('/')} className="text-gray-400 hover:text-gray-700 dark:hover:text-white transition text-lg" title="Back to Dashboard">✕</button>
         <h1 className="font-bold text-lg">{t('nav.kds')}</h1>
         {activeBranch?.name && <span className="text-sm text-gray-500">{activeBranch.name}</span>}
+        <span
+          className={`ms-1 inline-flex items-center gap-1 text-[11px] font-semibold ${kdsConnected ? 'text-emerald-500' : 'text-amber-500'}`}
+          title={kdsConnected ? 'Live — receiving instant updates' : 'Reconnecting — polling every 10s'}
+        >
+          <span className={`w-2 h-2 rounded-full ${kdsConnected ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+          {kdsConnected ? 'LIVE' : 'POLLING'}
+        </span>
       </div>
 
       {/* ── Offline Warning Banner for Kitchen Staff ── */}
@@ -283,6 +299,16 @@ export default function KDSPage() {
               orderMap.get(key)!.items.push(it);
             }
             const orders = Array.from(orderMap.values());
+
+            // Urgency sort: oldest-fired orders bubble to the top of QUEUED /
+            // PREPARING so the kitchen always works the most-overdue ticket first.
+            if (col !== 'READY') {
+              orders.sort((a, b) => {
+                const at = Math.min(...a.items.map((i: any) => (i.firedAt ? new Date(i.firedAt).getTime() : Infinity)));
+                const bt = Math.min(...b.items.map((i: any) => (i.firedAt ? new Date(i.firedAt).getTime() : Infinity)));
+                return at - bt;
+              });
+            }
 
             return (
               <div key={col} className={`rounded-xl border-t-4 ${COLUMN_STYLE[col]} bg-gray-50 dark:bg-gray-900/50 p-3`}>
