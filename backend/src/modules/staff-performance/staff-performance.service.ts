@@ -198,6 +198,12 @@ export class StaffPerformanceService {
       const tablesServed = new Set(tableOrders.map(o => o.tableName)).size;
       const tips = userOrders.reduce((s, o) => s + (o.tip || 0), 0);
       const tipRate = totalRevenue > 0 ? (tips / totalRevenue) * 100 : 0;
+      // Average table occupancy: dine-in order lifetime (created → completed),
+      // in minutes. Uses the already-loaded orders — no extra query.
+      const tableTimes = tableOrders
+        .filter(o => o.completedAt && o.createdAt)
+        .map(o => (new Date(o.completedAt!).getTime() - new Date(o.createdAt).getTime()) / 60000);
+      const avgTableTimeMins = tableTimes.length > 0 ? tableTimes.reduce((s, t) => s + t, 0) / tableTimes.length : 0;
 
       // ─── Kitchen Metrics (prep time from firedAt → readyAt) ───
       const allItems = userOrders.flatMap(o => o.items);
@@ -257,7 +263,7 @@ export class StaffPerformanceService {
           modifiersAdded: modCount,
           upsellScore,
           tablesServed,
-          avgTableTimeMins: 0, // TODO: compute from table occupancy
+          avgTableTimeMins: +avgTableTimeMins.toFixed(1),
           tipsEarned: +tips.toFixed(2),
           tipRate: +tipRate.toFixed(1),
           avgPrepTimeMins: +avgPrepTime.toFixed(1),
@@ -297,7 +303,9 @@ export class StaffPerformanceService {
       topPerformers: staffMetrics.filter(m => m.score >= 70).slice(0, 5),
       needsImprovement: staffMetrics.filter(m => m.score < 50 || m.improvements.length > 1).slice(0, 5),
       allStaff: staffMetrics,
-      trends: [], // TODO: compare with previous period
+      trends: [], // Requires persisted historical reports (not stored yet) to
+                  // compare against a prior period; deferred to avoid re-running
+                  // the full aggregation (which mutates cached state) per request.
     };
 
     this.latestReport = report;
