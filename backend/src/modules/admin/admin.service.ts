@@ -1,11 +1,15 @@
 import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private audit: AuditService,
+  ) {}
 
   async getSystemStats() {
     const [users, branches, products, requisitions, inventory, wastage, alerts, purchaseOrders, transfers, batches] = await Promise.all([
@@ -71,6 +75,13 @@ export class AdminService {
     }
 
     this.logger.log('Validation passed, starting data deletion...');
+    this.audit.create({
+      userId,
+      action: keepMasterData ? 'RESET_SOFT' : 'RESET_FULL',
+      entity: 'system',
+      entityId: 'all-operational-data',
+      newValues: { keepMasterData },
+    });
 
     // Phase 1: Delete order-related data (FK-safe order: children first)
     await this.prisma.$transaction([
@@ -226,6 +237,7 @@ export class AdminService {
     }
 
     this.logger.log(`Module reset: ${module} by user ${userId}`);
+    this.audit.create({ userId, action: 'RESET_MODULE', entity: 'system', entityId: module });
 
     switch (module) {
       case 'sales':
@@ -319,6 +331,7 @@ export class AdminService {
           this.prisma.requisitionItem.deleteMany({ where: { requisitionId: id } }),
           this.prisma.requisition.delete({ where: { id } }),
         ]);
+        this.audit.create({ userId: requestedByUserId, action: 'DELETE', entity: 'requisition', entityId: String(id), oldValues: { requisitionNo: exists.requisitionNo } });
         return { success: true, message: `Requisition #${id} (${exists.requisitionNo}) deleted` };
       }
 
@@ -329,6 +342,7 @@ export class AdminService {
           this.prisma.purchaseOrderItem.deleteMany({ where: { purchaseOrderId: id } }),
           this.prisma.purchaseOrder.delete({ where: { id } }),
         ]);
+        this.audit.create({ userId: requestedByUserId, action: 'DELETE', entity: 'purchase-order', entityId: String(id), oldValues: { poNumber: exists.poNumber } });
         return { success: true, message: `Purchase Order #${id} (${exists.poNumber}) deleted` };
       }
 
@@ -336,6 +350,7 @@ export class AdminService {
         const exists = await this.prisma.wastageRecord.findUnique({ where: { id } });
         if (!exists) throw new NotFoundException(`Wastage record #${id} not found`);
         await this.prisma.wastageRecord.delete({ where: { id } });
+        this.audit.create({ userId: requestedByUserId, action: 'DELETE', entity: 'wastage', entityId: String(id) });
         return { success: true, message: `Wastage record #${id} deleted` };
       }
 
@@ -343,6 +358,7 @@ export class AdminService {
         const exists = await this.prisma.alert.findUnique({ where: { id } });
         if (!exists) throw new NotFoundException(`Alert #${id} not found`);
         await this.prisma.alert.delete({ where: { id } });
+        this.audit.create({ userId: requestedByUserId, action: 'DELETE', entity: 'alert', entityId: String(id) });
         return { success: true, message: `Alert #${id} deleted` };
       }
 
@@ -353,6 +369,7 @@ export class AdminService {
           this.prisma.inventoryTransaction.deleteMany({ where: { productId: exists.productId, branchId: exists.branchId } }),
           this.prisma.inventory.delete({ where: { id } }),
         ]);
+        this.audit.create({ userId: requestedByUserId, action: 'DELETE', entity: 'inventory', entityId: String(id), oldValues: { productId: exists.productId, branchId: exists.branchId } });
         return { success: true, message: `Inventory record #${id} deleted` };
       }
 
@@ -360,6 +377,7 @@ export class AdminService {
         const exists = await this.prisma.auditLog.findUnique({ where: { id } });
         if (!exists) throw new NotFoundException(`Audit log #${id} not found`);
         await this.prisma.auditLog.delete({ where: { id } });
+        this.audit.create({ userId: requestedByUserId, action: 'DELETE', entity: 'audit-log', entityId: String(id) });
         return { success: true, message: `Audit log #${id} deleted` };
       }
 

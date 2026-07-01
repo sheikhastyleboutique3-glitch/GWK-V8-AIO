@@ -49,32 +49,32 @@ function DriversSection() {
   });
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-      <div className="px-5 py-4 border-b border-gray-100 bg-gray-50">
-        <h3 className="font-semibold text-gray-900">🚚 Drivers</h3>
-        <p className="text-xs text-gray-500 mt-0.5">Manage delivery drivers available for dispatch</p>
+    <div className="bg-surface rounded-2xl border border-border overflow-hidden">
+      <div className="px-5 py-4 border-b border-border bg-surface-2">
+        <h3 className="font-semibold text-fg">🚚 Drivers</h3>
+        <p className="text-xs text-fg-muted mt-0.5">Manage delivery drivers available for dispatch</p>
       </div>
       <div className="p-5 space-y-5">
         {/* Add / edit form */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="Driver name *" className="border border-gray-200 rounded-xl px-3 py-2 text-sm" />
-          <input value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} placeholder="Phone" className="border border-gray-200 rounded-xl px-3 py-2 text-sm" />
-          <input value={form.vehicle} onChange={e => setForm(p => ({ ...p, vehicle: e.target.value }))} placeholder="Vehicle (e.g. Van — 12345)" className="border border-gray-200 rounded-xl px-3 py-2 text-sm" />
-          <input value={form.licenseNo} onChange={e => setForm(p => ({ ...p, licenseNo: e.target.value }))} placeholder="License No." className="border border-gray-200 rounded-xl px-3 py-2 text-sm" />
-          <input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="Notes" className="border border-gray-200 rounded-xl px-3 py-2 text-sm sm:col-span-2" />
+          <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="Driver name *" className="border border-border rounded-xl px-3 py-2 text-sm" />
+          <input value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} placeholder="Phone" className="border border-border rounded-xl px-3 py-2 text-sm" />
+          <input value={form.vehicle} onChange={e => setForm(p => ({ ...p, vehicle: e.target.value }))} placeholder="Vehicle (e.g. Van — 12345)" className="border border-border rounded-xl px-3 py-2 text-sm" />
+          <input value={form.licenseNo} onChange={e => setForm(p => ({ ...p, licenseNo: e.target.value }))} placeholder="License No." className="border border-border rounded-xl px-3 py-2 text-sm" />
+          <input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="Notes" className="border border-border rounded-xl px-3 py-2 text-sm sm:col-span-2" />
         </div>
         <div className="flex gap-2">
           <button onClick={() => { if (!form.name.trim()) { toast.error('Name is required'); return; } save.mutate(); }} disabled={save.isPending} className="bg-brand-600 hover:bg-brand-700 disabled:bg-brand-300 text-white font-medium px-4 py-2 rounded-xl text-sm">
             {save.isPending ? 'Saving…' : editing ? 'Update Driver' : '+ Add Driver'}
           </button>
-          {editing && <button onClick={() => setForm(blank)} className="border border-gray-200 text-gray-700 px-4 py-2 rounded-xl text-sm">Cancel</button>}
+          {editing && <button onClick={() => setForm(blank)} className="border border-border text-fg px-4 py-2 rounded-xl text-sm">Cancel</button>}
         </div>
 
         {/* Drivers list */}
         {isLoading ? <LoadingSpinner /> : (
-          <div className="border border-gray-100 rounded-xl overflow-hidden">
+          <div className="border border-border rounded-xl overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+              <thead className="bg-surface-2 text-xs text-fg-muted uppercase">
                 <tr>
                   <th className="text-start px-3 py-2">Name</th>
                   <th className="text-start px-3 py-2">Phone</th>
@@ -83,14 +83,14 @@ function DriversSection() {
                   <th className="text-end px-3 py-2">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-border">
                 {drivers?.map((d: any) => (
-                  <tr key={d.id} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 text-gray-900 font-medium">{d.name}</td>
-                    <td className="px-3 py-2 text-gray-600">{d.phone || '—'}</td>
-                    <td className="px-3 py-2 text-gray-600">{d.vehicle || '—'}</td>
+                  <tr key={d.id} className="hover:bg-surface-2">
+                    <td className="px-3 py-2 text-fg font-medium">{d.name}</td>
+                    <td className="px-3 py-2 text-fg-muted">{d.phone || '—'}</td>
+                    <td className="px-3 py-2 text-fg-muted">{d.vehicle || '—'}</td>
                     <td className="px-3 py-2 text-center">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${d.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{d.isActive ? 'Active' : 'Inactive'}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${d.isActive ? 'bg-green-100 text-green-700' : 'bg-surface-2 text-fg-muted'}`}>{d.isActive ? 'Active' : 'Inactive'}</span>
                     </td>
                     <td className="px-3 py-2 text-end whitespace-nowrap">
                       <button onClick={() => setForm({ id: d.id, name: d.name, phone: d.phone || '', vehicle: d.vehicle || '', licenseNo: d.licenseNo || '', notes: d.notes || '' })} className="text-xs text-brand-600 hover:underline me-3">Edit</button>
@@ -98,7 +98,7 @@ function DriversSection() {
                     </td>
                   </tr>
                 ))}
-                {!drivers?.length && <tr><td colSpan={5} className="text-center text-gray-400 py-6">No drivers yet. Add one above.</td></tr>}
+                {!drivers?.length && <tr><td colSpan={5} className="text-center text-fg-subtle py-6">No drivers yet. Add one above.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -138,15 +138,15 @@ function DataManagementSection({ onDeleted }: { onDeleted: () => void }) {
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-orange-200 overflow-hidden">
-      <div className="px-5 py-4 border-b border-orange-200 bg-orange-50">
+    <div className="bg-surface rounded-2xl border border-orange-200 dark:border-orange-500/30 overflow-hidden">
+      <div className="px-5 py-4 border-b border-orange-200 bg-orange-50 dark:bg-orange-500/10">
         <h3 className="font-semibold text-orange-900">🛠️ Data Management</h3>
         <p className="text-xs text-orange-600 mt-0.5">Delete individual records by type and ID. This action is permanent and cannot be undone.</p>
       </div>
       <div className="p-5 space-y-4">
         {/* Type selector */}
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-2">Record Type</label>
+          <label className="block text-xs font-medium text-fg-muted mb-2">Record Type</label>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {RECORD_TYPES.map(rt => (
               <button
@@ -154,8 +154,8 @@ function DataManagementSection({ onDeleted }: { onDeleted: () => void }) {
                 onClick={() => { setRecordType(rt.value); setRecordId(''); setConfirmOpen(false); }}
                 className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${
                   recordType === rt.value
-                    ? 'border-orange-400 bg-orange-50 text-orange-800'
-                    : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                    ? 'border-orange-400 bg-orange-50 dark:bg-orange-500/10 text-orange-800'
+                    : 'border-border text-fg-muted hover:bg-surface-2'
                 }`}
               >
                 <span>{rt.icon}</span>
@@ -168,7 +168,7 @@ function DataManagementSection({ onDeleted }: { onDeleted: () => void }) {
         {/* ID input */}
         <div className="flex gap-3 items-end">
           <div className="flex-1">
-            <label className="block text-xs font-medium text-gray-600 mb-1">
+            <label className="block text-xs font-medium text-fg-muted mb-1">
               {selectedType.icon} {isRTL ? selectedType.labelAr : selectedType.label} ID
             </label>
             <input
@@ -177,7 +177,7 @@ function DataManagementSection({ onDeleted }: { onDeleted: () => void }) {
               value={recordId}
               onChange={e => { setRecordId(e.target.value); setConfirmOpen(false); }}
               placeholder={`Enter ${isRTL ? selectedType.labelAr : selectedType.label} ID...`}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+              className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
             />
           </div>
           <button
@@ -193,7 +193,7 @@ function DataManagementSection({ onDeleted }: { onDeleted: () => void }) {
 
         {/* Confirmation */}
         {confirmOpen && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-3">
+          <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-xl p-4 space-y-3">
             <p className="text-sm font-semibold text-red-800">
               ⚠️ Confirm permanent deletion
             </p>
@@ -204,7 +204,7 @@ function DataManagementSection({ onDeleted }: { onDeleted: () => void }) {
             <div className="flex gap-3">
               <button
                 onClick={() => setConfirmOpen(false)}
-                className="flex-1 border border-gray-200 text-gray-700 py-2 rounded-xl text-sm font-medium hover:bg-gray-50"
+                className="flex-1 border border-border text-fg py-2 rounded-xl text-sm font-medium hover:bg-surface-2"
               >
                 Cancel
               </button>
@@ -227,9 +227,104 @@ function DataManagementSection({ onDeleted }: { onDeleted: () => void }) {
           </div>
         )}
 
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-fg-subtle">
           ℹ️ Tip: Find record IDs in the respective pages (Requisitions, Purchase Orders, etc.) or in the Audit Log.
         </p>
+      </div>
+    </div>
+  );
+}
+
+const RESET_MODULES = [
+  { key: 'sales',         icon: '🧾', label: 'Sales',         desc: 'Orders, payments, POS sessions' },
+  { key: 'inventory',     icon: '📦', label: 'Inventory',     desc: 'Stock, batches, transfers, production, wastage' },
+  { key: 'finance',       icon: '💰', label: 'Finance',       desc: 'Journal entries' },
+  { key: 'procurement',   icon: '🛒', label: 'Procurement',   desc: 'Requisitions, POs, price history' },
+  { key: 'notifications', icon: '🔔', label: 'Notifications', desc: 'Alerts, inbox, audit logs' },
+];
+
+/** Granular per-module reset — clears ONE data area (backend: POST /admin/reset/:module). */
+function ModuleResetSection({ onDone }: { onDone: () => void }) {
+  const [active, setActive] = useState<string | null>(null);
+  const [phrase, setPhrase] = useState('');
+  const [busy, setBusy] = useState(false);
+  const required = active ? `RESET-${active.toUpperCase()}` : '';
+  const run = async () => {
+    if (phrase !== required) { toast.error(`Type exactly: ${required}`); return; }
+    setBusy(true);
+    try {
+      const res = await api.post(`/admin/reset/${active}`, { confirmPhrase: phrase });
+      toast.success(res.data.data?.message || 'Module reset complete');
+      setActive(null); setPhrase(''); onDone();
+    } catch (e: any) { toast.error(e.response?.data?.message || 'Reset failed'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="bg-surface rounded-2xl border border-amber-200 dark:border-amber-500/30 overflow-hidden">
+      <div className="px-5 py-4 border-b border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10">
+        <h3 className="font-semibold text-amber-900 dark:text-amber-300">♻️ Granular Module Reset</h3>
+        <p className="text-xs text-amber-600 dark:text-amber-400/80 mt-0.5">Clear ONE data area without touching the rest — safer than a full wipe.</p>
+      </div>
+      <div className="p-5 space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          {RESET_MODULES.map(m => (
+            <button key={m.key} onClick={() => { setActive(m.key); setPhrase(''); }}
+              className={`text-start p-3 rounded-xl border transition-colors ${active === m.key ? 'border-amber-400 bg-amber-50 dark:bg-amber-500/10' : 'border-border hover:bg-surface-2'}`}>
+              <div className="font-semibold text-fg text-sm">{m.icon} {m.label}</div>
+              <div className="text-xs text-fg-muted mt-0.5">{m.desc}</div>
+            </button>
+          ))}
+        </div>
+        {active && (
+          <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-xl p-4 space-y-3">
+            <p className="text-sm text-fg">Type <code className="font-mono text-amber-700 dark:text-amber-300 select-all break-all">{required}</code> to clear <strong>{active}</strong> data. This cannot be undone.</p>
+            <input value={phrase} onChange={e => setPhrase(e.target.value)} placeholder={required} autoComplete="off" spellCheck={false}
+              className={`w-full border rounded-xl px-3 py-2.5 text-sm font-mono ${phrase === required ? 'border-green-400 bg-green-50 dark:bg-green-500/10 text-green-800 dark:text-green-300' : 'border-border'}`} />
+            <div className="flex gap-2">
+              <button onClick={() => { setActive(null); setPhrase(''); }} className="flex-1 border border-border text-fg py-2 rounded-xl text-sm hover:bg-surface-2">Cancel</button>
+              <button onClick={run} disabled={busy || phrase !== required} className="flex-1 bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white py-2 rounded-xl text-sm font-bold">{busy ? 'Clearing…' : `Clear ${active} data`}</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Live subsystem diagnostics (backend: GET /health/deep). */
+function SystemHealthSection() {
+  const { data, isFetching, refetch } = useQuery({
+    queryKey: ['admin-health'],
+    queryFn: () => api.get('/health/deep').then(r => r.data?.data ?? r.data),
+    refetchInterval: 30000,
+  });
+  const checks: Record<string, any> = data?.checks ?? {};
+  const overall = data?.status ?? 'unknown';
+  const dot = (s?: string) => (s === 'ok' || s === 'healthy') ? 'bg-green-500' : (s === 'warning' || s === 'degraded') ? 'bg-amber-500' : 'bg-red-500';
+  return (
+    <div className="bg-surface rounded-2xl border border-border overflow-hidden">
+      <div className="px-5 py-4 border-b border-border bg-surface-2 flex items-center justify-between">
+        <div>
+          <h3 className="font-semibold text-fg">💓 System Health</h3>
+          <p className="text-xs text-fg-muted mt-0.5">Live subsystem diagnostics</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={`w-2.5 h-2.5 rounded-full ${dot(overall)}`} />
+          <span className="text-sm font-semibold text-fg capitalize">{overall}</span>
+          <button onClick={() => refetch()} className="text-xs border border-border rounded-lg px-2 py-1 text-fg-muted hover:bg-surface-2">{isFetching ? '…' : '↻'}</button>
+        </div>
+      </div>
+      <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+        {Object.entries(checks).map(([name, v]) => (
+          <div key={name} className="flex items-center gap-2 rounded-xl border border-border p-3">
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot(v?.status)}`} />
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-fg capitalize">{name}</div>
+              <div className="text-xs text-fg-muted truncate">{v?.error || v?.latency || v?.status}</div>
+            </div>
+          </div>
+        ))}
+        {!Object.keys(checks).length && <div className="text-sm text-fg-muted">No health data available.</div>}
       </div>
     </div>
   );
@@ -433,53 +528,56 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* System health — live subsystem diagnostics */}
+      <SystemHealthSection />
+
       {/* Invoice & Bill Customization */}
-      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 bg-gray-50">
-          <h3 className="font-semibold text-gray-900">🧾 {t('admin.invoiceCustomization')}</h3>
-          <p className="text-xs text-gray-500 mt-0.5">{t('admin.invoiceSubtitle')}</p>
+      <div className="bg-surface rounded-2xl border border-border overflow-hidden">
+        <div className="px-5 py-4 border-b border-border bg-surface-2">
+          <h3 className="font-semibold text-fg">🧾 {t('admin.invoiceCustomization')}</h3>
+          <p className="text-xs text-fg-muted mt-0.5">{t('admin.invoiceSubtitle')}</p>
         </div>
         <div className="p-5 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">{t('admin.headerText')}</label>
-              <input value={invoice.invoice_header_text} onChange={e => setInv('invoice_header_text', e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" />
+              <label className="block text-xs font-medium text-fg-muted mb-1">{t('admin.headerText')}</label>
+              <input value={invoice.invoice_header_text} onChange={e => setInv('invoice_header_text', e.target.value)} className="w-full border border-border rounded-xl px-3 py-2 text-sm" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">{t('admin.footerText')}</label>
-              <input value={invoice.invoice_footer_text} onChange={e => setInv('invoice_footer_text', e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" />
+              <label className="block text-xs font-medium text-fg-muted mb-1">{t('admin.footerText')}</label>
+              <input value={invoice.invoice_footer_text} onChange={e => setInv('invoice_footer_text', e.target.value)} className="w-full border border-border rounded-xl px-3 py-2 text-sm" />
             </div>
             <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-gray-600 mb-1">{t('admin.termsConditions')}</label>
-              <textarea value={invoice.invoice_terms} onChange={e => setInv('invoice_terms', e.target.value)} rows={2} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none" />
+              <label className="block text-xs font-medium text-fg-muted mb-1">{t('admin.termsConditions')}</label>
+              <textarea value={invoice.invoice_terms} onChange={e => setInv('invoice_terms', e.target.value)} rows={2} className="w-full border border-border rounded-xl px-3 py-2 text-sm resize-none" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">{t('admin.accentColor')}</label>
+              <label className="block text-xs font-medium text-fg-muted mb-1">{t('admin.accentColor')}</label>
               <div className="flex items-center gap-2">
-                <input type="color" value={invoice.invoice_accent_color} onChange={e => setInv('invoice_accent_color', e.target.value)} className="w-12 h-10 border border-gray-200 rounded-xl px-1 py-1 cursor-pointer" />
-                <span className="text-sm text-gray-600 font-mono">{invoice.invoice_accent_color}</span>
+                <input type="color" value={invoice.invoice_accent_color} onChange={e => setInv('invoice_accent_color', e.target.value)} className="w-12 h-10 border border-border rounded-xl px-1 py-1 cursor-pointer" />
+                <span className="text-sm text-fg-muted font-mono">{invoice.invoice_accent_color}</span>
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">{t('admin.defaultCurrency')}</label>
-              <select value={invoice.invoice_currency} onChange={e => setInv('invoice_currency', e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+              <label className="block text-xs font-medium text-fg-muted mb-1">{t('admin.defaultCurrency')}</label>
+              <select value={invoice.invoice_currency} onChange={e => setInv('invoice_currency', e.target.value)} className="w-full border border-border rounded-xl px-3 py-2 text-sm">
                 {['QAR', 'USD', 'EUR', 'AED', 'SAR', 'GBP'].map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">{t('admin.taxVatRate')}</label>
-              <input type="number" min={0} max={100} step={0.5} value={invoice.invoice_tax_rate} onChange={e => setInv('invoice_tax_rate', e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" />
+              <label className="block text-xs font-medium text-fg-muted mb-1">{t('admin.taxVatRate')}</label>
+              <input type="number" min={0} max={100} step={0.5} value={invoice.invoice_tax_rate} onChange={e => setInv('invoice_tax_rate', e.target.value)} className="w-full border border-border rounded-xl px-3 py-2 text-sm" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">{t('admin.paperSize')}</label>
-              <select value={invoice.invoice_paper_size} onChange={e => setInv('invoice_paper_size', e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+              <label className="block text-xs font-medium text-fg-muted mb-1">{t('admin.paperSize')}</label>
+              <select value={invoice.invoice_paper_size} onChange={e => setInv('invoice_paper_size', e.target.value)} className="w-full border border-border rounded-xl px-3 py-2 text-sm">
                 <option value="A4">A4</option>
                 <option value="LETTER">Letter</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">{t('admin.documentLanguage')}</label>
-              <select value={invoice.invoice_language} onChange={e => setInv('invoice_language', e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+              <label className="block text-xs font-medium text-fg-muted mb-1">{t('admin.documentLanguage')}</label>
+              <select value={invoice.invoice_language} onChange={e => setInv('invoice_language', e.target.value)} className="w-full border border-border rounded-xl px-3 py-2 text-sm">
                 <option value="en">English</option>
                 <option value="ar">عربي (Arabic)</option>
                 <option value="bilingual">Bilingual (EN + AR)</option>
@@ -487,23 +585,23 @@ export default function AdminPage() {
             </div>
             <div className="flex items-center gap-2 pt-4">
               <input id="showLogo" type="checkbox" checked={invoice.invoice_show_logo === 'true'} onChange={e => setInv('invoice_show_logo', e.target.checked ? 'true' : 'false')} className="rounded w-4 h-4" />
-              <label htmlFor="showLogo" className="text-sm text-gray-700">{t('admin.showLogo')}</label>
+              <label htmlFor="showLogo" className="text-sm text-fg">{t('admin.showLogo')}</label>
             </div>
           </div>
-          <div className="border-t border-gray-100 pt-4">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">{t('admin.signatureLabels')}</p>
+          <div className="border-t border-border pt-4">
+            <p className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-3">{t('admin.signatureLabels')}</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Signature 1</label>
-                <input value={invoice.invoice_sig_prepared} onChange={e => setInv('invoice_sig_prepared', e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" />
+                <label className="block text-xs text-fg-subtle mb-1">Signature 1</label>
+                <input value={invoice.invoice_sig_prepared} onChange={e => setInv('invoice_sig_prepared', e.target.value)} className="w-full border border-border rounded-xl px-3 py-2 text-sm" />
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Signature 2</label>
-                <input value={invoice.invoice_sig_approved} onChange={e => setInv('invoice_sig_approved', e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" />
+                <label className="block text-xs text-fg-subtle mb-1">Signature 2</label>
+                <input value={invoice.invoice_sig_approved} onChange={e => setInv('invoice_sig_approved', e.target.value)} className="w-full border border-border rounded-xl px-3 py-2 text-sm" />
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Signature 3</label>
-                <input value={invoice.invoice_sig_ack} onChange={e => setInv('invoice_sig_ack', e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" />
+                <label className="block text-xs text-fg-subtle mb-1">Signature 3</label>
+                <input value={invoice.invoice_sig_ack} onChange={e => setInv('invoice_sig_ack', e.target.value)} className="w-full border border-border rounded-xl px-3 py-2 text-sm" />
               </div>
             </div>
           </div>
@@ -523,25 +621,25 @@ export default function AdminPage() {
       {/* ================================================================
           NOTIFICATION SOUNDS — real-time audible alerts/orders/requisitions
           ================================================================ */}
-      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 bg-gray-50">
-          <h3 className="font-semibold text-gray-900">🔔 {t('sound.title')}</h3>
-          <p className="text-xs text-gray-500 mt-0.5">{t('sound.subtitle')}</p>
+      <div className="bg-surface rounded-2xl border border-border overflow-hidden">
+        <div className="px-5 py-4 border-b border-border bg-surface-2">
+          <h3 className="font-semibold text-fg">🔔 {t('sound.title')}</h3>
+          <p className="text-xs text-fg-muted mt-0.5">{t('sound.subtitle')}</p>
         </div>
         <div className="p-5 space-y-5">
           {/* Master toggle + volume */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <label className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 cursor-pointer">
+            <label className="flex items-center gap-3 p-3 rounded-xl border border-border cursor-pointer">
               <input
                 type="checkbox"
                 checked={sound.sound_enabled === 'true'}
                 onChange={e => setSnd('sound_enabled', e.target.checked ? 'true' : 'false')}
                 className="rounded w-4 h-4"
               />
-              <span className="text-sm font-medium text-gray-800">{t('sound.masterEnable')}</span>
+              <span className="text-sm font-medium text-fg">{t('sound.masterEnable')}</span>
             </label>
-            <div className="p-3 rounded-xl border border-gray-200">
-              <label className="block text-xs font-medium text-gray-600 mb-1">
+            <div className="p-3 rounded-xl border border-border">
+              <label className="block text-xs font-medium text-fg-muted mb-1">
                 {t('sound.volume')}: <span className="font-mono">{sound.sound_volume}%</span>
               </label>
               <input
@@ -563,7 +661,7 @@ export default function AdminPage() {
               const urlKey = `sound_url_${key}`;
               const hasCustom = !!sound[urlKey];
               return (
-                <div key={key} className="rounded-xl border border-gray-200 p-4">
+                <div key={key} className="rounded-xl border border-border p-4">
                   <div className="flex flex-wrap items-center gap-3 justify-between">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -572,20 +670,20 @@ export default function AdminPage() {
                         onChange={e => setSnd(enabledKey, e.target.checked ? 'true' : 'false')}
                         className="rounded w-4 h-4"
                       />
-                      <span className="text-sm font-semibold text-gray-800">{icon} {t(`sound.channel.${key}`)}</span>
+                      <span className="text-sm font-semibold text-fg">{icon} {t(`sound.channel.${key}`)}</span>
                     </label>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400">
+                      <span className="text-xs text-fg-subtle">
                         {hasCustom ? t('sound.customSound') : t('sound.defaultSound')}
                       </span>
                       <button
                         type="button"
                         onClick={() => testSound(key)}
-                        className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg px-3 py-1.5 font-medium"
+                        className="text-xs bg-surface-2 hover:bg-surface-3 text-fg rounded-lg px-3 py-1.5 font-medium"
                       >
                         ▶ {t('sound.test')}
                       </button>
-                      <label className="text-xs bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-lg px-3 py-1.5 font-medium cursor-pointer">
+                      <label className="text-xs bg-brand-50 dark:bg-brand-500/10 hover:bg-brand-100 text-brand-700 rounded-lg px-3 py-1.5 font-medium cursor-pointer">
                         {uploadingSound === key ? t('common.saving') : `⬆ ${t('sound.upload')}`}
                         <input
                           type="file"
@@ -614,7 +712,7 @@ export default function AdminPage() {
             })}
           </div>
 
-          <p className="text-xs text-gray-400">{t('sound.hint')}</p>
+          <p className="text-xs text-fg-subtle">{t('sound.hint')}</p>
 
           <button
             onClick={() => soundMutation.mutate()}
@@ -636,13 +734,24 @@ export default function AdminPage() {
           ================================================================ */}
       <DataManagementSection onDeleted={refetch} />
 
+      {/* Granular per-module resets (safer than a full wipe) */}
+      <ModuleResetSection onDone={refetch} />
+
+      {/* Backup reminder before destructive resets */}
+      <div className="bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 rounded-2xl px-5 py-4">
+        <p className="text-sm font-semibold text-blue-900 dark:text-blue-300">💾 Back up before you wipe</p>
+        <p className="text-xs text-blue-700 dark:text-blue-400/80 mt-1">
+          Resets are permanent. On the server, run <code className="font-mono bg-blue-100 dark:bg-blue-500/20 px-1.5 py-0.5 rounded select-all">bash scripts/backup.sh</code> (or your DB dump) <strong>before</strong> a full wipe. Your PostgreSQL data is the source of truth — code redeploys never touch it, but resets do.
+        </p>
+      </div>
+
       {/* ================================================================
           SYSTEM RESET — rebuilt from scratch
           No password required. 3-step flow: choose → confirm → done.
           ================================================================ */}
-      <div className="bg-white rounded-2xl border border-red-200 overflow-hidden">
+      <div className="bg-surface rounded-2xl border border-red-200 dark:border-red-500/30 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 bg-red-50 border-b border-red-200">
+        <div className="flex items-center justify-between px-5 py-4 bg-red-50 dark:bg-red-500/10 border-b border-red-200 dark:border-red-500/30">
           <div>
             <h3 className="font-semibold text-red-900 flex items-center gap-2">
               ⚠️ {t('admin.systemReset')}
@@ -678,16 +787,16 @@ export default function AdminPage() {
                       ? 'bg-red-600 text-white'
                       : (idx < (['choose','confirm','done'] as ResetStep[]).indexOf(resetStep))
                         ? 'bg-green-500 text-white'
-                        : 'bg-gray-200 text-gray-500'
+                        : 'bg-surface-3 text-fg-muted'
                   }`}>
                     {idx < (['choose','confirm','done'] as ResetStep[]).indexOf(resetStep) ? '✓' : idx + 1}
                   </div>
                   <span className={`text-xs font-medium ${
-                    resetStep === step ? 'text-red-700' : 'text-gray-400'
+                    resetStep === step ? 'text-red-700' : 'text-fg-subtle'
                   }`}>
                     {step === 'choose' ? 'Choose Type' : step === 'confirm' ? 'Confirm' : 'Done'}
                   </span>
-                  {idx < 2 && <div className="w-8 h-px bg-gray-200" />}
+                  {idx < 2 && <div className="w-8 h-px bg-surface-3" />}
                 </div>
               ))}
             </div>
@@ -695,18 +804,18 @@ export default function AdminPage() {
             {/* STEP 1: Choose reset type */}
             {resetStep === 'choose' && (
               <div className="space-y-4">
-                <p className="text-sm text-gray-600 mb-3">Select the type of reset you want to perform:</p>
+                <p className="text-sm text-fg-muted mb-3">Select the type of reset you want to perform:</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Soft Reset */}
                   <button
                     onClick={() => { setKeepMaster(true); setResetStep('confirm'); }}
-                    className="text-start p-5 rounded-xl border-2 border-yellow-300 bg-yellow-50 hover:bg-yellow-100 hover:border-yellow-400 transition-all group"
+                    className="text-start p-5 rounded-xl border-2 border-yellow-300 bg-yellow-50 dark:bg-yellow-500/10 hover:bg-yellow-100 hover:border-yellow-400 transition-all group"
                   >
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-2xl">🧹</span>
-                      <span className="font-bold text-gray-900">{t('admin.softReset')}</span>
+                      <span className="font-bold text-fg">{t('admin.softReset')}</span>
                     </div>
-                    <p className="text-xs text-gray-600 mb-3">{t('admin.softResetDesc')}</p>
+                    <p className="text-xs text-fg-muted mb-3">{t('admin.softResetDesc')}</p>
                     <div className="space-y-1">
                       <p className="text-xs font-semibold text-red-600">🗑️ Will delete:</p>
                       <ul className="text-xs text-red-700 space-y-0.5 ms-3">
@@ -734,13 +843,13 @@ export default function AdminPage() {
                   {/* Full Wipe */}
                   <button
                     onClick={() => { setKeepMaster(false); setResetStep('confirm'); }}
-                    className="text-start p-5 rounded-xl border-2 border-red-300 bg-red-50 hover:bg-red-100 hover:border-red-400 transition-all group"
+                    className="text-start p-5 rounded-xl border-2 border-red-300 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 hover:border-red-400 transition-all group"
                   >
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-2xl">💣</span>
-                      <span className="font-bold text-gray-900">{t('admin.fullWipe')}</span>
+                      <span className="font-bold text-fg">{t('admin.fullWipe')}</span>
                     </div>
-                    <p className="text-xs text-gray-600 mb-3">{t('admin.fullWipeDesc')}</p>
+                    <p className="text-xs text-fg-muted mb-3">{t('admin.fullWipeDesc')}</p>
                     <div className="space-y-1">
                       <p className="text-xs font-semibold text-red-600">🗑️ Will delete EVERYTHING including:</p>
                       <ul className="text-xs text-red-700 space-y-0.5 ms-3">
@@ -769,21 +878,21 @@ export default function AdminPage() {
               <div className="space-y-5">
                 {/* Summary of what was chosen */}
                 <div className={`p-4 rounded-xl border-2 ${
-                  keepMaster ? 'border-yellow-300 bg-yellow-50' : 'border-red-300 bg-red-50'
+                  keepMaster ? 'border-yellow-300 bg-yellow-50 dark:bg-yellow-500/10' : 'border-red-300 bg-red-50 dark:bg-red-500/10'
                 }`}>
                   <div className="flex items-center gap-2">
                     <span className="text-xl">{keepMaster ? '🧹' : '💣'}</span>
                     <div>
-                      <p className="font-semibold text-gray-900">
+                      <p className="font-semibold text-fg">
                         {keepMaster ? t('admin.softReset') : t('admin.fullWipe')}
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-fg-muted">
                         {keepMaster ? t('admin.softResetDesc') : t('admin.fullWipeDesc')}
                       </p>
                     </div>
                     <button
                       onClick={() => setResetStep('choose')}
-                      className="ms-auto text-xs text-gray-400 hover:text-gray-600 underline"
+                      className="ms-auto text-xs text-fg-subtle hover:text-fg-muted underline"
                     >
                       Change
                     </button>
@@ -791,11 +900,11 @@ export default function AdminPage() {
                 </div>
 
                 {/* Confirmation phrase */}
-                <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-                  <p className="text-sm font-semibold text-gray-700">
+                <div className="bg-surface-2 rounded-xl p-4 space-y-3">
+                  <p className="text-sm font-semibold text-fg">
                     {t('admin.confirmPhrase')}
                   </p>
-                  <div className="bg-white border border-gray-200 rounded-lg px-3 py-2">
+                  <div className="bg-surface border border-border rounded-lg px-3 py-2">
                     <code className="text-sm text-red-700 font-mono select-all break-all">
                       {REQUIRED_PHRASE}
                     </code>
@@ -806,10 +915,10 @@ export default function AdminPage() {
                     placeholder="Type the phrase above exactly..."
                     className={`w-full border rounded-xl px-3 py-2.5 text-sm font-mono transition-colors ${
                       confirmPhrase === REQUIRED_PHRASE
-                        ? 'border-green-400 bg-green-50 text-green-800'
+                        ? 'border-green-400 bg-green-50 dark:bg-green-500/10 text-green-800'
                         : confirmPhrase.length > 0
-                          ? 'border-red-300 bg-red-50'
-                          : 'border-gray-200'
+                          ? 'border-red-300 bg-red-50 dark:bg-red-500/10'
+                          : 'border-border'
                     }`}
                     autoComplete="off"
                     spellCheck={false}
@@ -822,7 +931,7 @@ export default function AdminPage() {
                 <div className="flex gap-3">
                   <button
                     onClick={() => setResetStep('choose')}
-                    className="flex-1 border border-gray-200 text-gray-700 py-3 rounded-xl text-sm font-medium hover:bg-gray-50"
+                    className="flex-1 border border-border text-fg py-3 rounded-xl text-sm font-medium hover:bg-surface-2"
                   >
                     ← Back
                   </button>
@@ -855,8 +964,8 @@ export default function AdminPage() {
             {resetStep === 'done' && (
               <div className="text-center py-8 space-y-4">
                 <div className="text-5xl">✅</div>
-                <p className="text-lg font-bold text-gray-900">Reset Complete</p>
-                <p className="text-sm text-gray-500">
+                <p className="text-lg font-bold text-fg">Reset Complete</p>
+                <p className="text-sm text-fg-muted">
                   {keepMaster
                     ? 'Transactional data cleared. Master data preserved. All IDs reset to 1.'
                     : 'Full wipe complete. Super Admin accounts retained. All IDs reset to 1.'}
@@ -874,24 +983,24 @@ export default function AdminPage() {
       </div>
 
       {/* Demo Credentials */}
-      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 bg-gray-50">
-          <h3 className="font-semibold text-gray-900">🔑 {t('admin.demoCredentials')}</h3>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {t('admin.allPasswords')} <code className="bg-gray-200 px-1.5 py-0.5 rounded text-xs">Admin@1234</code>
+      <div className="bg-surface rounded-2xl border border-border overflow-hidden">
+        <div className="px-5 py-4 border-b border-border bg-surface-2">
+          <h3 className="font-semibold text-fg">🔑 {t('admin.demoCredentials')}</h3>
+          <p className="text-xs text-fg-muted mt-0.5">
+            {t('admin.allPasswords')} <code className="bg-surface-3 px-1.5 py-0.5 rounded text-xs">Admin@1234</code>
           </p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-100">
+            <thead className="bg-surface-2 border-b border-border">
               <tr>
-                <th className="text-start px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">Email</th>
-                <th className="text-start px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">Role</th>
-                <th className="text-start px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">Branch</th>
-                <th className="text-start px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">Language</th>
+                <th className="text-start px-4 py-2.5 text-xs font-semibold text-fg-muted uppercase">Email</th>
+                <th className="text-start px-4 py-2.5 text-xs font-semibold text-fg-muted uppercase">Role</th>
+                <th className="text-start px-4 py-2.5 text-xs font-semibold text-fg-muted uppercase">Branch</th>
+                <th className="text-start px-4 py-2.5 text-xs font-semibold text-fg-muted uppercase">Language</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50 text-sm">
+            <tbody className="divide-y divide-border text-sm">
               {[
                 { email: 'admin@gwk.com',       role: 'SUPER_ADMIN',    branch: 'All Branches',     lang: 'EN' },
                 { email: 'manager.d@gwk.com',   role: 'BRANCH_MANAGER', branch: 'Doha (West Bay)',  lang: 'AR' },
@@ -905,16 +1014,16 @@ export default function AdminPage() {
                 { email: 'cleaner@gwk.com',     role: 'CLEANER',        branch: 'Doha',             lang: 'AR' },
                 { email: 'kitchen.w@gwk.com',   role: 'KITCHEN',        branch: 'Al Wakra',         lang: 'AR' },
               ].map(row => (
-                <tr key={row.email} className="hover:bg-gray-50">
+                <tr key={row.email} className="hover:bg-surface-2">
                   <td className="px-4 py-2.5">
-                    <code className="text-xs text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded">{row.email}</code>
+                    <code className="text-xs text-brand-700 bg-brand-50 dark:bg-brand-500/10 px-1.5 py-0.5 rounded">{row.email}</code>
                   </td>
                   <td className="px-4 py-2.5">
-                    <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">
+                    <span className="text-xs bg-surface-2 text-fg px-2 py-0.5 rounded-full">
                       {t(`roles.${row.role}`)}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-xs text-gray-600">{row.branch}</td>
+                  <td className="px-4 py-2.5 text-xs text-fg-muted">{row.branch}</td>
                   <td className="px-4 py-2.5">
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                       row.lang === 'AR' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
