@@ -171,13 +171,15 @@ export class AdminService {
     if (!keepMasterData) {
       this.logger.log('Deleting master data...');
       await this.prisma.$transaction([
-        // POS/terminal/config first — posConfig references cashRounding/preset/floor
-        this.prisma.posConfig.deleteMany(),
+        // Config layer — delete strictly children-before-parents:
+        //   paymentMethodConfig/selfOrderConfig -> posConfig -> orderPreset/cashRounding
+        //   (posConfig references rounding/preset/floor; PMC & self-order reference posConfig)
+        this.prisma.paymentMethodConfig.deleteMany(),
+        this.prisma.selfOrderConfig.deleteMany(),
         this.prisma.preparationDisplay.deleteMany(),
         this.prisma.paymentTerminal.deleteMany(),
-        this.prisma.paymentMethodConfig.deleteMany(),
         this.prisma.iotDevice.deleteMany(),
-        this.prisma.selfOrderConfig.deleteMany(),
+        this.prisma.posConfig.deleteMany(),
         this.prisma.orderPreset.deleteMany(),
         this.prisma.cashRounding.deleteMany(),
         this.prisma.recipeComponent.deleteMany(),
