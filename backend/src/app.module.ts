@@ -80,7 +80,10 @@ import { ShiftsModule } from './modules/shifts/shifts.module';
     EventEmitterModule.forRoot(),
     // Global rate limiting: 100 requests / minute per IP by default.
     // Sensitive endpoints (e.g. login) tighten this with @Throttle().
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
+    // Generous global limit — this is a shared-IP internal app (many devices
+    // behind one restaurant IP + a data-heavy SPA). Sensitive endpoints (login)
+    // tighten this with @Throttle(). 100/min throttled the whole site at once.
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 3000 }]),
     // Serve frontend SPA - exclude API and uploads routes
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', '..', 'frontend', 'dist'),

@@ -19,7 +19,7 @@ export function clearAuth() { localStorage.removeItem('token'); localStorage.rem
 
 function redirectToLogin() { clearAuth(); if (window.location.pathname !== '/login') window.location.replace('/login'); }
 
-const api: AxiosInstance = axios.create({ baseURL: '/api', timeout: 30_000, headers: { 'Content-Type': 'application/json' } });
+const api: AxiosInstance = axios.create({ baseURL: '/api', timeout: 15_000, headers: { 'Content-Type': 'application/json' } });
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = getToken();

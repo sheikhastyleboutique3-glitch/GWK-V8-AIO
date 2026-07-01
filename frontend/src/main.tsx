@@ -61,8 +61,8 @@ const queryClient = new QueryClient({
     queries: {
       retry: 1,
       retryDelay: 1000,
-      staleTime: 0, // Always refetch on mount/navigate — instant fresh data on every page open.
-                     // WebSocket invalidation handles between-navigation freshness.
+      staleTime: 10_000, // 10s — instant from cache on revisit, light on the server;
+                         // WebSocket invalidation refreshes immediately on real changes.
       gcTime: 5 * 60_000, // Keep unused cache 5min (instant back-nav, still revalidates in bg)
       refetchOnWindowFocus: true, // Refetch when user tabs back (cheap, catches stale data)
       refetchOnReconnect: true,
