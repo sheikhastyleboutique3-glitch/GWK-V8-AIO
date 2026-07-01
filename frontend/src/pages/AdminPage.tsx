@@ -243,6 +243,14 @@ const RESET_MODULES = [
   { key: 'notifications', icon: '🔔', label: 'Notifications', desc: 'Alerts, inbox, audit logs' },
 ];
 
+const ADMIN_TABS = [
+  { id: 'overview', label: '📊 Overview' },
+  { id: 'invoice', label: '🧾 Invoice' },
+  { id: 'sounds', label: '🔔 Sounds' },
+  { id: 'drivers', label: '🚚 Drivers' },
+  { id: 'danger', label: '⚠️ Data & Reset' },
+];
+
 /** Granular per-module reset — clears ONE data area (backend: POST /admin/reset/:module). */
 function ModuleResetSection({ onDone }: { onDone: () => void }) {
   const [active, setActive] = useState<string | null>(null);
@@ -387,6 +395,7 @@ export default function AdminPage() {
   const [resetStep, setResetStep]     = useState<ResetStep>('choose');
   const [keepMaster, setKeepMaster]   = useState(true);
   const [confirmPhrase, setConfirmPhrase] = useState('');
+  const [activeTab, setActiveTab] = useState('overview');
 
   // ---- Queries ----
   const { data: stats, isLoading, refetch } = useQuery({
@@ -517,22 +526,34 @@ export default function AdminPage() {
     { title: t('admin.stats.pos'),          value: stats.counts.purchaseOrders, icon: '📝', color: 'blue'   as const },
   ] : [];
 
+  const show = (tab: string) => (activeTab === tab ? '' : 'hidden');
+
   return (
     <div className="space-y-6">
       <PageHeader title={`🛡️ ${t('admin.title')}`} subtitle={t('admin.subtitle')} />
 
-      {/* System Stats */}
-      {isLoading ? <LoadingSpinner /> : (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {statCards.map(s => <StatsCard key={s.title} {...s} />)}
-        </div>
-      )}
+      {/* Tabbed sections — each admin area is its own panel */}
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
+        {ADMIN_TABS.map((tb) => (
+          <button key={tb.id} onClick={() => setActiveTab(tb.id)}
+            className={`px-3.5 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${activeTab === tb.id ? 'bg-primary text-white' : 'bg-surface-2 text-fg-muted hover:bg-surface-3'}`}>
+            {tb.label}
+          </button>
+        ))}
+      </div>
 
-      {/* System health — live subsystem diagnostics */}
-      <SystemHealthSection />
+      {/* Overview: system stats + health */}
+      <div className={`space-y-6 ${show('overview')}`}>
+        {isLoading ? <LoadingSpinner /> : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {statCards.map(s => <StatsCard key={s.title} {...s} />)}
+          </div>
+        )}
+        <SystemHealthSection />
+      </div>
 
       {/* Invoice & Bill Customization */}
-      <div className="bg-surface rounded-2xl border border-border overflow-hidden">
+      <div className={`bg-surface rounded-2xl border border-border overflow-hidden ${show('invoice')}`}>
         <div className="px-5 py-4 border-b border-border bg-surface-2">
           <h3 className="font-semibold text-fg">🧾 {t('admin.invoiceCustomization')}</h3>
           <p className="text-xs text-fg-muted mt-0.5">{t('admin.invoiceSubtitle')}</p>
@@ -621,7 +642,7 @@ export default function AdminPage() {
       {/* ================================================================
           NOTIFICATION SOUNDS — real-time audible alerts/orders/requisitions
           ================================================================ */}
-      <div className="bg-surface rounded-2xl border border-border overflow-hidden">
+      <div className={`bg-surface rounded-2xl border border-border overflow-hidden ${show('sounds')}`}>
         <div className="px-5 py-4 border-b border-border bg-surface-2">
           <h3 className="font-semibold text-fg">🔔 {t('sound.title')}</h3>
           <p className="text-xs text-fg-muted mt-0.5">{t('sound.subtitle')}</p>
@@ -727,18 +748,18 @@ export default function AdminPage() {
       {/* ================================================================
           DRIVERS — manage dispatch drivers
           ================================================================ */}
-      <DriversSection />
+      <div className={show('drivers')}><DriversSection /></div>
 
       {/* ================================================================
           DATA MANAGEMENT — delete individual records
           ================================================================ */}
-      <DataManagementSection onDeleted={refetch} />
+      <div className={show('danger')}><DataManagementSection onDeleted={refetch} /></div>
 
       {/* Granular per-module resets (safer than a full wipe) */}
-      <ModuleResetSection onDone={refetch} />
+      <div className={show('danger')}><ModuleResetSection onDone={refetch} /></div>
 
       {/* Backup reminder before destructive resets */}
-      <div className="bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 rounded-2xl px-5 py-4">
+      <div className={`bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 rounded-2xl px-5 py-4 ${show('danger')}`}>
         <p className="text-sm font-semibold text-blue-900 dark:text-blue-300">💾 Back up before you wipe</p>
         <p className="text-xs text-blue-700 dark:text-blue-400/80 mt-1">
           Resets are permanent. On the server, run <code className="font-mono bg-blue-100 dark:bg-blue-500/20 px-1.5 py-0.5 rounded select-all">bash scripts/backup.sh</code> (or your DB dump) <strong>before</strong> a full wipe. Your PostgreSQL data is the source of truth — code redeploys never touch it, but resets do.
@@ -749,7 +770,7 @@ export default function AdminPage() {
           SYSTEM RESET — rebuilt from scratch
           No password required. 3-step flow: choose → confirm → done.
           ================================================================ */}
-      <div className="bg-surface rounded-2xl border border-red-200 dark:border-red-500/30 overflow-hidden">
+      <div className={`bg-surface rounded-2xl border border-red-200 dark:border-red-500/30 overflow-hidden ${show('danger')}`}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 bg-red-50 dark:bg-red-500/10 border-b border-red-200 dark:border-red-500/30">
           <div>
