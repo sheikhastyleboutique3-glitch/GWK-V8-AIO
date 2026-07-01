@@ -25,6 +25,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { StaffTasksService } from './staff-tasks.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { BranchIsolationGuard } from '../../common/guards/branch-isolation.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import {
@@ -78,7 +79,7 @@ const UPDATE: Role[] = [Role.SUPER_ADMIN, Role.BRANCH_MANAGER, Role.CLEANER, Rol
 
 @ApiTags('Staff Tasks')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, BranchIsolationGuard)
 @Controller('staff-tasks')
 export class StaffTasksController {
   constructor(private svc: StaffTasksService) {}

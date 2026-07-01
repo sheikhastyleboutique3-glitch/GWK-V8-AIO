@@ -14,6 +14,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { KdsService } from './kds.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { BranchIsolationGuard } from '../../common/guards/branch-isolation.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { KdsStatus, Role } from '@prisma/client';
@@ -48,7 +49,7 @@ const KITCHEN: Role[] = [
 
 @ApiTags('Kitchen Display')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, BranchIsolationGuard)
 @Controller('kds')
 export class KdsController {
   constructor(private svc: KdsService) {}

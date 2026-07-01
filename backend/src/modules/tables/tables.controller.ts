@@ -16,6 +16,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { TablesService } from './tables.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { BranchIsolationGuard } from '../../common/guards/branch-isolation.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ReservationStatus, Role, TableShape, TableStatus } from '@prisma/client';
@@ -93,7 +94,7 @@ const MANAGE: Role[] = [Role.SUPER_ADMIN, Role.BRANCH_MANAGER, Role.CASHIER, Rol
 
 @ApiTags('Tables & Reservations')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, BranchIsolationGuard)
 @Controller()
 export class TablesController {
   constructor(private svc: TablesService) {}

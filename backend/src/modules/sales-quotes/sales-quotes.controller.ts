@@ -5,6 +5,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { SalesQuotesService } from './sales-quotes.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { BranchIsolationGuard } from '../../common/guards/branch-isolation.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Role, SalesQuoteStatus } from '@prisma/client';
@@ -32,7 +33,7 @@ const MANAGE: Role[] = [Role.SUPER_ADMIN, Role.BRANCH_MANAGER];
 
 @ApiTags('Sales Quotes')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, BranchIsolationGuard)
 @Controller('sales-quotes')
 export class SalesQuotesController {
   constructor(private svc: SalesQuotesService) {}
