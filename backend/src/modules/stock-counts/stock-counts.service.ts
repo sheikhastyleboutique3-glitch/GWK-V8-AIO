@@ -1,13 +1,15 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { InventoryTxType } from '@prisma/client';
+import { InventoryTxType, FinanceEntryType } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
+import { FinanceService } from '../finance/finance.service';
 
 @Injectable()
 export class StockCountsService {
   constructor(
     private prisma: PrismaService,
     private inventory: InventoryService,
+    private finance: FinanceService,
   ) {}
 
   private async genNo(branchId: number) {
@@ -112,13 +114,15 @@ export class StockCountsService {
     // entire finalize back (stock is never left partially reconciled).
     //   - shrinkage (counted < system): FEFO deduct the difference (WASTAGE)
     //   - surplus   (counted > system): add the difference (RETURN_IN)
-    // NOTE: this moves STOCK only; the shrinkage cost is already captured on the
-    // count as varianceValue for reporting (no finance journal entry is posted).
+    // The net variance cost is also posted to the finance journal (WASTAGE type,
+    // signed) so COGS/inventory valuation stays accurate.
     await this.prisma.$transaction(
       async (tx) => {
+        let netCostImpact = 0; // signed: shrinkage negative (cost), surplus positive
         for (const item of count.items) {
           const variance = +(item.countedQty - item.systemQty).toFixed(4);
           if (!variance) continue;
+          netCostImpact += variance * item.unitCost;
           await this.inventory.applyManualAdjustment(
             tx,
             {
@@ -130,6 +134,24 @@ export class StockCountsService {
               performedById: userId ?? count.createdById ?? undefined,
             },
             { allowNegative: true },
+          );
+        }
+        // Post the net variance to the finance journal for accurate COGS.
+        // amount is signed (cost negative, gain positive) — matches varianceValue.
+        const amount = +netCostImpact.toFixed(2);
+        if (Math.abs(amount) >= 0.01) {
+          await this.finance.create(
+            {
+              type: FinanceEntryType.WASTAGE,
+              amount,
+              branchId: count.branchId,
+              sourceType: 'stock_count',
+              sourceId: count.id,
+              reference: count.countNo,
+              notes: `Stock count ${count.countNo} variance`,
+              createdById: userId ?? count.createdById ?? undefined,
+            },
+            tx,
           );
         }
         await tx.stockCount.update({ where: { id }, data: { status: 'FINALIZED', finalizedAt: new Date() } });
