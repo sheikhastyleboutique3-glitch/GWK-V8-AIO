@@ -38,7 +38,7 @@ export class StockCountsController {
   }
 
   @Post() @Roles(...MANAGE)
-  create(@Query('branchId', ParseIntPipe) branchId: number, @CurrentUser('id') userId: number) {
+  create(@Query('branchId', ParseIntPipe) branchId: number, @CurrentUser('sub') userId: number) {
     return this.svc.create(branchId, userId);
   }
 
@@ -48,7 +48,7 @@ export class StockCountsController {
   }
 
   @Post(':id/finalize') @Roles(...MANAGE)
-  finalize(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.finalize(id);
+  finalize(@Param('id', ParseIntPipe) id: number, @CurrentUser('sub') userId: number) {
+    return this.svc.finalize(id, userId);
   }
 }

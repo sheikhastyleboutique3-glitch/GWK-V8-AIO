@@ -1,9 +1,14 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { InventoryTxType } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { InventoryService } from '../inventory/inventory.service';
 
 @Injectable()
 export class StockCountsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private inventory: InventoryService,
+  ) {}
 
   private async genNo(branchId: number) {
     const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -96,11 +101,41 @@ export class StockCountsService {
     return this.get(id);
   }
 
-  async finalize(id: number) {
-    const count = await this.prisma.stockCount.findUnique({ where: { id } });
+  async finalize(id: number, userId?: number) {
+    const count = await this.prisma.stockCount.findUnique({ where: { id }, include: { items: true } });
     if (!count) throw new NotFoundException(`Stock count ${id} not found`);
     if (count.status !== 'DRAFT') throw new BadRequestException('Count is already finalized.');
-    await this.prisma.stockCount.update({ where: { id }, data: { status: 'FINALIZED', finalizedAt: new Date() } });
+
+    // Reconcile system stock to the physically counted quantities — this is the
+    // whole point of a count. Done atomically: every item's variance adjustment
+    // + the status change commit together, so a failure on any item rolls the
+    // entire finalize back (stock is never left partially reconciled).
+    //   - shrinkage (counted < system): FEFO deduct the difference (WASTAGE)
+    //   - surplus   (counted > system): add the difference (RETURN_IN)
+    // NOTE: this moves STOCK only; the shrinkage cost is already captured on the
+    // count as varianceValue for reporting (no finance journal entry is posted).
+    await this.prisma.$transaction(
+      async (tx) => {
+        for (const item of count.items) {
+          const variance = +(item.countedQty - item.systemQty).toFixed(4);
+          if (!variance) continue;
+          await this.inventory.applyManualAdjustment(
+            tx,
+            {
+              productId: item.productId,
+              branchId: count.branchId,
+              quantity: Math.abs(variance),
+              type: variance < 0 ? InventoryTxType.WASTAGE : InventoryTxType.RETURN_IN,
+              notes: `Stock count ${count.countNo} reconciliation (${variance > 0 ? '+' : ''}${variance})`,
+              performedById: userId ?? count.createdById ?? undefined,
+            },
+            { allowNegative: true },
+          );
+        }
+        await tx.stockCount.update({ where: { id }, data: { status: 'FINALIZED', finalizedAt: new Date() } });
+      },
+      { isolationLevel: 'Serializable', maxWait: 10_000, timeout: 30_000 },
+    );
     return this.get(id);
   }
 }

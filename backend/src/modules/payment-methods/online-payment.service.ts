@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
 /**
@@ -40,6 +40,15 @@ export class OnlinePaymentService {
   constructor(private prisma: PrismaService) {}
 
   /**
+   * Demo mode must be turned on EXPLICITLY (PAYMENT_DEMO_MODE=true). Otherwise
+   * this service fails closed: it will never auto-approve a payment, so a
+   * production server without a real provider SDK can't mark unpaid orders paid.
+   */
+  private get demoMode(): boolean {
+    return process.env.PAYMENT_DEMO_MODE === 'true';
+  }
+
+  /**
    * Create a payment intent. In production, this calls the provider API
    * (Stripe PaymentIntent, Tap Charge, etc.) and returns a client secret
    * or checkout URL. For demo, it auto-generates a mock.
@@ -51,41 +60,25 @@ export class OnlinePaymentService {
     const id = `pi_${provider}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
     // ──────────────────────────────────────────────────────────────────────
-    // PROVIDER INTEGRATION SEAM — replace this block with real SDK calls:
-    //
-    // if (provider === 'stripe') {
-    //   const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-    //   const intent = await stripe.paymentIntents.create({
-    //     amount: Math.round(input.amount * 100),
-    //     currency: currency.toLowerCase(),
-    //     metadata: input.metadata,
-    //   });
-    //   return { id: intent.id, status: 'pending', amount: input.amount, currency, provider, checkoutUrl: intent.client_secret, createdAt: new Date() };
-    // }
-    //
-    // if (provider === 'tap') {
-    //   const tap = require('@tap-payments/tap-nodejs');
-    //   const charge = await tap.charges.create({ amount: input.amount, currency, ...});
-    //   return { id: charge.id, status: 'pending', ...};
-    // }
+    // PROVIDER INTEGRATION SEAM — replace this block with real SDK calls
+    // (Stripe PaymentIntent, Tap Charge, Checkout.qa, ...). See git history.
     // ──────────────────────────────────────────────────────────────────────
 
-    // Demo mode: auto-approve after a short delay (simulates gateway)
-    this.logger.log(`[DEMO] Payment intent created: ${id} for ${currency} ${input.amount}`);
+    // FAIL CLOSED: no real provider is wired. Only the demo auto-approve path
+    // is allowed, and only when explicitly enabled. This prevents a production
+    // server from silently approving unpaid online/QR orders.
+    if (!this.demoMode) {
+      throw new ServiceUnavailableException(
+        'Online payments are not configured on this server. Wire a provider SDK, or set PAYMENT_DEMO_MODE=true for demos.',
+      );
+    }
 
-    // Generate a mock QR payload (in production this would be the bank's QR standard)
-    const qrData = JSON.stringify({
-      type: 'payment',
-      id,
-      amount: input.amount,
-      currency,
-      merchant: 'GWK Restaurant',
-      timestamp: Date.now(),
-    });
+    this.logger.warn(`[DEMO] Auto-approving payment intent ${id} for ${currency} ${input.amount} — NOT a real charge`);
+    const qrData = JSON.stringify({ type: 'payment', id, amount: input.amount, currency, merchant: 'GWK Restaurant', timestamp: Date.now() });
 
     return {
       id,
-      status: 'approved', // Demo: auto-approve
+      status: 'approved', // Demo only (PAYMENT_DEMO_MODE=true)
       amount: input.amount,
       currency,
       provider,
@@ -97,18 +90,16 @@ export class OnlinePaymentService {
 
   /**
    * Verify a payment intent status. In production, checks with the provider.
-   * Returns 'approved' if payment was successful.
+   * Fails closed: without a real provider (demo mode off) it never reports
+   * 'approved'.
    */
   async verifyIntent(intentId: string): Promise<{ status: 'approved' | 'pending' | 'failed'; intentId: string }> {
-    // ──────────────────────────────────────────────────────────────────────
-    // PROVIDER INTEGRATION SEAM:
-    // const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-    // const intent = await stripe.paymentIntents.retrieve(intentId);
-    // return { status: intent.status === 'succeeded' ? 'approved' : 'pending', intentId };
-    // ──────────────────────────────────────────────────────────────────────
-
-    // Demo: always approved
-    this.logger.log(`[DEMO] Payment intent verified: ${intentId} → approved`);
+    // PROVIDER INTEGRATION SEAM: query the real provider and map its status.
+    if (!this.demoMode) {
+      // Never auto-approve without a real provider verification.
+      return { status: 'pending', intentId };
+    }
+    this.logger.warn(`[DEMO] Payment intent ${intentId} → approved (demo mode)`);
     return { status: 'approved', intentId };
   }
 }
