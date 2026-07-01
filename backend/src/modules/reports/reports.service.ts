@@ -42,6 +42,53 @@ export interface ExportFilters {
 export class ReportsService {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * Tips pooling report — total and per-staff tips over a period. Attribution
+   * is via order.createdById (the cashier/waiter who rang the order). Voided and
+   * refunded orders are excluded. Includes an equal-split figure to help pool.
+   */
+  async tipsSummary(branchId?: number, from?: string, to?: string) {
+    const where: any = { tip: { gt: 0 }, completedAt: { not: null }, status: { notIn: ['VOIDED', 'REFUNDED'] } };
+    if (branchId) where.branchId = branchId;
+    if (from || to) {
+      where.completedAt = { not: null };
+      if (from) where.completedAt.gte = new Date(from);
+      if (to) where.completedAt.lte = new Date(to);
+    }
+
+    const [byStaff, total] = await Promise.all([
+      this.prisma.order.groupBy({ by: ['createdById'], where, _sum: { tip: true }, _count: true }),
+      this.prisma.order.aggregate({ where, _sum: { tip: true }, _count: true }),
+    ]);
+
+    const staffIds = byStaff.map((s) => s.createdById).filter((id): id is number => id != null);
+    const users = staffIds.length
+      ? await this.prisma.user.findMany({ where: { id: { in: staffIds } }, select: { id: true, firstName: true, lastName: true } })
+      : [];
+    const nameById = new Map(users.map((u) => [u.id, `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() || `User #${u.id}`]));
+
+    const totalTips = total._sum.tip ?? 0;
+    const orderCount = total._count ?? 0;
+    const byStaffOut = byStaff
+      .map((s) => ({
+        userId: s.createdById,
+        name: s.createdById != null ? (nameById.get(s.createdById) ?? `User #${s.createdById}`) : 'Unattributed',
+        tips: Math.round((s._sum.tip ?? 0) * 100) / 100,
+        orders: s._count,
+        share: totalTips > 0 ? Math.round(((s._sum.tip ?? 0) / totalTips) * 1000) / 10 : 0,
+      }))
+      .sort((a, b) => b.tips - a.tips);
+
+    return {
+      totalTips: Math.round(totalTips * 100) / 100,
+      orderCount,
+      perOrderAvg: orderCount > 0 ? Math.round((totalTips / orderCount) * 100) / 100 : 0,
+      staffCount: byStaffOut.length,
+      equalSplit: byStaffOut.length ? Math.round((totalTips / byStaffOut.length) * 100) / 100 : 0,
+      byStaff: byStaffOut,
+    };
+  }
+
   async wastageSummary(branchId?: number, from?: string, to?: string) {
     const where: any = {};
     if (branchId) where.branchId = branchId;

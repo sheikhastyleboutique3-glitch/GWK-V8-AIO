@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { InventoryTxType } from '@prisma/client';
+import { PurchaseOrdersService } from '../purchase-orders/purchase-orders.service';
 
 export interface Suggestion {
   productId: number;
@@ -17,7 +18,10 @@ export interface Suggestion {
 
 @Injectable()
 export class ReplenishmentService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private po: PurchaseOrdersService,
+  ) {}
 
   /**
    * Auto-reorder suggestions: products at a branch whose on-hand has fallen to or
@@ -77,5 +81,54 @@ export class ReplenishmentService {
       });
     }
     return out.sort((a, b) => b.suggestedQty - a.suggestedQty);
+  }
+
+  /**
+   * Turn replenishment suggestions into DRAFT purchase orders — one PO per
+   * supplier, priced at each product's costPrice. Products with no supplier are
+   * skipped and reported back. Reuses the proven PurchaseOrdersService.create so
+   * PO numbering, totals and status handling stay consistent.
+   */
+  async generateDraftPurchaseOrders(branchId: number, userId: number, coverDays = 7, lookbackDays = 14) {
+    const suggestions = await this.suggestions(branchId, coverDays, lookbackDays);
+    if (!suggestions.length) {
+      return { created: 0, skipped: [], purchaseOrders: [], message: 'Nothing to reorder — all stock is above its reorder point.' };
+    }
+
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: suggestions.map((s) => s.productId) } },
+      select: { id: true, name: true, supplierId: true, costPrice: true, unitId: true },
+    });
+    const meta = new Map(products.map((p) => [p.id, p]));
+
+    // Group suggested items by supplier; skip products without a supplier.
+    const bySupplier = new Map<number, { productId: number; unitId?: number; orderedQty: number; unitPrice: number }[]>();
+    const skipped: string[] = [];
+    for (const s of suggestions) {
+      const m = meta.get(s.productId);
+      if (!m?.supplierId) { skipped.push(s.name); continue; }
+      const arr = bySupplier.get(m.supplierId) ?? [];
+      arr.push({ productId: s.productId, unitId: m.unitId ?? undefined, orderedQty: s.suggestedQty, unitPrice: m.costPrice ?? 0 });
+      bySupplier.set(m.supplierId, arr);
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const purchaseOrders = [];
+    for (const [supplierId, items] of bySupplier) {
+      const po = await this.po.create(
+        { supplierId, branchId, notes: `Auto-generated from replenishment suggestions (${today})`, items },
+        userId,
+      );
+      purchaseOrders.push(po);
+    }
+
+    return {
+      created: purchaseOrders.length,
+      skipped,
+      purchaseOrders,
+      message: purchaseOrders.length
+        ? `Created ${purchaseOrders.length} draft PO(s)${skipped.length ? `; ${skipped.length} item(s) skipped (no supplier)` : ''}.`
+        : 'No POs created — suggested products have no supplier assigned.',
+    };
   }
 }

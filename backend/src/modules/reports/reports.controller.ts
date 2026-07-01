@@ -33,6 +33,17 @@ export class ReportsController {
     return this.svc.financials(branchId ? +branchId : undefined);
   }
 
+  /** Tips pooling report — total + per-staff tips over a period. */
+  @Get('tips')
+  @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
+  tips(
+    @Query('branchId') branchId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.svc.tipsSummary(branchId ? +branchId : undefined, from, to);
+  }
+
   @Get('cost-variance')
   @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER, Role.PROCUREMENT)
   costVariance(@Query('branchId') branchId?: string) {
