@@ -232,18 +232,24 @@ async function main() {
   const catBites    = await prisma.category.upsert({ where: { id: 13 }, update: { station: 'HOT KITCHEN' },     create: { id: 13, name: 'Light Bites',     nameAr: 'وجبات خفيفة',   icon: '🥪', sortOrder: 14, station: 'HOT KITCHEN' } });
 
   // Helper: create a sellable menu item + its recipe (BOM) in one go.
-  // `price` is the SALE price (what the customer pays); costPrice is computed
-  // later from the recipe BOM but we seed a rough estimate (~30% of sale).
+  // `price` is the SALE price. costPrice is the REAL BOM cost, computed from the
+  // ingredient costs (Σ qty × component.costPrice) — so the demo shows
+  // recipe cost == selling-item cost, matching the runtime cost roll-up.
   const menuItem = async (
     sku: string, name: string, nameAr: string, categoryId: number, price: number,
     components: Array<{ id: number; qty: number; unit: number }>,
     emoji = '🍽️',
   ) => {
-    const estimatedCost = Math.round(price * 0.3 * 100) / 100;
+    const comps = await prisma.product.findMany({
+      where: { id: { in: components.map((c) => c.id) } },
+      select: { id: true, costPrice: true },
+    });
+    const costMap = new Map(comps.map((c) => [c.id, c.costPrice]));
+    const bomCost = Math.round(components.reduce((s, c) => s + c.qty * (costMap.get(c.id) ?? 0), 0) * 100) / 100;
     const prod = await prisma.product.upsert({
       where: { sku },
-      update: { isSellable: true, productType: 'MENU', salePrice: price, costPrice: estimatedCost, categoryId, name, nameAr },
-      create: { sku, name, nameAr, categoryId, unitId: pcs.id, salePrice: price, costPrice: estimatedCost, isSellable: true, productType: 'MENU', taxCategory: 'FOOD', allergens: [] },
+      update: { isSellable: true, productType: 'MENU', salePrice: price, costPrice: bomCost, categoryId, name, nameAr },
+      create: { sku, name, nameAr, categoryId, unitId: pcs.id, salePrice: price, costPrice: bomCost, isSellable: true, productType: 'MENU', taxCategory: 'FOOD', allergens: [] },
     });
     await prisma.recipe.create({
       data: {
