@@ -13,7 +13,7 @@ type ProductType = 'RAW' | 'SEMI_FINISHED';
 const EMPTY = {
   name: '', nameAr: '', sku: '', costPrice: '', categoryId: '', unitId: '',
   description: '', productType: 'RAW' as ProductType,
-  reorderLevel: '', supplierId: '',
+  reorderLevel: '', supplierId: '', imageUrl: '',
 };
 
 /**
@@ -31,6 +31,8 @@ export default function WarehouseItemsPage() {
   const [form, setForm] = useState({ ...EMPTY });
   const [editId, setEditId] = useState<number | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [uploadingImg, setUploadingImg] = useState(false);
 
   const canWrite = ['SUPER_ADMIN', 'BRANCH_MANAGER', 'PROCUREMENT', 'WAREHOUSE'].includes(user?.role || '');
 
@@ -82,18 +84,36 @@ export default function WarehouseItemsPage() {
         productType: form.productType,
         isSellable: false,
         isAvailable: true,
-        reorderLevel: form.reorderLevel ? parseFloat(form.reorderLevel) : undefined,
+        // NOTE: DTO field is reorderPoint (not reorderLevel) — sending the wrong
+        // key would be rejected by the global whitelist validator.
+        reorderPoint: form.reorderLevel ? parseFloat(form.reorderLevel) : undefined,
       };
+      // Step 1: save the product, get its id
+      let productId = editId;
       if (editId) {
-        return api.patch(`/products/${editId}`, payload);
+        await api.patch(`/products/${editId}`, payload);
+      } else {
+        const res = await api.post('/products', payload);
+        productId = res.data.data?.id ?? res.data?.id;
       }
-      return api.post('/products', payload);
+      // Step 2: if a new image was chosen, upload it to the product.
+      if (imageFile && productId) {
+        setUploadingImg(true);
+        try {
+          const fd = new FormData();
+          fd.append('image', imageFile);
+          await api.post(`/products/${productId}/image`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        } finally {
+          setUploadingImg(false);
+        }
+      }
     },
     onSuccess: () => {
       toast.success(editId ? 'Item updated' : 'Item created');
       setShowForm(false);
       setEditId(null);
       setForm({ ...EMPTY });
+      setImageFile(null);
       refresh();
     },
     onError: (e: any) => toast.error(e.response?.data?.message || 'Failed'),
@@ -109,15 +129,18 @@ export default function WarehouseItemsPage() {
       unitId: String(p.unitId ?? ''),
       description: p.description || '',
       productType: p.productType || 'RAW',
-      reorderLevel: String(p.reorderLevel ?? ''),
+      reorderLevel: String(p.reorderPoint ?? ''),
       supplierId: String(p.supplierId ?? ''),
+      imageUrl: p.imageUrl || '',
     });
+    setImageFile(null);
     setEditId(p.id);
     setShowForm(true);
   };
 
   const openNew = () => {
     setForm({ ...EMPTY });
+    setImageFile(null);
     setEditId(null);
     setShowForm(true);
   };
@@ -163,8 +186,15 @@ export default function WarehouseItemsPage() {
               {items.map((p: any) => (
                 <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                   <td className="px-4 py-3">
-                    <div className="font-medium text-gray-900 dark:text-gray-100">{p.name}</div>
-                    {p.nameAr && p.nameAr !== p.name && <div className="text-xs text-gray-400" dir="rtl">{p.nameAr}</div>}
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex items-center justify-center overflow-hidden shrink-0">
+                        {p.imageUrl ? <img src={p.imageUrl} alt="" className="h-full w-full object-cover" /> : <span className="text-lg">{p.category?.icon || '📦'}</span>}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-medium text-gray-900 dark:text-gray-100 truncate">{p.name}</div>
+                        {p.nameAr && p.nameAr !== p.name && <div className="text-xs text-gray-400 truncate" dir="rtl">{p.nameAr}</div>}
+                      </div>
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500 font-mono">{p.sku}</td>
                   <td className="px-4 py-3">
@@ -211,6 +241,24 @@ export default function WarehouseItemsPage() {
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4">{editId ? 'Edit Item' : 'Add New Warehouse Item'}</h3>
             <div className="space-y-4">
+              {/* Item photo */}
+              <div className="flex items-center gap-4">
+                <div className="h-20 w-20 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex items-center justify-center overflow-hidden shrink-0">
+                  {imageFile ? (
+                    <img src={URL.createObjectURL(imageFile)} alt="" className="h-full w-full object-cover" />
+                  ) : form.imageUrl ? (
+                    <img src={form.imageUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="text-3xl">📦</span>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Item Photo</label>
+                  <input type="file" accept="image/png,image/jpeg,image/webp" onChange={e => setImageFile(e.target.files?.[0] || null)}
+                    className="text-sm text-gray-600 dark:text-gray-300 max-w-full" />
+                  <p className="text-[11px] text-gray-400 mt-1">JPG/PNG/WebP, up to 2MB — uploaded when you save.</p>
+                </div>
+              </div>
               {/* Product Type */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Product Type *</label>
@@ -255,6 +303,9 @@ export default function WarehouseItemsPage() {
                     <option value="">None</option>
                     {(categories || []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
+                  {!categories?.length && (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">No categories yet — add them on the Categories page.</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Unit</label>
