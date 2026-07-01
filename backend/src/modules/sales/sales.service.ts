@@ -134,9 +134,14 @@ export class SalesService {
   ) {
     const subtotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
     const itemDiscounts = items.reduce((s, i) => s + (i.discount ?? 0), 0);
-    const discountTotal = itemDiscounts + couponDiscount + ruleDiscount;
+    // Cap the combined discount at the merchandise subtotal. Coupons are capped
+    // individually, but item + coupon + rule discounts are summed — without this
+    // cap a stacked/over-entered discount could exceed the subtotal and push the
+    // order total (and the finance/refund entries derived from it) negative.
+    const discountTotal = Math.min(itemDiscounts + couponDiscount + ruleDiscount, subtotal);
     const taxTotal = items.reduce((s, i) => s + (i.taxAmount ?? 0), 0);
-    const total = subtotal - discountTotal + taxTotal + serviceCharge + tip;
+    // Floor at zero as a final guard (tax/service/tip are non-negative).
+    const total = Math.max(0, subtotal - discountTotal + taxTotal + serviceCharge + tip);
     return { subtotal, discountTotal, taxTotal, total };
   }
 
