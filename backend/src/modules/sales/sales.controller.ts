@@ -27,6 +27,7 @@ import { SalesService } from './sales.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { BranchIsolationGuard } from '../../common/guards/branch-isolation.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { OrderChannel, OrderStatus, PaymentMethod, Role } from '@prisma/client';
@@ -132,7 +133,7 @@ const POS_ROLES: Role[] = [
 
 @ApiTags('Sales')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, BranchIsolationGuard)
 @Controller('sales/orders')
 export class SalesController {
   constructor(private svc: SalesService, private audit: AuditService) {}

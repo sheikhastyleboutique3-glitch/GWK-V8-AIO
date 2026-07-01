@@ -27,18 +27,19 @@ export class BranchIsolationGuard implements CanActivate {
       branchIds.push(user.branchId);
     }
 
-    // If a branchId is specified in query/body, validate it's in the user's assigned branches
+    // If a branchId is specified in query/body, validate it's in the user's
+    // assigned branches. IMPORTANT: only enforce when the user actually has
+    // branch assignments — a non-admin with an empty branchIds array is treated
+    // as unrestricted (matches pre-guard behaviour, so rolling this guard out to
+    // more controllers can't cause false 403s for company-wide roles).
     const queryBranchId = parseInt(request.query?.branchId, 10);
     const bodyBranchId = parseInt(request.body?.branchId, 10);
 
-    if (queryBranchId && !isNaN(queryBranchId)) {
-      if (!branchIds.includes(queryBranchId)) {
+    if (branchIds.length > 0) {
+      if (queryBranchId && !isNaN(queryBranchId) && !branchIds.includes(queryBranchId)) {
         throw new ForbiddenException('Access denied: you are not assigned to this branch');
       }
-    }
-
-    if (bodyBranchId && !isNaN(bodyBranchId)) {
-      if (!branchIds.includes(bodyBranchId)) {
+      if (bodyBranchId && !isNaN(bodyBranchId) && !branchIds.includes(bodyBranchId)) {
         throw new ForbiddenException('Access denied: you are not assigned to this branch');
       }
     }
