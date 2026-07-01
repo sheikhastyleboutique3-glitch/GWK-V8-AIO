@@ -140,6 +140,11 @@ export class AdminService {
       this.prisma.loyaltyCard.deleteMany(),
       // Deliveries (driver GPS)
       this.prisma.driverLocation.deleteMany(),
+      // Sales quotes, gift cards, staff tasks (transactional)
+      this.prisma.salesQuoteItem.deleteMany(),
+      this.prisma.salesQuote.deleteMany(),
+      this.prisma.giftCard.deleteMany(),
+      this.prisma.staffTask.deleteMany(),
       // System logs
       this.prisma.systemResetLog.deleteMany(),
     ]);
@@ -159,12 +164,22 @@ export class AdminService {
       'staff_shifts', 'production_consumptions', 'production_orders',
       'stock_count_items', 'stock_counts', 'reservations',
       'loyalty_cards', 'driver_locations', 'system_reset_logs',
+      'sales_quote_items', 'sales_quotes', 'gift_cards', 'staff_tasks',
     ];
     for (const table of transactionalTables) await this.resetSequence(table);
 
     if (!keepMasterData) {
       this.logger.log('Deleting master data...');
       await this.prisma.$transaction([
+        // POS/terminal/config first — posConfig references cashRounding/preset/floor
+        this.prisma.posConfig.deleteMany(),
+        this.prisma.preparationDisplay.deleteMany(),
+        this.prisma.paymentTerminal.deleteMany(),
+        this.prisma.paymentMethodConfig.deleteMany(),
+        this.prisma.iotDevice.deleteMany(),
+        this.prisma.selfOrderConfig.deleteMany(),
+        this.prisma.orderPreset.deleteMany(),
+        this.prisma.cashRounding.deleteMany(),
         this.prisma.recipeComponent.deleteMany(),
         this.prisma.recipe.deleteMany(),
         this.prisma.comboChoice.deleteMany(),
@@ -178,8 +193,11 @@ export class AdminService {
         this.prisma.productTax.deleteMany(),
         this.prisma.productAttributeLine.deleteMany(),
         this.prisma.productVariant.deleteMany(),
+        this.prisma.productAttributeValue.deleteMany(),
+        this.prisma.productAttribute.deleteMany(),
         this.prisma.product.deleteMany(),
         this.prisma.category.deleteMany(),
+        this.prisma.printer.deleteMany(),
         this.prisma.unit.deleteMany(),
         this.prisma.supplier.deleteMany(),
         this.prisma.customer.deleteMany(),
@@ -190,6 +208,9 @@ export class AdminService {
         this.prisma.driver.deleteMany(),
         this.prisma.deliveryPlatform.deleteMany(),
         this.prisma.discountRule.deleteMany(),
+        this.prisma.fiscalPositionTaxMap.deleteMany(),
+        this.prisma.fiscalPosition.deleteMany(),
+        this.prisma.taxRate.deleteMany(),
         this.prisma.restaurantTable.deleteMany(),
         this.prisma.restaurantFloor.deleteMany(),
         this.prisma.user.deleteMany({ where: { role: { not: 'SUPER_ADMIN' } } }),
@@ -203,6 +224,11 @@ export class AdminService {
         'product_modifier_groups', 'product_taxes', 'product_attribute_lines',
         'product_variants', 'coupons', 'loyalty_programs', 'loyalty_rules',
         'loyalty_rewards', 'drivers', 'delivery_platforms', 'discount_rules',
+        'pos_configs', 'preparation_displays', 'payment_terminals',
+        'payment_method_configs', 'iot_devices', 'self_order_configs',
+        'order_presets', 'cash_roundings', 'product_attribute_values',
+        'product_attributes', 'fiscal_position_tax_maps', 'fiscal_positions',
+        'tax_rates', 'printers',
         'restaurant_tables', 'restaurant_floors', 'user_branches', 'user_views',
       ];
       for (const table of masterTables) await this.resetSequence(table);
