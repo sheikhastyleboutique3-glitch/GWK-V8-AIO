@@ -36,6 +36,8 @@
 - [User Roles](#-user-roles)
 - [Module Map](#-module-map)
 - [Database Schema](#-database-schema)
+- [Cost Model (Recipe/BOM)](#-cost-model--how-cost-recipebom--selling-item-cost-relate)
+- [System Reset](#-system-reset-admin--data--reset)
 - [API Reference](#-api-reference)
 - [Performance](#-performance)
 - [Security](#-security)
@@ -481,6 +483,67 @@ backend/src/modules/
 2. **FEFO with SELECT FOR UPDATE** — serializable transactions prevent race conditions
 3. **Immutable transactions** — never hard-delete; soft-void with audit trail
 4. **Idempotency** — 60s in-memory cache prevents double-orders on rapid POS taps
+
+---
+
+## 💰 Cost Model — how Cost, Recipe/BOM & Selling-Item cost relate
+
+This is the #1 source of confusion, so here it is precisely. There are **two
+kinds of cost** and they meet through the recipe:
+
+| Term | What it is | Where it lives |
+|------|-----------|----------------|
+| **Ingredient cost** | The purchase cost of a *raw* item (flour, milk…) | `product.costPrice` on the RAW item, updated by purchase orders |
+| **Recipe / BOM cost** | The *computed* cost to make one unit of a menu item, from its ingredients | `recipes.cost()` — calculated live |
+| **Selling-item cost** | The cost stored on the *menu* item, used for margin/food-cost % | `product.costPrice` on the MENU item |
+
+### How the recipe/BOM cost is computed
+```
+unitCost = (Σ component.qty × (1 + component.waste%) × component.costPrice)
+           × (1 + prepLoss% + cookLoss% + waste%)      ← recipe loss factors
+           ÷ recipe.yieldQty                            ← per finished unit
+```
+Example — a 12-cup Karak batch:
+- 3 L milk @ 4.00 + 200 g tea @ 0.05/g + sugar … = **48.00 raw**
+- ×1.05 (5% total loss) = 50.40 batch → ÷ 12 cups = **4.20 / cup**
+
+### Why "recipe cost" and "selling-item cost" used to differ
+The menu item's `costPrice` is a **stored field**; the recipe cost is
+**computed**. They were never linked — so a menu item could show `costPrice = 0`
+while its recipe clearly costs 4.20. 
+
+**Fixed (v8.2):** whenever you create, edit, or activate the **active** recipe,
+the computed BOM unit cost is now **rolled up into the menu item's `costPrice`
+automatically** (Odoo-style). So the selling item's cost always reflects its
+ingredients. (Update your raw-item costs → re-save/activate the recipe to
+refresh the rolled-up cost.)
+
+### What each cost is used for
+- **COGS at sale time** — for items *with* a recipe, COGS is taken from the
+  **live recipe explosion** (actual ingredient costs at that moment, FEFO
+  batch cost). For items *without* a recipe, COGS = the item's own `costPrice`.
+- **Margin / food-cost %** on reports & menu engineering — uses the menu item's
+  (now rolled-up) `costPrice` vs `salePrice`.
+
+---
+
+## 🧹 System Reset (Admin → Data & Reset)
+
+Two levels, both gated behind a typed confirmation phrase, FK-safe, with
+sequence realignment afterwards:
+
+| | 🧹 Soft Reset (keep master data) | 💣 Full Wipe |
+|---|---|---|
+| **Phrase** | `PURGE-ALL-OPERATIONAL-DATA-TO-ZERO` | same + choose "Full" |
+| **Clears** | orders, payments, POS sessions, finance, inventory + batches + transactions, transfers, requisitions, POs, production, stock counts, wastage, reservations, loyalty cards, driver GPS, **sales quotes, gift cards, staff tasks**, alerts, audit, notifications | **Everything above PLUS** products, categories, units, suppliers, customers, recipes, combos, pricelists, modifiers, discounts, loyalty programs, drivers, delivery platforms, tables/floors, **POS configs, payment terminals & methods, IoT devices, self-order configs, order presets, cash roundings, product attributes, fiscal positions, tax rates, printers**, and all non-super-admin users |
+| **Always kept** | products, users, branches, categories, suppliers, settings | Super-admin accounts, branches, settings |
+
+**Granular resets** (safer, one domain at a time) are also available:
+`sales`, `inventory`, `finance`, `procurement`, `notifications` — each with its
+own `RESET-<MODULE>` phrase. Every destructive action is written to the audit log.
+
+> ⚠️ **Back up first.** Run `bash scripts/backup.sh` (or a DB dump) before any
+> wipe — resets are permanent. Code redeploys never touch your data; resets do.
 
 ---
 
