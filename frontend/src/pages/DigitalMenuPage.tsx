@@ -84,7 +84,7 @@ export default function DigitalMenuPage() {
       const json = await r.json();
       return json?.data || json || [];
     },
-    staleTime: 5 * 60_000,
+    staleTime: 10_000, // 10s — fast reload for menu testing
     retry: 2,
     retryDelay: 1000,
   });
@@ -118,7 +118,7 @@ export default function DigitalMenuPage() {
       const json = await r.json();
       return json?.data || json || {};
     },
-    staleTime: 2 * 60_000,
+    staleTime: 10_000,
     refetchInterval: 60_000,
     retry: 2,
     retryDelay: 1000,

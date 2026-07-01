@@ -59,11 +59,12 @@ window.addEventListener('unhandledrejection', (event) => {
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1, // Single retry (was 3 — too slow on flaky networks)
-      retryDelay: 1000, // 1s flat (was exponential up to 10s)
-      staleTime: 5 * 60_000, // 5 MINUTES — data is considered fresh much longer
-      gcTime: 30 * 60_000, // 30min — keep in cache even if unused
-      refetchOnWindowFocus: false, // WebSocket handles real-time sync
+      retry: 1,
+      retryDelay: 1000,
+      staleTime: 0, // Always refetch on mount/navigate — instant fresh data on every page open.
+                     // WebSocket invalidation handles between-navigation freshness.
+      gcTime: 5 * 60_000, // Keep unused cache 5min (instant back-nav, still revalidates in bg)
+      refetchOnWindowFocus: true, // Refetch when user tabs back (cheap, catches stale data)
       refetchOnReconnect: true,
       // Show previous data instantly while background refetch happens
       placeholderData: (prev: any) => prev,
