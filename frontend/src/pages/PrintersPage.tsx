@@ -59,8 +59,8 @@ export default function PrintersPage() {
       <div className="grid md:grid-cols-3 gap-5">
         <div className="md:col-span-2">
           {isLoading ? <LoadingSpinner /> : (
-            <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden bg-white dark:bg-gray-900">
-              <table className="w-full text-sm">
+            <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-x-auto bg-white dark:bg-gray-900">
+              <table className="w-full min-w-[560px] text-sm">
                 <thead>
                   <tr className="text-[10px] uppercase text-gray-400 border-b border-gray-100 dark:border-gray-800">
                     <th className="text-start p-3">{t('printers.name')}</th>

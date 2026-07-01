@@ -186,8 +186,8 @@ export default function TransfersPage() {
                 )}
               </div>
 
-              <div className="mt-3 border-t border-gray-50 pt-2">
-                <table className="w-full text-xs">
+              <div className="mt-3 border-t border-gray-50 pt-2 overflow-x-auto">
+                <table className="w-full min-w-[480px] text-xs">
                   <thead className="text-gray-400">
                     <tr><th className="text-start py-1">Item</th><th className="text-center">Qty</th><th className="text-start">Batch</th><th className="text-start">Expiry (moving)</th></tr>
                   </thead>

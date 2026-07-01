@@ -87,8 +87,8 @@ const OrdersListView = React.memo(function OrdersListView({
           <option value="REFUNDED">Refunded</option>
         </select>
       </div>
-      <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-x-auto">
+        <table className="w-full min-w-[720px] text-sm">
           <thead className="bg-gray-50 dark:bg-gray-900/50 text-gray-500 text-xs uppercase">
             <tr>
               <th className="text-left px-3 py-2">Date</th>
