@@ -37,6 +37,7 @@ export default function SettingsPage() {
     { group: 'review', label: '\u2b50 Customer Reviews', keys: ['review_url'] },
     { group: 'staff_perf', label: '\ud83d\udcca Staff Performance', keys: ['staff_performance_enabled'] },
     { group: 'digital_menu', label: '\ud83d\udcf1 Digital Menu (QR)', keys: ['menu_banner_url', 'theme_brand_color', 'menu_enable_ordering', 'menu_show_prices', 'menu_closed_message', 'menu_footer_text', 'menu_3d_effects'] },
+    { group: 'reports', label: '\ud83d\udce7 Scheduled Reports', keys: ['report_recipients_weekly', 'report_recipients_monthly'] },
   ];
   // Group the settings into domain tabs so each area has its own panel instead
   // of one endless scrolling form. Saving still persists every loaded key.
@@ -48,6 +49,7 @@ export default function SettingsPage() {
     { id: 'localization', label: '\ud83c\udf0d Localization', groups: ['localization'] },
     { id: 'digital_menu', label: '\ud83d\udcf1 Digital Menu', groups: ['digital_menu', 'review'] },
     { id: 'staff', label: '\ud83d\udcca Staff', groups: ['staff_perf'] },
+    { id: 'reports', label: '\ud83d\udce7 Reports', groups: ['reports'] },
   ];
   const activeGroups = TABS.find((tb) => tb.id === activeTab)?.groups ?? [];
   const visibleGroups = settingGroups.filter((g) => activeGroups.includes(g.group));

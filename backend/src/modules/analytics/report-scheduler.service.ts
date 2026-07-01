@@ -27,11 +27,29 @@ export class ReportSchedulerService {
     private analytics: AnalyticsService,
   ) {}
 
+  /**
+   * Report recipients — DB setting first (UI-configurable via Settings →
+   * Reports), falling back to the env var. Comma-separated emails.
+   */
+  private async recipientsFor(kind: 'weekly' | 'monthly'): Promise<string | null> {
+    try {
+      const s = await this.prisma.setting.findUnique({ where: { key: `report_recipients_${kind}` } });
+      if (s?.value?.trim()) return s.value.trim();
+    } catch {
+      /* fall through to env */
+    }
+    const env =
+      kind === 'weekly'
+        ? this.config.get<string>('WEEKLY_REPORT_RECIPIENTS')
+        : this.config.get<string>('MONTHLY_REPORT_RECIPIENTS') || this.config.get<string>('WEEKLY_REPORT_RECIPIENTS');
+    return env?.trim() || null;
+  }
+
   /** Weekly report — Monday at 7:00 AM */
   @Cron('0 7 * * 1')
   async sendWeeklyReport() {
     if (this.config.get('WEEKLY_REPORT_ENABLED') === 'false') return;
-    const recipients = this.config.get<string>('WEEKLY_REPORT_RECIPIENTS');
+    const recipients = await this.recipientsFor('weekly');
     if (!recipients) return;
 
     try {
@@ -56,7 +74,7 @@ export class ReportSchedulerService {
   @Cron('0 7 1 * *')
   async sendMonthlyReport() {
     if (this.config.get('MONTHLY_REPORT_ENABLED') === 'false') return;
-    const recipients = this.config.get<string>('MONTHLY_REPORT_RECIPIENTS') || this.config.get<string>('WEEKLY_REPORT_RECIPIENTS');
+    const recipients = await this.recipientsFor('monthly');
     if (!recipients) return;
 
     try {
