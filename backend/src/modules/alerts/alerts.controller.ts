@@ -3,11 +3,10 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { AlertsService } from './alerts.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { BranchIsolationGuard } from '../../common/guards/branch-isolation.guard';
 
 @ApiTags('Alerts')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard, BranchIsolationGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('alerts')
 export class AlertsController {
   constructor(private svc: AlertsService) {}

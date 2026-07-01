@@ -3,7 +3,6 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { FinanceService } from './finance.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { BranchIsolationGuard } from '../../common/guards/branch-isolation.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { FinanceEntryType, Role } from '@prisma/client';
 
@@ -11,7 +10,7 @@ const FINANCE_ROLES: Role[] = [Role.SUPER_ADMIN, Role.BRANCH_MANAGER, Role.PROCU
 
 @ApiTags('Finance')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard, BranchIsolationGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('finance')
 export class FinanceController {
   constructor(private svc: FinanceService) {}

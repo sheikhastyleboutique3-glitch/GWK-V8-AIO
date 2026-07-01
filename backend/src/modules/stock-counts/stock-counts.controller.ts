@@ -5,7 +5,6 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { StockCountsService } from './stock-counts.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { BranchIsolationGuard } from '../../common/guards/branch-isolation.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Role } from '@prisma/client';
@@ -22,7 +21,7 @@ const MANAGE: Role[] = [Role.SUPER_ADMIN, Role.BRANCH_MANAGER, Role.WAREHOUSE];
 
 @ApiTags('Stock Counts')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard, BranchIsolationGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('stock-counts')
 export class StockCountsController {
   constructor(private svc: StockCountsService) {}
@@ -48,7 +47,7 @@ export class StockCountsController {
   }
 
   @Post(':id/finalize') @Roles(...MANAGE)
-  finalize(@Param('id', ParseIntPipe) id: number, @CurrentUser('sub') userId: number) {
-    return this.svc.finalize(id, userId);
+  finalize(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.finalize(id);
   }
 }

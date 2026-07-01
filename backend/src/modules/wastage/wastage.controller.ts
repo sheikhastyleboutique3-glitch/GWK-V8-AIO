@@ -5,7 +5,6 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { WastageService } from './wastage.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { BranchIsolationGuard } from '../../common/guards/branch-isolation.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { WastageReason } from '@prisma/client';
 
@@ -20,7 +19,7 @@ export class CreateWastageDto {
 
 @ApiTags('Wastage')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard, BranchIsolationGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('wastage')
 export class WastageController {
   constructor(private svc: WastageService) {}

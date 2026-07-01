@@ -3,14 +3,13 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { ShiftsService } from './shifts.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { BranchIsolationGuard } from '../../common/guards/branch-isolation.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Role } from '@prisma/client';
 
 @ApiTags('Shifts')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard, BranchIsolationGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('shifts')
 export class ShiftsController {
   constructor(private svc: ShiftsService) {}

@@ -4,7 +4,6 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { PosConfigsService } from './pos-configs.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { BranchIsolationGuard } from '../../common/guards/branch-isolation.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 
@@ -33,7 +32,7 @@ export class UpdatePosConfigDto {
 
 @ApiTags('POS Configs')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard, BranchIsolationGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('pos-configs')
 export class PosConfigsController {
   constructor(private svc: PosConfigsService) {}

@@ -1,16 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { InventoryTxType, FinanceEntryType } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { InventoryService } from '../inventory/inventory.service';
-import { FinanceService } from '../finance/finance.service';
 
 @Injectable()
 export class StockCountsService {
-  constructor(
-    private prisma: PrismaService,
-    private inventory: InventoryService,
-    private finance: FinanceService,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
   private async genNo(branchId: number) {
     const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -103,61 +96,11 @@ export class StockCountsService {
     return this.get(id);
   }
 
-  async finalize(id: number, userId?: number) {
-    const count = await this.prisma.stockCount.findUnique({ where: { id }, include: { items: true } });
+  async finalize(id: number) {
+    const count = await this.prisma.stockCount.findUnique({ where: { id } });
     if (!count) throw new NotFoundException(`Stock count ${id} not found`);
     if (count.status !== 'DRAFT') throw new BadRequestException('Count is already finalized.');
-
-    // Reconcile system stock to the physically counted quantities — this is the
-    // whole point of a count. Done atomically: every item's variance adjustment
-    // + the status change commit together, so a failure on any item rolls the
-    // entire finalize back (stock is never left partially reconciled).
-    //   - shrinkage (counted < system): FEFO deduct the difference (WASTAGE)
-    //   - surplus   (counted > system): add the difference (RETURN_IN)
-    // The net variance cost is also posted to the finance journal (WASTAGE type,
-    // signed) so COGS/inventory valuation stays accurate.
-    await this.prisma.$transaction(
-      async (tx) => {
-        let netCostImpact = 0; // signed: shrinkage negative (cost), surplus positive
-        for (const item of count.items) {
-          const variance = +(item.countedQty - item.systemQty).toFixed(4);
-          if (!variance) continue;
-          netCostImpact += variance * item.unitCost;
-          await this.inventory.applyManualAdjustment(
-            tx,
-            {
-              productId: item.productId,
-              branchId: count.branchId,
-              quantity: Math.abs(variance),
-              type: variance < 0 ? InventoryTxType.WASTAGE : InventoryTxType.RETURN_IN,
-              notes: `Stock count ${count.countNo} reconciliation (${variance > 0 ? '+' : ''}${variance})`,
-              performedById: userId ?? count.createdById ?? undefined,
-            },
-            { allowNegative: true },
-          );
-        }
-        // Post the net variance to the finance journal for accurate COGS.
-        // amount is signed (cost negative, gain positive) — matches varianceValue.
-        const amount = +netCostImpact.toFixed(2);
-        if (Math.abs(amount) >= 0.01) {
-          await this.finance.create(
-            {
-              type: FinanceEntryType.WASTAGE,
-              amount,
-              branchId: count.branchId,
-              sourceType: 'stock_count',
-              sourceId: count.id,
-              reference: count.countNo,
-              notes: `Stock count ${count.countNo} variance`,
-              createdById: userId ?? count.createdById ?? undefined,
-            },
-            tx,
-          );
-        }
-        await tx.stockCount.update({ where: { id }, data: { status: 'FINALIZED', finalizedAt: new Date() } });
-      },
-      { isolationLevel: 'Serializable', maxWait: 10_000, timeout: 30_000 },
-    );
+    await this.prisma.stockCount.update({ where: { id }, data: { status: 'FINALIZED', finalizedAt: new Date() } });
     return this.get(id);
   }
 }
