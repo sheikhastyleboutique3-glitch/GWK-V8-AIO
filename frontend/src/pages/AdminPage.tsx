@@ -533,10 +533,10 @@ export default function AdminPage() {
       <PageHeader title={`🛡️ ${t('admin.title')}`} subtitle={t('admin.subtitle')} />
 
       {/* Tabbed sections — each admin area is its own panel */}
-      <div className="flex gap-1.5 overflow-x-auto pb-1">
+      <div className="flex gap-1.5 mb-5 overflow-x-auto pb-1">
         {ADMIN_TABS.map((tb) => (
           <button key={tb.id} onClick={() => setActiveTab(tb.id)}
-            className={`px-3.5 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${activeTab === tb.id ? 'bg-primary text-white' : 'bg-surface-2 text-fg-muted hover:bg-surface-3'}`}>
+            className={`px-3.5 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${activeTab === tb.id ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
             {tb.label}
           </button>
         ))}
