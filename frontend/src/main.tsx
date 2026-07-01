@@ -102,6 +102,10 @@ if (token) {
         queryClient.setQueryData(['branches-switcher'], data.branches);
         queryClient.setQueryData(['branches-qr'], data.branches);
       }
+      if (data.tables?.length && branchId) {
+        queryClient.setQueryData(['waiter-tables', branchId], data.tables);
+        queryClient.setQueryData(['pos-tables', branchId], data.tables);
+      }
     });
   });
 
