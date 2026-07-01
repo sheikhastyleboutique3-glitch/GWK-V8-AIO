@@ -149,6 +149,7 @@ export class RecipesService {
       entityId: String(recipe.id),
       newValues: recipe as any,
     });
+    if (recipe.isActive) await this.syncProductCost(recipe.id, recipe.productId);
     return recipe;
   }
 
@@ -196,6 +197,7 @@ export class RecipesService {
       oldValues: existing as any,
       newValues: updated as any,
     });
+    if (updated.isActive) await this.syncProductCost(updated.id, updated.productId);
     return updated;
   }
 
@@ -207,7 +209,9 @@ export class RecipesService {
         data: { isActive: false },
       });
     }
-    return this.prisma.recipe.update({ where: { id }, data: { isActive } });
+    const result = await this.prisma.recipe.update({ where: { id }, data: { isActive } });
+    if (isActive) await this.syncProductCost(id, recipe.productId);
+    return result;
   }
 
   async approve(id: number, userId?: number) {
@@ -225,6 +229,24 @@ export class RecipesService {
       entityId: String(id),
     });
     return { success: true };
+  }
+
+  /**
+   * Roll the recipe's computed unit cost up into the finished product's
+   * `costPrice`, so a selling item's cost reflects its BOM (Odoo-style cost
+   * roll-up). Only the ACTIVE recipe drives the product cost. Fire-and-forget:
+   * never blocks the recipe save.
+   */
+  private async syncProductCost(recipeId: number, productId: number) {
+    try {
+      const c = await this.cost(recipeId);
+      await this.prisma.product.update({
+        where: { id: productId },
+        data: { costPrice: Math.round((c.unitCost || 0) * 100) / 100 },
+      });
+    } catch {
+      /* cost roll-up is best-effort */
+    }
   }
 
   /**
