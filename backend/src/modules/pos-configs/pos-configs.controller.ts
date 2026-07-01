@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, ParseIntPipe, Query, UseGuards } from '@nestjs/common';
-import { IsString, IsOptional, IsNotEmpty, IsBoolean, IsInt } from 'class-validator';
+import { IsString, IsOptional, IsNotEmpty, IsBoolean, IsInt, IsObject } from 'class-validator';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { PosConfigsService } from './pos-configs.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -16,6 +16,18 @@ export class CreatePosConfigDto {
   @IsOptional() @IsBoolean() allowTips?: boolean;
   @IsOptional() @IsInt() cashRoundingId?: number;
   @IsOptional() @IsInt() defaultPresetId?: number;
+}
+
+export class UpdatePosConfigDto {
+  @IsOptional() @IsString() @IsNotEmpty() name?: string;
+  @IsOptional() @IsInt() defaultFloorId?: number;
+  @IsOptional() @IsBoolean() allowSplitBill?: boolean;
+  @IsOptional() @IsBoolean() allowTableMove?: boolean;
+  @IsOptional() @IsBoolean() allowTips?: boolean;
+  @IsOptional() @IsInt() cashRoundingId?: number;
+  @IsOptional() @IsInt() defaultPresetId?: number;
+  @IsOptional() @IsObject() iface?: Record<string, any>;
+  @IsOptional() @IsBoolean() isActive?: boolean;
 }
 
 @ApiTags('POS Configs')
@@ -41,7 +53,7 @@ export class PosConfigsController {
   }
 
   @Patch(':id') @Roles(Role.SUPER_ADMIN, Role.BRANCH_MANAGER)
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: any) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdatePosConfigDto) {
     return this.svc.update(id, dto);
   }
 

@@ -36,6 +36,13 @@ class ProcurementUpdateDto {
   @IsOptional() @IsString() recipientName?: string;
   @IsOptional() @IsString() trackingNotes?: string;
 }
+class ReceivedItemDto {
+  @IsInt() @Type(() => Number) itemId: number;
+  @IsNumber() @Min(0) @Type(() => Number) receivedQty: number;
+}
+class ConfirmReceiptDto {
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => ReceivedItemDto) receivedItems?: ReceivedItemDto[];
+}
 
 @ApiTags('Requisitions')
 @ApiBearerAuth('access-token')
@@ -68,5 +75,5 @@ export class RequisitionsController {
   @Patch(':id/procurement-update') @Roles(Role.PROCUREMENT, Role.WAREHOUSE, Role.SUPER_ADMIN)
   procurementUpdate(@Param('id', ParseIntPipe) id: number, @Body() dto: ProcurementUpdateDto, @CurrentUser('sub') userId: number) { return this.svc.procurementUpdate(id, dto.status, userId, dto); }
   @Patch(':id/confirm-receipt') @Roles(Role.KITCHEN, Role.BARISTA, Role.PASTRY, Role.CASHIER, Role.CLEANER, Role.BRANCH_MANAGER, Role.SUPER_ADMIN)
-  confirmReceipt(@Param('id', ParseIntPipe) id: number, @Body() dto: any, @CurrentUser() user: any) { return this.svc.confirmReceipt(id, user.sub, user.branchId, dto.receivedItems); }
+  confirmReceipt(@Param('id', ParseIntPipe) id: number, @Body() dto: ConfirmReceiptDto, @CurrentUser() user: any) { return this.svc.confirmReceipt(id, user.sub, user.branchId, dto.receivedItems); }
 }
