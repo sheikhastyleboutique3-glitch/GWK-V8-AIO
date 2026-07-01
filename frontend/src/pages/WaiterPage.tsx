@@ -330,7 +330,7 @@ export default function WaiterPage() {
       );
 
       if (newlyFired.length > 0) {
-        printKot(firedOrder, { items: newlyFired, waiter: waiterName, splitByStation: true });
+        printKot(firedOrder, { items: newlyFired, waiter: waiterName, splitByStation: true, auto: true });
         // Mark all fired items as sent
         setSentItemIds((prev) => {
           const next = new Set(prev);

@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import api from '../../lib/api';
 import { usePrompt } from '../../lib/usePrompt';
 import { useConfirm } from '../../lib/useConfirm';
-import { printReceipt, printKot } from '../../lib/thermalPrint';
+import { printReceipt, printKot, agentHandlesPrinting } from '../../lib/thermalPrint';
 import { ChosenModifier } from '../../components/ModifierModal';
 
 type Channel = 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY' | 'QR' | 'TALABAT' | 'SNOONU' | 'AGGREGATOR';
@@ -103,6 +103,9 @@ const CartPanel = React.memo(function CartPanel(props: CartPanelProps) {
   // Auto-fire to kitchen when taking payment (default ON — food must always
   // reach the kitchen). Persisted locally so each terminal keeps its choice.
   const [autoFire, setAutoFire] = useState(() => localStorage.getItem('pos_auto_fire') !== 'false');
+  // Print mode for THIS device: 'browser' (default, print here) or 'agent'
+  // (on-prem print agent handles it — suppress automatic browser prints).
+  const [agentPrint, setAgentPrint] = useState(() => agentHandlesPrinting());
   // Items on an open order that have NOT been sent to the kitchen yet.
   const unfiredCount = useMemo(
     () =>
@@ -236,7 +239,7 @@ const CartPanel = React.memo(function CartPanel(props: CartPanelProps) {
         const prevFiredIds = new Set((loadedOrder?.items || []).filter((it: any) => it.firedAt).map((it: any) => it.id));
         const newlyFired = (firedOrder.items || []).filter((it: any) => it.firedAt && !prevFiredIds.has(it.id) && !it.isVoided);
         if (newlyFired.length > 0) {
-          printKot(firedOrder, { items: newlyFired, splitByStation: true });
+          printKot(firedOrder, { items: newlyFired, splitByStation: true, auto: true });
           toast.success(`🔥 ${newlyFired.length} item(s) sent to kitchen!`, { duration: 3000 });
         } else { toast('All items already sent to kitchen', { icon: '✓' }); }
         qc.invalidateQueries({ queryKey: ['pos-loaded', loadedOrderId] });
@@ -256,7 +259,7 @@ const CartPanel = React.memo(function CartPanel(props: CartPanelProps) {
         const newOrder = created.data;
         await api.post(`/sales/orders/${newOrderId}/courses/1/fire`).catch(() => {});
         const kotOrder = { orderNo: newOrder.orderNo, tableName: newOrder.tableName || tableName, channel, items: kotItems };
-        printKot(kotOrder as any, { splitByStation: true });
+        printKot(kotOrder as any, { splitByStation: true, auto: true });
         setLoadedOrderId(newOrderId);
         setCart([]);
         setTableName(newOrder.tableName || '');
@@ -498,6 +501,11 @@ const CartPanel = React.memo(function CartPanel(props: CartPanelProps) {
             className="rounded border-gray-300 text-primary focus:ring-primary" />
           🔥 Auto-send to kitchen when taking payment
         </label>
+        <label className="flex items-center gap-1.5 mt-0.5 text-[10px] text-gray-500 cursor-pointer select-none">
+          <input type="checkbox" checked={agentPrint} onChange={(e) => { setAgentPrint(e.target.checked); localStorage.setItem('pos_print_mode', e.target.checked ? 'agent' : 'browser'); }}
+            className="rounded border-gray-300 text-primary focus:ring-primary" />
+          🖨️ Printer handled by on-prem agent (don’t print here)
+        </label>
         <button disabled={(!lines.length && !comboCart.length) || !posSession} onClick={async () => {
             // Auto-fire any unsent items before payment so the kitchen is never skipped.
             if (autoFire && unfiredCount > 0) { try { await handleKitchenFire(); } catch { /* fire surfaces its own error */ } }
@@ -564,7 +572,7 @@ const CartPanel = React.memo(function CartPanel(props: CartPanelProps) {
                   try {
                     const res = await api.post(`/sales/orders/${loadedOrderId}/split`, { itemIds, quantities: splitSelected });
                     const newOrder = res.data?.data?.newOrder;
-                    if (splitPayMethod !== 'later' && newOrder) { await api.post(`/sales/orders/${newOrder.id}/payments`, { method: splitPayMethod, amount: newOrder.total }); const { data: completed } = await api.post(`/sales/orders/${newOrder.id}/complete`, {}); printReceipt(completed?.data ?? newOrder, businessInfo); toast.success(t('pos.splitPaid', { method: splitPayMethod })); }
+                    if (splitPayMethod !== 'later' && newOrder) { await api.post(`/sales/orders/${newOrder.id}/payments`, { method: splitPayMethod, amount: newOrder.total }); const { data: completed } = await api.post(`/sales/orders/${newOrder.id}/complete`, {}); printReceipt(completed?.data ?? newOrder, businessInfo, { auto: true }); toast.success(t('pos.splitPaid', { method: splitPayMethod })); }
                     else toast.success(t('pos.splitDone'));
                     setSplitModal(false); setSplitSelected({}); qc.invalidateQueries({ queryKey: ['pos-pending'] }); refetchLoaded();
                   } catch (e: any) { toast.error(e.response?.data?.message || 'Split failed'); }

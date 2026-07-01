@@ -63,6 +63,21 @@ export interface BusinessInfo {
   currency?: string; // e.g. 'QAR', 'SAR', 'USD' — shown on receipts
 }
 
+/**
+ * True when this device is configured to let the on-prem print agent handle
+ * physical printing (network ESC/POS). Automatic browser prints are then
+ * suppressed to avoid double tickets. Per-device (localStorage) because a POS
+ * terminal and a waiter's phone may print differently. Manual print buttons
+ * always work regardless of this setting.
+ */
+export function agentHandlesPrinting(): boolean {
+  try {
+    return localStorage.getItem('pos_print_mode') === 'agent';
+  } catch {
+    return false;
+  }
+}
+
 /** Map a line item to a kitchen station from its product category. */
 export function stationForItem(it: OrderItemLike): string {
   // Prefer the explicit per-category station set in Settings/Categories.
@@ -134,7 +149,11 @@ function printDoc(title: string, bodyHtml: string, widthMm = 80) {
 }
 
 /** Customer receipt (logo, business info, prices, payments, change). */
-export function printReceipt(order: OrderLike, info: BusinessInfo = {}) {
+export function printReceipt(order: OrderLike, info: BusinessInfo = {}, opts: { auto?: boolean } = {}) {
+  // In "agent" print mode the on-prem print agent prints receipts server-side
+  // (on order completion), so we skip the automatic browser print to avoid
+  // double tickets. Manual "reprint" buttons pass no `auto` flag and still work.
+  if (opts.auto && agentHandlesPrinting()) return;
   _currency = info.currency || 'QAR';
   const items = order.items ?? [];
   const subtotal = order.subtotal ?? items.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
@@ -266,8 +285,12 @@ function kotSection(order: OrderLike, items: OrderItemLike[], opts: { station?: 
  */
 export function printKot(
   order: OrderLike,
-  opts: { station?: string; items?: OrderItemLike[]; waiter?: string; splitByStation?: boolean } = {},
+  opts: { station?: string; items?: OrderItemLike[]; waiter?: string; splitByStation?: boolean; auto?: boolean } = {},
 ) {
+  // Skip the automatic browser KOT print when the on-prem agent handles it
+  // (network ESC/POS), preventing double kitchen tickets. Manual print buttons
+  // omit `auto` and always print.
+  if (opts.auto && agentHandlesPrinting()) return;
   const items = opts.items ?? order.items ?? [];
   if (!items.length) return;
 

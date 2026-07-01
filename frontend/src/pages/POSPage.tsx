@@ -384,7 +384,7 @@ export default function POSPage() {
         orderId = created.data.id;
         try {
           const fireRes = await api.post(`/sales/orders/${orderId}/courses/1/fire`);
-          if (fireRes.data?.data) printKot(fireRes.data.data, { splitByStation: true });
+          if (fireRes.data?.data) printKot(fireRes.data.data, { splitByStation: true, auto: true });
         } catch { toast('Note: Kitchen fire pending', { icon: '⚠️' }); }
       }
       for (const ten of tenders) {
@@ -405,7 +405,7 @@ export default function POSPage() {
     onSuccess: (order) => {
       toast.success(`Sale ${order.orderNo} completed`);
       setLastReceipt(order);
-      printReceipt(order, businessInfo);
+      printReceipt(order, businessInfo, { auto: true });
       setCart([]); setComboCart([]); setTableName(''); setPlatformRef(''); setPresetId(undefined);
       setCouponCode(''); setCoupon(null); setTenderAmount(''); setTenders([]); setTipAmount(0);
       setLoadedOrderId(null); setCustomer(null); setCustomerSearch(''); setShipLater(false);
